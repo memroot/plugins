@@ -1,0 +1,14 @@
+{
+  "name": "memroot",
+  "plugins": [
+    {
+      "name": "memroot",
+      "source": {
+        "type": "local",
+        "path": "./plugins/grok"
+      },
+      "description": "Memroot coding-agent plugin",
+      "version": "0.1.0-alpha.7"
+    }
+  ]
+}

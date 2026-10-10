@@ -1,0 +1,19 @@
+{
+  "name": "memroot",
+  "version": "0.1.0-alpha.7",
+  "description": "Connect Memroot, explicitly save or retrieve engineering knowledge, and optionally capture it after sessions end.",
+  "author": {
+    "name": "Memroot"
+  },
+  "license": "LicenseRef-Memroot-Proprietary",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Memroot",
+    "shortDescription": "Connect Memroot and manage durable engineering knowledge.",
+    "longDescription": "Setup links native Codex MCP OAuth to Memroot. After authorization, explicitly save user-approved knowledge and retrieve structured memory packs. Optional session capture (memroot capture on) runs a bundled background worker after a session ends: it redacts the transcript locally, runs Codex without tools to extract candidates, and uploads only typed memories labeled session-extracted. Trust the Memroot SessionStart and SessionEnd hooks once in /hooks.",
+    "developerName": "Memroot",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": ["Check my Memroot plugin status."]
+  }
+}

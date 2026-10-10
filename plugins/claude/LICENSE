@@ -1,0 +1,118 @@
+Memroot CLI and plugins. Proprietary license, not an open-source license.
+
+Copyright (c) 2026 Maksym Davydov. All rights reserved.
+
+In this license:
+
+- "Memroot" means Maksym Davydov, the operator of the Memroot service at
+  https://memroot.dev.
+- "Software" means the npm package "memroot", in this and later
+  versions: the Memroot command-line tool, its agent plugins and every
+  file shipped with them, in any copy.
+- "Terms" means the Memroot Terms of service at https://memroot.dev/terms.
+- "You" means the person who uses the Software and, if you use it for an
+  employer or another organization, that organization.
+
+1. Ownership
+
+The Software belongs to Memroot or its licensors. You receive permission
+to use it, not ownership of it. Memroot keeps every right that this
+license does not expressly give you.
+
+2. What you may do
+
+Memroot gives you a limited, non-exclusive, non-transferable, revocable
+license to download, install and run the unmodified Software, only to
+access the Memroot service for your own or your organization's projects.
+
+That includes the copies that ordinary use needs, made by you or by the
+tools you run, on computers and hosted environments that you or your
+organization use:
+
+- downloading and caching by a package manager, or by your
+  organization's own package proxy;
+- the copy that the command-line tool makes of its plugin files into
+  your user directories;
+- the copy that your coding agent's plugin manager makes when it
+  installs or updates a plugin;
+- loading the Software into memory to run it;
+- ordinary backups of those systems.
+
+Every such copy must keep this license and all other notices intact.
+
+It also covers letting your coding agent, and the model provider that
+agent uses, read and process the Software's skill, hook and prompt texts
+while you use it.
+
+You may also read the files as shipped, for example to check what the
+Software does on your machine.
+
+3. What you may not do
+
+Except as section 2 allows, and unless Memroot agrees in writing, you
+may not, and may not let anyone else:
+
+- copy the Software, in whole or in part;
+- modify, adapt or translate it, or create derivative works from it,
+  including by reusing its code, prompts, skill texts or plugin files in
+  another product;
+- distribute, publish, sublicense, sell, rent or lend it, or otherwise
+  make it available to a third party, alone or as part of something
+  else;
+- host it or run it as a service for third parties;
+- remove, hide or alter any copyright, license or other notice in it;
+- reverse engineer, decompile or disassemble it, except to the extent
+  that the law which applies to you gives you a right to do so that
+  cannot be excluded by agreement.
+
+4. Trademarks
+
+This license gives you no right to use the Memroot name, logo or other
+brand.
+
+5. Third-party components
+
+The Software includes open-source components. They stay under their own
+licenses, which are reproduced in the THIRD-PARTY-NOTICES.txt file
+shipped with the Software (in the npm package, under dist/). Nothing in
+this license limits the rights those licenses give you in those
+components.
+
+6. The Terms, governing law, warranty and liability
+
+Your use of the Software to access the Memroot service is governed by
+the Terms, including their disclaimers and limits of liability. This
+file sets out, for the package, the license described in the Terms under
+"Our software and your feedback". If this file and the Terms conflict,
+the Terms prevail.
+
+This license is governed by the law, and disputes about it go to the
+courts, that the Terms name under "Governing law and disputes", with the
+exceptions for consumers stated there. That applies to everyone who has
+a copy of the Software, including anyone who has not accepted the Terms.
+
+Where the Terms do not apply to you, the Software is provided "as is"
+and "as available", without warranties of any kind, express or implied,
+including warranties of merchantability, fitness for a particular
+purpose and non-infringement, and, to the fullest extent the law allows,
+Memroot is not liable for any claim, loss or damage arising from the
+Software or from its use.
+
+Nothing in this license limits liability that cannot lawfully be
+limited, or takes away rights that the law gives you as a consumer and
+that cannot be excluded.
+
+7. When this license ends
+
+This license ends automatically if you copy, modify or distribute the
+Software in breach of section 3, and when your right to use the Memroot
+service ends under the Terms. For any other breach, Memroot may end this
+license; where the Terms apply, it follows their process: where it is
+reasonable, it tells you first and gives you a chance to fix the
+problem. When this license ends, stop using the Software and delete your
+copies of it. Sections 1, 3, 4, 6 and 7 continue to apply.
+
+8. Other permissions
+
+To ask for a permission that this license does not give, or to report a
+copy that breaks it, write to support@memroot.dev.

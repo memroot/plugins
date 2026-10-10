@@ -1,0 +1,20 @@
+# Memroot for Claude Code
+
+This is the complete, self-contained Memroot plugin root, version `0.1.0-alpha.7`. The setup utility copies this folder into a durable installation before native registration. Node.js is the only runtime requirement. Every script in `scripts/` is generated from the Memroot CLI source and bundled with its dependencies; no script refers to `npx`, the npm cache or files outside this bundle.
+
+The memroot-status skill and `node scripts/status.mjs` explain this release's capabilities. Setup registers the production MCP server with Claude Code (authorize it with `/mcp`); its tools provide explicit save and retrieval.
+
+Hooks only read the stdin envelope (at most 64 KiB; the SessionEnd and PostCompact hook at most 1 MiB, because a compaction event can carry the summary of the conversation; waiting at most 500 ms) and never echo event fields. A larger envelope is dropped, which means no capture for that trigger; the next trigger of the session captures the same turns. They print nothing on SessionEnd or PostCompact, never open a transcript and make no network request. When the user has opted in with `memroot capture on`, the SessionEnd hook, and the PostCompact hook once Claude Code has compacted a session that is still open, write one small job file per session (identifiers, paths and the trigger only; 0600 under `$XDG_STATE_HOME/memroot/capture`) and start the bundled `scripts/capture-worker.mjs` fully detached, resolved next to the hook script itself. Both run the same script. The PostCompact hook reads none of the event's content fields: the compaction summary is never read, stored or logged. Without consent the hooks do nothing. Capture at compaction needs its own agreement, which `memroot capture on` of `0.1.0-alpha.7` or later records in a second file (`~/.memroot/capture-compaction.json`) bound to the consent; consent given with an earlier version, or rewritten by one, covers session ends only.
+
+The bundled worker reads only the referenced session transcript, keeps user and assistant text plus tool names and file paths (never tool output), redacts secrets, personal email addresses and home paths locally and fails closed, runs your own agent CLI headless with no tools to propose memories, validates them, and sends only typed memories labeled session-extracted (not user-attested) to `https://api.memroot.dev/mcp` with the separate Memroot CLI capture connection. Each memory includes up to 3 short evidence quotes (at most 200 characters) from the redacted transcript, repo-relative paths and symbols, the normalized repository remote, and salted hashes of the session id and quoted segments; one retrieval query per capture contains only the repository name. Raw transcripts are never uploaded. At most 3 memories per capture and 10 per 24 hours. A later capture of the same session reads only the turns added since the previous one. `memroot capture off` stops capture and deletes queued work.
+
+The SessionStart hook supplies a short static context about memory retrieval. The SessionEnd hook stays within Claude Code's fixed 1.5 s SessionEnd budget (plugin timeouts cannot raise it); it typically returns in about 25 ms. The PostCompact hook has a 5 s timeout and returns as fast; it runs after the compaction is done, and Claude Code gives PostCompact no way to block or change anything. Claude Code only appends to the transcript, so the turns from before a compaction stay in it. Grok also loads this plugin from `~/.claude`; under Grok the scripts act for the Grok host and the SessionStart context stays silent.
+
+Inspect the installed plugin through the agent's native plugin interface.
+
+License: proprietary, all rights reserved. See `LICENSE` in this folder; the licenses of bundled open-source components are in `THIRD-PARTY-NOTICES.txt`.
+
+Official references verified October 2, 2026 (the PostCompact event on October 10, 2026, with Claude Code 2.1.296):
+
+- [Plugin packaging and native installation](https://code.claude.com/docs/en/plugins-reference)
+- [Hook event and output contracts](https://code.claude.com/docs/en/hooks)

@@ -1,0 +1,20 @@
+{
+  "name": "memroot",
+  "interface": {
+    "displayName": "Memroot"
+  },
+  "plugins": [
+    {
+      "name": "memroot",
+      "source": {
+        "source": "local",
+        "path": "./plugins/codex"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

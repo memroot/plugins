@@ -1,0 +1,56 @@
+# Reviewed template, copied into the PUBLIC distribution repository only.
+name: Sync verified npm plugins
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Exact published memroot version"
+        required: true
+        type: string
+      integrity:
+        description: "SHA-512 integrity from the successful npm release"
+        required: true
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: memroot-marketplace
+  cancel-in-progress: false
+jobs:
+  sync:
+    if: github.repository == 'dmsmaxim/memroot-plugins' && github.event.repository.private == false && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check out current public distribution
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+      - name: Use pinned Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Use pinned npm metadata client
+        run: npm install --global --ignore-scripts --no-audit --no-fund npm@12.2.0
+      - name: Verify exact public bytes and stage all three catalogs
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_INTEGRITY: ${{ inputs.integrity }}
+        run: |
+          node tooling/export-marketplace.mjs --version "$RELEASE_VERSION" --integrity "$RELEASE_INTEGRITY" --current release.json --output "$RUNNER_TEMP/marketplace-next"
+      - name: Publish one atomic Git update
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          git rm -r --ignore-unmatch -- plugins .claude-plugin .agents .grok-plugin
+          cp -R "$RUNNER_TEMP/marketplace-next/." .
+          git add -- plugins .claude-plugin .agents .grok-plugin LICENSE release.json
+          if git diff --cached --quiet; then
+            echo "This exact release is already available."
+            exit 0
+          fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "Publish Memroot plugins $RELEASE_VERSION"
+          git push origin HEAD:main
