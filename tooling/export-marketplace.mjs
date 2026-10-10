@@ -312,27 +312,56 @@ async function download(url) {
   return Buffer.concat(chunks);
 }
 
+// npm 12 always emits an array here; older supported npm emits one object.
+// Exactly one result is required for an exact version, never a range or tag.
+export function registryTarball(value, version, integrity) {
+  validateRelease(version, integrity);
+  const metadata =
+    Array.isArray(value) && value.length === 1 ? value[0] : value;
+  const url = `https://registry.npmjs.org/memroot/-/memroot-${version}.tgz`;
+  if (
+    !metadata ||
+    typeof metadata !== "object" ||
+    Array.isArray(metadata) ||
+    metadata.integrity !== integrity ||
+    metadata.tarball !== url ||
+    !Number.isSafeInteger(metadata.unpackedSize) ||
+    metadata.unpackedSize <= 0 ||
+    metadata.unpackedSize > MAX_CONTENT
+  ) {
+    throw new Error(
+      "Published npm metadata does not match the approved release",
+    );
+  }
+  return url;
+}
+
+class MarketplaceExportError extends Error {}
+
 export async function main(args) {
-  const { values } = parseArgs({
-    args,
-    options: {
-      version: { type: "string" },
-      integrity: { type: "string" },
-      output: { type: "string" },
-      current: { type: "string" },
-    },
-    strict: true,
-    allowPositionals: false,
-  });
-  const { version, integrity, output } = values;
-  const current = values.current
-    ? JSON.parse(await readFile(values.current, "utf8"))
-    : undefined;
-  validateRelease(version, integrity, current);
-  if (!output) throw new Error("--output is required");
-  await absent(resolve(output));
-  const temporary = await mkdtemp(`${tmpdir()}/memroot-marketplace-`);
+  let stage = "INPUT";
+  let temporary;
   try {
+    const { values } = parseArgs({
+      args,
+      options: {
+        version: { type: "string" },
+        integrity: { type: "string" },
+        output: { type: "string" },
+        current: { type: "string" },
+      },
+      strict: true,
+      allowPositionals: false,
+    });
+    const { version, integrity, output } = values;
+    const current = values.current
+      ? JSON.parse(await readFile(values.current, "utf8"))
+      : undefined;
+    validateRelease(version, integrity, current);
+    if (!output) throw new Error("--output is required");
+    await absent(resolve(output));
+    temporary = await mkdtemp(`${tmpdir()}/memroot-marketplace-`);
+    stage = "REGISTRY";
     const metadata = JSON.parse(
       command(
         "npm",
@@ -352,26 +381,25 @@ export async function main(args) {
         65536,
       ),
     );
-    const url = `https://registry.npmjs.org/memroot/-/memroot-${version}.tgz`;
-    if (
-      metadata.integrity !== integrity ||
-      metadata.tarball !== url ||
-      !Number.isSafeInteger(metadata.unpackedSize) ||
-      metadata.unpackedSize <= 0 ||
-      metadata.unpackedSize > MAX_CONTENT
-    )
-      throw new Error(
-        "Published npm metadata does not match the approved release",
-      );
+    stage = "METADATA";
+    const url = registryTarball(metadata, version, integrity);
+    stage = "DOWNLOAD";
     const archive = `${temporary}/release.tgz`;
     await writeFile(archive, await download(url), { flag: "wx", mode: 0o600 });
-    console.log(
-      json(
-        await exportTarball({ archive, version, integrity, output, current }),
-      ),
-    );
+    stage = "ARCHIVE";
+    const result = await exportTarball({
+      archive,
+      version,
+      integrity,
+      output,
+      current,
+    });
+    console.log(json(result));
+  } catch {
+    // A stable allowlisted stage only: never echo native output, paths or configuration.
+    throw new MarketplaceExportError(`MARKETPLACE_${stage}_FAILED`);
   } finally {
-    await rm(temporary, { recursive: true, force: true });
+    if (temporary) await rm(temporary, { recursive: true, force: true });
   }
 }
 
@@ -379,9 +407,13 @@ if (
   process.argv[1] &&
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
-  main(process.argv.slice(2)).catch(() => {
+  main(process.argv.slice(2)).catch((error) => {
+    const code =
+      error instanceof MarketplaceExportError
+        ? error.message
+        : "MARKETPLACE_CLEANUP_FAILED";
     console.error(
-      "Marketplace export failed. No release was published; inspect inputs and bounded validation locally.",
+      `${code}: No release was published. Check the approved release inputs and rerun the exporter locally.`,
     );
     process.exitCode = 1;
   });

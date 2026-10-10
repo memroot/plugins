@@ -49,14 +49,14 @@ Use `setup` above for the complete plugin and MCP configuration. If you already 
 ### Claude Code
 
 ```sh
-claude plugin marketplace add https://github.com/dmsmaxim/memroot-plugins.git --scope user
+claude plugin marketplace add https://github.com/memroot/plugins.git --scope user
 claude plugin install memroot@memroot --scope user
 ```
 
 ### Codex
 
 ```sh
-codex plugin marketplace add https://github.com/dmsmaxim/memroot-plugins.git --json
+codex plugin marketplace add https://github.com/memroot/plugins.git --json
 codex plugin add memroot@memroot --json
 ```
 
@@ -65,8 +65,8 @@ Review Memroot's hooks in `/hooks`. New or changed hooks may need fresh trust af
 ### Grok
 
 ```sh
-grok plugin marketplace add https://github.com/dmsmaxim/memroot-plugins.git
-grok plugin install memroot@dmsmaxim/memroot-plugins --trust
+grok plugin marketplace add https://github.com/memroot/plugins.git
+grok plugin install memroot@memroot/plugins --trust
 ```
 
 `--trust` authorizes the plugin to run its hooks. Review the plugin before installing it.
@@ -84,7 +84,6 @@ To refresh immediately with the native CLIs:
 ```sh
 claude plugin update memroot@memroot --scope user
 codex plugin marketplace upgrade memroot --json
-grok plugin marketplace update memroot-plugins
 grok plugin update memroot
 ```
 

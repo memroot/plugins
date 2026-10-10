@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   sync:
-    if: github.repository == 'dmsmaxim/memroot-plugins' && github.event.repository.private == false && github.ref == 'refs/heads/main'
+    if: github.repository == 'memroot/plugins' && github.event.repository.private == false && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
