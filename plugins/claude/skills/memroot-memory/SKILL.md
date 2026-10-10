@@ -21,9 +21,9 @@ Skip retrieval for one-line or mechanical edits (renames, typos, formatting), ge
 
 1. Call `memory_retrieve` without a `project_id`; the server uses the connection's one authorized project:
    ```json
-   {"retrieval_request": {"schema_version": 1, "query": "deploy failure migrations wrangler", "budget": {"max_items": 5}}}
+   {"retrieval_request": {"schema_version": 1, "query": "deploy fails after running migrations with wrangler", "budget": {"max_items": 5}}}
    ```
-   Retrieval is keyword (full-text) search, not semantic search, so the query should be a few concrete nouns from the task and the repo (component, file, command, error text). Don't paste the whole prompt, code, or anything secret.
+   Describe the situation in one short sentence (under about 20 words): what is being changed or the symptom, and the component, with exact code identifiers you know (a file path, symbol name or error code). Retrieval is by meaning, so don't paste code, logs, stack traces, timestamps, record IDs or the user's message, and never secrets or personal data.
 2. If the call fails with `project_not_found`, or says `project_id` is required (an older server), get the id once from `projects_list`, add it as the top-level `"project_id"` and retry.
 3. If nothing relevant comes back, try one rephrased query at most, then continue without memory.
 

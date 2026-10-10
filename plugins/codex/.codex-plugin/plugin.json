@@ -1,6 +1,6 @@
 {
   "name": "memroot",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.8",
   "description": "Connect Memroot, explicitly save or retrieve engineering knowledge, and optionally capture it after sessions end.",
   "author": {
     "name": "Memroot"

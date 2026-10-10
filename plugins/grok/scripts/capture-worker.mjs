@@ -15231,9 +15231,9 @@ var validateCrossReferences = (value, ctx) => {
     const object2 = "literal" in assertion.object ? void 0 : familyOf(assertion.object);
     const objectSubtype = "literal" in assertion.object ? void 0 : subtypeOf(assertion.object);
     const ce = allows(subject, ["code", "engineering"]);
-    const cp2 = allows(subject, ["code", "principal_scope"]);
+    const cp = allows(subject, ["code", "principal_scope"]);
     const po = allows(subject, ["principal_scope"]);
-    const okay = assertion.predicate === "has_property" && "literal" in assertion.object || assertion.predicate === "uses" && !("literal" in assertion.object) && allows(subject, ["code", "engineering"]) && allows(object2, ["code", "engineering"]) || assertion.predicate === "depends_on" && ce && allows(object2, ["code", "engineering"]) || assertion.predicate === "implements" && allows(subject, ["code"]) && allows(object2, ["engineering"]) || assertion.predicate === "applies_to" && allows(subject, ["engineering", "principal_scope"]) && allows(object2, ["code", "principal_scope"]) || assertion.predicate === "part_of" && allows(subject, ["code", "engineering", "principal_scope"]) && (subject === void 0 || object2 === void 0 || object2 === subject) || ["requires", "forbids", "recommends"].includes(assertion.predicate) && cp2 && allows(object2, ["code", "engineering"]) || ["causes", "fixes", "avoids"].includes(assertion.predicate) && ce && allows(object2, ["engineering"]) && (objectSubtype === void 0 || ["incident", "error", "behavior"].includes(objectSubtype)) || assertion.predicate === "fails_because" && ce && allows(object2, ["code", "engineering"]) || ["prefers", "disfavors", "owns", "maintains"].includes(
+    const okay = assertion.predicate === "has_property" && "literal" in assertion.object || assertion.predicate === "uses" && !("literal" in assertion.object) && allows(subject, ["code", "engineering"]) && allows(object2, ["code", "engineering"]) || assertion.predicate === "depends_on" && ce && allows(object2, ["code", "engineering"]) || assertion.predicate === "implements" && allows(subject, ["code"]) && allows(object2, ["engineering"]) || assertion.predicate === "applies_to" && allows(subject, ["engineering", "principal_scope"]) && allows(object2, ["code", "principal_scope"]) || assertion.predicate === "part_of" && allows(subject, ["code", "engineering", "principal_scope"]) && (subject === void 0 || object2 === void 0 || object2 === subject) || ["requires", "forbids", "recommends"].includes(assertion.predicate) && cp && allows(object2, ["code", "engineering"]) || ["causes", "fixes", "avoids"].includes(assertion.predicate) && ce && allows(object2, ["engineering"]) && (objectSubtype === void 0 || ["incident", "error", "behavior"].includes(objectSubtype)) || assertion.predicate === "fails_because" && ce && allows(object2, ["code", "engineering"]) || ["prefers", "disfavors", "owns", "maintains"].includes(
       assertion.predicate
     ) && po && allows(object2, ["code", "engineering"]) || assertion.predicate === "located_in" && allows(subject, ["code"]) && allows(object2, ["code"]) && (objectSubtype === void 0 || [
       "repository",
@@ -15325,7 +15325,6 @@ var BudgetSchema = external_exports.object({
 var RetrieveMemoryPackRequestV1Schema = external_exports.object({
   schema_version: external_exports.literal(1),
   query: scalar(1, 16e3),
-  mode: external_exports.enum(["hybrid", "structured_only"]).default("hybrid"),
   git_state: external_exports.object({
     repository_entity_id: opaque,
     commit_oid: external_exports.string().regex(/^[a-f0-9]{40,128}$/),
@@ -15348,9 +15347,10 @@ var shown = external_exports.string().min(1);
 var count = external_exports.number().int().min(0);
 var MemoryPackResponseV1Schema = external_exports.object({
   schema_version: external_exports.literal(1),
-  retrieval_mode: external_exports.enum(["hybrid", "structured_only", "vector"]),
-  degraded: external_exports.boolean(),
-  degradation_reasons: external_exports.array(shown),
+  // Vectors and Git anchors: the only way a pack is retrieved (ADR 0016).
+  // When vectors cannot answer the request fails with one of the two
+  // `vector_retrieval_*` codes; no pack is ever degraded.
+  retrieval_mode: external_exports.literal("vector"),
   ranking_version: shown,
   index_generation: shown.nullable(),
   d1_bookmark: shown.nullable(),
@@ -15386,6 +15386,18 @@ var MemoryPackResponseV1Schema = external_exports.object({
       ).min(1),
       warnings: external_exports.array(shown),
       score: external_exports.number(),
+      /**
+       * The terms the ranking formula read for this item, by name; together
+       * they reproduce `score`. Which names there are depends on
+       * `ranking_version`, which is `r4v` for every answer of the deployed
+       * route. `semantic` is the similarity term as the formula reads it:
+       * under `r4v` that is the cosine similarity above the version's
+       * origin, rescaled to 0..1, not the cosine itself. `r4v` therefore
+       * also reports `similarity`, the cosine similarity between the query
+       * and the item's best assertion as the index gave it, clamped to
+       * 0..1: a negative cosine is reported as 0, and so is an assertion
+       * without a hit. Values are ordinal ranking inputs, not probabilities.
+       */
       score_signals: external_exports.record(external_exports.string(), external_exports.number())
     })
   ),
@@ -18241,7 +18253,6 @@ import { join as join13 } from "node:path";
 
 // src/storage.ts
 import {
-  cp,
   lstat,
   mkdir,
   readdir,
@@ -19003,7 +19014,6 @@ async function existingMemories(context, projectId, query) {
       retrieval_request: {
         schema_version: 1,
         query,
-        mode: "structured_only",
         budget: { max_items: 8 }
       }
     });
@@ -19473,7 +19483,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.1.0-alpha.7"}`
+        `memroot-capture/${"0.1.0-alpha.8"}`
       ),
       salt,
       redactor: createRedactor(salt),
