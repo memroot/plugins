@@ -8,7 +8,7 @@
       "name": "memroot",
       "source": "./plugins/claude",
       "description": "Memroot coding-agent plugin",
-      "version": "0.1.0-alpha.9"
+      "version": "0.1.0-alpha.10"
     }
   ]
 }
