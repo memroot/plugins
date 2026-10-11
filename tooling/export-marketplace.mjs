@@ -103,7 +103,7 @@ export function catalogs(version) {
   };
 }
 
-const pluginFiles = (agent) => [
+const pluginFiles = (agent, version) => [
   `${agent === "codex" ? ".codex-plugin" : ".claude-plugin"}/plugin.json`,
   "README.md",
   "LICENSE",
@@ -115,6 +115,17 @@ const pluginFiles = (agent) => [
   "scripts/capture-worker.mjs",
   "scripts/session-end.mjs",
   "scripts/status.mjs",
+  ...(version === "0.1.0-alpha.7" ||
+  version === "0.1.0-alpha.8" ||
+  version === "0.1.0-alpha.9" ||
+  version === "0.1.0-alpha.10"
+    ? []
+    : [
+        "scripts/project.mjs",
+        "scripts/project-guard.mjs",
+        "scripts/snapshot-worker.mjs",
+        `skills/${agent === "claude" ? "project" : "memroot-project"}/SKILL.md`,
+      ]),
   `scripts/${agent === "grok" ? "session-reminder" : "session-start"}.mjs`,
 ];
 
@@ -182,7 +193,7 @@ export async function exportTarball({
   }
   const expected = new Map(
     agents.flatMap((agent) =>
-      pluginFiles(agent).map((path) => [
+      pluginFiles(agent, version).map((path) => [
         `package/dist/plugins/${agent}/${path}`,
         `plugins/${agent}/${path}`,
       ]),
@@ -227,7 +238,9 @@ export async function exportTarball({
     files.set(destination, extract(source));
   for (const agent of agents) {
     const prefix = `plugins/${agent}/`;
-    const manifest = JSON.parse(files.get(`${prefix}${pluginFiles(agent)[0]}`));
+    const manifest = JSON.parse(
+      files.get(`${prefix}${pluginFiles(agent, version)[0]}`),
+    );
     if (
       manifest.name !== "memroot" ||
       manifest.version !== version ||
