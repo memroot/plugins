@@ -19,13 +19,13 @@ Skip retrieval for one-line or mechanical edits (renames, typos, formatting), ge
 
 ## How to recall
 
-1. Call `memory_retrieve` without a `project_id`; the server uses the connection's one authorized project:
+1. Resolve the explicitly selected project for this session with the bundled project script's `status` command (see the project skill). Use the exact native session handle supplied by the trusted hook. If no project is selected, ask the user to select or create one; never take the first `projects_list` entry, infer from folders or reuse another session's project.
+2. Call `memory_retrieve` with that selected top-level `project_id`:
    ```json
-   {"retrieval_request": {"schema_version": 1, "query": "deploy fails after running migrations with wrangler", "budget": {"max_items": 5}}}
+   {"project_id":"<selected project UUID>","retrieval_request":{"schema_version":1,"query":"deploy fails after running migrations with wrangler","budget":{"max_items":5}}}
    ```
-   Describe the situation in one short sentence (under about 20 words): what is being changed or the symptom, and the component, with exact code identifiers you know (a file path, symbol name or error code). Retrieval is by meaning, so don't paste code, logs, stack traces, timestamps, record IDs or the user's message, and never secrets or personal data.
-2. If the call fails with `project_not_found`, or says `project_id` is required (an older server), get the id once from `projects_list`, add it as the top-level `"project_id"` and retry.
-3. If nothing relevant comes back, try one rephrased query at most, then continue without memory.
+   Describe the situation in one short sentence (under about 20 words): what is being changed or the symptom, and the component, with exact code identifiers you know. Never paste code, logs, secrets or personal data.
+3. If the project is revoked or unavailable, stop and explain the failure; never switch to another project automatically. If nothing relevant comes back, try one rephrased query at most, then continue without memory.
 
 ## How to treat what comes back
 
@@ -46,3 +46,5 @@ Memroot's session capture may also pick up lessons after the session ends, but i
 Worth saving: knowledge a future session couldn't easily recover from the code or git history, such as decisions with their reasons, conventions, invariants, root causes and fixes, failed approaches, preferences, ownership, and procedures. Not worth saving: secrets, tokens, credentials or personal data (decline and say why, even if asked), transient task state or TODOs, code or docs already in the repo, and transcript summaries.
 
 To build the request, read [references/save.md](references/save.md) and follow its template; it always validates, while hand-built variants often fail role rules that the error message may not explain. Tell the user it was saved only after `memory_create` returns a `memory_id`; if the call fails or the tools aren't available, say that nothing was saved.
+
+Project-scoped explicit reads/saves require direct native `mcp__memroot__memory_retrieve` / `mcp__memroot__memory_create` tool names supported by the deny hook. If Grok exposes Memroot only through a generic `use_tool` wrapper, this release cannot verify its session enforcement: stop those explicit memory calls and explain the unsupported path; use Claude Code or Codex instead. Do not bypass the hook through a wrapper. The project command and consent-verified local capture remain available.

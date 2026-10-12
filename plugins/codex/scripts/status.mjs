@@ -145,13 +145,15 @@ var capture = consent.kind === "ok" ? {
 process.stdout.write(
   `${JSON.stringify({
     plugin: "memroot",
-    version: "0.1.0-alpha.10",
+    version: "0.2.0",
     agent,
     connection: "not_checked",
     capabilities: {
       installationStatus: true,
       cloudAuthentication: true,
       memoryRetrieval: true,
+      sessionProjectSelection: true,
+      projectCreation: true,
       sessionCapture: true,
       sessionCaptureMode: "opt_in_local_extraction",
       extraction: true

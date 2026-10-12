@@ -33,6 +33,17 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/project-guard.mjs\"",
+            "timeout": 3
+          }
+        ]
+      }
     ]
   }
 }

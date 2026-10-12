@@ -26,6 +26,7 @@ Example for "Remember that the deploy fails if migrations run after wrangler dep
 
 ```json
 {
+  "project_id": "<selected project UUID>",
   "idempotency_key": "mr-20261002-deploy-order-7f3a9c2e",
   "memory_request": {
     "schema_version": 1,
@@ -66,11 +67,13 @@ Example for "Remember that the deploy fails if migrations run after wrangler dep
 
 Field notes:
 
-- `project_id`: leave it out; the server uses the connection's one authorized project. If the call fails with `project_not_found`, or says `project_id` is required (an older server), get the id once from `projects_list`, add it as the top-level `"project_id"` and retry with the same `idempotency_key`.
+- `project_id`: include the explicit ID confirmed by project status in this session. If unavailable or revoked, stop; never select another project as a fallback.
 - `idempotency_key`: any unique string of 16 to 128 printable characters that you compose yourself (date, short slug, a few random characters). No command is needed to generate it or the other values. Reuse the same key with the identical request if you retry.
 - `valid_time.from` (in both places): the current UTC time, ending in `Z`.
 - `qualifier`: lowercase snake_case, starting with a letter, such as `package_manager` or `deploy_order`. The literal `value` is a short string, at most 512 bytes.
 - `evidence`: keep exactly one `user_attestation` item with an empty `locator`, and summarize what the user said. Don't add other evidence. If the user agreed to your offer, say so, for example "User agreed to save this root cause after the agent offered."
 - `provenance.source_id`: an opaque id you make up (for example `op-` plus 16 hex digits); it is not a session, commit, or file id. Leave out `adapter`; it has no Grok value.
 
-If the call fails with `project_not_found`, or says `project_id` is required, use the `project_id` fallback in the field notes first. If the call is rejected for any other reason, compare your request with the template field by field and retry once with the same `idempotency_key`. If it still fails, tell the user nothing was saved.
+If the call fails with `project_not_found`, tell the user the selected project is unavailable and stop. If the call is rejected for any other reason, compare your request with the template field by field and retry once with the same `idempotency_key`. If it still fails, tell the user nothing was saved.
+
+Always include the explicit top-level `project_id` confirmed by the session project status command. If no project is selected, ask the user to select or create one first. Never rely on a connection default.
