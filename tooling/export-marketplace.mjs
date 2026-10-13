@@ -103,31 +103,41 @@ export function catalogs(version) {
   };
 }
 
-const pluginFiles = (agent, version) => [
-  `${agent === "codex" ? ".codex-plugin" : ".claude-plugin"}/plugin.json`,
-  "README.md",
-  "LICENSE",
-  "THIRD-PARTY-NOTICES.txt",
-  "hooks/hooks.json",
-  "skills/memroot-memory/SKILL.md",
-  "skills/memroot-memory/references/save.md",
-  "skills/memroot-status/SKILL.md",
-  "scripts/capture-worker.mjs",
-  "scripts/session-end.mjs",
-  "scripts/status.mjs",
-  ...(version === "0.1.0-alpha.7" ||
-  version === "0.1.0-alpha.8" ||
-  version === "0.1.0-alpha.9" ||
-  version === "0.1.0-alpha.10"
-    ? []
-    : [
-        "scripts/project.mjs",
-        "scripts/project-guard.mjs",
-        "scripts/snapshot-worker.mjs",
-        `skills/${agent === "claude" ? "project" : "memroot-project"}/SKILL.md`,
-      ]),
-  `scripts/${agent === "grok" ? "session-reminder" : "session-start"}.mjs`,
-];
+const pluginFiles = (agent, version) => {
+  // scripts/memory-mirror.mjs and scripts/prompt-nudge.mjs first ship in
+  // 0.3.0; published tarballs before it do not carry the hooks and must still
+  // export cleanly.
+  const [major, minor] = releaseParts(version);
+  const memoryHooks = major > 0n || (major === 0n && minor >= 3n);
+  return [
+    `${agent === "codex" ? ".codex-plugin" : ".claude-plugin"}/plugin.json`,
+    "README.md",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.txt",
+    "hooks/hooks.json",
+    "skills/memroot-memory/SKILL.md",
+    "skills/memroot-memory/references/save.md",
+    "skills/memroot-status/SKILL.md",
+    "scripts/capture-worker.mjs",
+    "scripts/session-end.mjs",
+    "scripts/status.mjs",
+    ...(version === "0.1.0-alpha.7" ||
+    version === "0.1.0-alpha.8" ||
+    version === "0.1.0-alpha.9" ||
+    version === "0.1.0-alpha.10"
+      ? []
+      : [
+          "scripts/project.mjs",
+          "scripts/project-guard.mjs",
+          "scripts/snapshot-worker.mjs",
+          `skills/${agent === "claude" ? "project" : "memroot-project"}/SKILL.md`,
+        ]),
+    ...(memoryHooks
+      ? ["scripts/memory-mirror.mjs", "scripts/prompt-nudge.mjs"]
+      : []),
+    `scripts/${agent === "grok" ? "session-reminder" : "session-start"}.mjs`,
+  ];
+};
 
 function command(program, args, cwd, maxBuffer = MAX_CONTENT) {
   // Ignore user npm/tar options and credentials. No shell or package scripts.
