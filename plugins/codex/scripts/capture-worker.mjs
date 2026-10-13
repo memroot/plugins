@@ -16451,7 +16451,7 @@ function mapCandidate(candidate, context) {
 }
 
 // src/capture/extract/prompt/extract-prompt.md
-var extract_prompt_default = `<!-- memroot-extract-v1 | schema memroot-extract-v1 (schema.json) | system part above "<!-- USER -->", user-message template below it | placeholders: {{session_date}} {{agent}} {{repo_name}} {{branch_hint}} {{existing_memories}} {{transcript}} {{nonce}} {{max_items}} -->
+var extract_prompt_default = `<!-- memroot-extract-v2 | schema memroot-extract-v1 (schema.json) | system part above "<!-- USER -->", user-message template below it | placeholders: {{session_date}} {{agent}} {{repo_name}} {{branch_hint}} {{existing_memories}} {{transcript}} {{nonce}} {{max_items}} -->
 You extract durable engineering memories from one finished coding-agent session for Memroot, a memory store shared by future coding agents working in the same repository. You have no tools. Output JSON only.
 
 Precision beats recall. A wrong, duplicated, transient or code-derivable memory misleads future agents and wastes the user's small write quota; a missed one costs little. Zero memories is the most common correct answer.
@@ -16715,7 +16715,7 @@ var schema_default = {
 };
 
 // src/capture/extract/prompt/VERSION
-var VERSION_default = "prompt_version=memroot-extract-v1\nschema_version=memroot-extract-v1\nmax_items=5\n# default model per runner (evidence: results.md, 50-variant tournament 2026-10-03)\nclaude.model=sonnet\nclaude.fallback_model=haiku\nclaude.env=MAX_THINKING_TOKENS=0\ncodex.model=default\ncodex.config=model_reasoning_effort=low\ngrok.model=grok-4.7\ngrok.reasoning_effort=low\n";
+var VERSION_default = "prompt_version=memroot-extract-v2\nschema_version=memroot-extract-v1\nmax_items=5\n# default model per runner (evidence: results.md, 50-variant tournament 2026-10-03)\nclaude.model=sonnet\nclaude.fallback_model=haiku\nclaude.env=MAX_THINKING_TOKENS=0\ncodex.model=default\ncodex.config=model_reasoning_effort=low\ngrok.model=grok-4.7\ngrok.reasoning_effort=low\n";
 
 // src/capture/extract/render.ts
 var VERSION_PATTERN = /^[A-Za-z0-9._:/@+-]{1,128}$/;
@@ -19499,7 +19499,9 @@ async function extract(job, context) {
     agent: job.agent,
     repo_name: repoName,
     branch_hint: context.redactor.redact(branch ?? "unknown") ?? "unknown",
-    existing_memories: existing,
+    // Stored titles are used only for local deduplication; never sent to
+    // the agent model provider as additional customer content.
+    existing_memories: [],
     transcript: condensed.text,
     nonce,
     max_items: PROMPT_MAX_ITEMS
@@ -19892,7 +19894,7 @@ async function main2() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.4.0"}`
+        `memroot-capture/${"0.5.0"}`
       ),
       salt,
       redactor: createRedactor(salt),

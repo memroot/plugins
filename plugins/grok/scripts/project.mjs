@@ -1871,7 +1871,7 @@ async function projectCommand(args, bundledAgent) {
   const client = new McpClient(
     base,
     new TokenBroker(base),
-    `memroot-cli/${"0.4.0"}`
+    `memroot-cli/${"0.5.0"}`
   );
   let projects;
   try {
