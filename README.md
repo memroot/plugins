@@ -24,6 +24,8 @@ Setup detects your agents, previews the installation, registers this remote mark
 | Codex | Complete the browser sign-in during setup, then review and trust the Memroot hooks in `/hooks`. |
 | Grok | Run `/mcps`, select `memroot`, and press `i` to authorize. |
 
+> **Codex:** plugin support is a Codex feature and must be enabled. If `codex plugin list` fails or setup cannot find the plugin manager, run `codex features enable plugins` and restart Codex, then re-run `npx memroot@latest setup`.
+
 For a preview or a specific agent:
 
 ```sh
