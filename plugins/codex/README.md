@@ -1,6 +1,8 @@
 # Memroot for Codex
 
-This is the complete, self-contained Memroot plugin root, version `0.3.0`. The native agent plugin manager installs this folder from the public Memroot plugin marketplace and owns subsequent updates. Node.js is the only runtime requirement. Every script in `scripts/` is generated from the Memroot CLI source and bundled with its dependencies; no script refers to `npx`, the npm cache or files outside this bundle.
+This is the complete, self-contained Memroot plugin root, version `0.4.0`. The native agent plugin manager installs this folder from the public Memroot plugin marketplace and owns subsequent updates. Node.js is the only runtime requirement. Every script in `scripts/` is generated from the Memroot CLI source and bundled with its dependencies; no script refers to `npx`, the npm cache or files outside this bundle.
+
+Codex plugin support is a Codex feature and must be enabled. If `codex plugin list` fails or setup cannot find the plugin manager, run `codex features enable plugins` and restart Codex, then re-run `npx memroot@latest setup`.
 
 The memroot-status skill and `node scripts/status.mjs` explain this release's capabilities. Setup registers the production remote MCP server with Codex and opens native OAuth sign-in when needed. The MCP tools provide explicit save and retrieval after authorization. Setup also maintains a managed `<!-- memroot:start -->` … `<!-- memroot:end -->` block in `~/.codex/AGENTS.md` (or `AGENTS.override.md` when that file is used) that names Memroot the default durable memory layer; content outside the markers is untouched.
 

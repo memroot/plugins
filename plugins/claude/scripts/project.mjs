@@ -309,6 +309,16 @@ async function readConfig() {
     if (registered.claude || registered.codex || registered.grok)
       config.mcpRegistered = registered;
   }
+  const stamps = record2.instructionsInstalled;
+  if (stamps && typeof stamps === "object" && !Array.isArray(stamps)) {
+    const installed = {};
+    for (const key2 of ["claude", "codex", "grok"]) {
+      const value2 = optionalString(stamps[key2]);
+      if (value2) installed[key2] = value2;
+    }
+    if (installed.claude || installed.codex || installed.grok)
+      config.instructionsInstalled = installed;
+  }
   return config;
 }
 async function writeConfig(config) {
@@ -1861,7 +1871,7 @@ async function projectCommand(args, bundledAgent) {
   const client = new McpClient(
     base,
     new TokenBroker(base),
-    `memroot-cli/${"0.3.0"}`
+    `memroot-cli/${"0.4.0"}`
   );
   let projects;
   try {
