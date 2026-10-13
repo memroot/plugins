@@ -571,6 +571,10 @@ var NOT_A_TRANSCRIPT_ERRNO = NOT_A_TRANSCRIPT.map(
   (name) => osConstants.errno[name]
 ).filter((value) => typeof value === "number");
 
+// src/project-defaults.ts
+var MAX_FILE_BYTES = 256 * 1024;
+var HINT_TTL_MS = 90 * 24 * 60 * 60 * 1e3;
+
 // src/project-session.ts
 var EMPTY_HASH = createHash2("sha256").update("").digest("hex");
 var SESSION_RETENTION_MS = 14 * 24 * 60 * 60 * 1e3;
@@ -715,7 +719,7 @@ function captureTrigger(agent2, record2) {
   return void 0;
 }
 function isSubagentEvent(record2) {
-  return record2.subagentType !== void 0 || record2.subagent_type !== void 0 || record2.agent_id !== void 0;
+  return record2.subagentType !== void 0 || record2.subagent_type !== void 0 || record2.agent_id !== void 0 || record2.agent_type !== void 0;
 }
 function normalizeCaptureEvent(agent2, trigger, record2) {
   const sessionId = string(record2, "session_id", "sessionId");

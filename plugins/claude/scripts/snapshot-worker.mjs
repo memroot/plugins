@@ -298,6 +298,10 @@ var NOT_A_TRANSCRIPT_ERRNO = NOT_A_TRANSCRIPT.map(
   (name) => osConstants.errno[name]
 ).filter((value) => typeof value === "number");
 
+// src/project-defaults.ts
+var MAX_FILE_BYTES = 256 * 1024;
+var HINT_TTL_MS = 90 * 24 * 60 * 60 * 1e3;
+
 // src/project-session.ts
 var EMPTY_HASH = createHash2("sha256").update("").digest("hex");
 var SESSION_RETENTION_MS = 14 * 24 * 60 * 60 * 1e3;

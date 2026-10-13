@@ -1,6 +1,6 @@
 {
   "name": "memroot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Memroot status, memory usage guidance and opt-in session capture.",
   "author": {
     "name": "Memroot"

@@ -9,6 +9,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_PLUGIN_ROOT}/scripts/memory-mirror.mjs\"",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "SessionEnd": [

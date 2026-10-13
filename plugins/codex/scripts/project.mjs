@@ -237,7 +237,7 @@ function optionalString(value) {
 function containsCredential(value) {
   if (!value || typeof value !== "object") return false;
   return Object.entries(value).some(
-    ([key, entry]) => /token|secret|password|credential|api[_-]?key/i.test(key) || containsCredential(entry)
+    ([key2, entry]) => /token|secret|password|credential|api[_-]?key/i.test(key2) || containsCredential(entry)
   );
 }
 async function migrateLegacy(record2, raw) {
@@ -502,7 +502,7 @@ function parseConsent(value) {
     return void 0;
   const record2 = value;
   const keys = Object.keys(record2);
-  if (keys.some((key) => !KEYS.includes(key)) || keys.length !== KEYS.length)
+  if (keys.some((key2) => !KEYS.includes(key2)) || keys.length !== KEYS.length)
     return void 0;
   const agents2 = record2.agents;
   const models = record2.models;
@@ -510,7 +510,7 @@ function parseConsent(value) {
     return void 0;
   const modelRecord = models;
   const modelKeys = Object.keys(modelRecord);
-  if (modelKeys.length !== CAPTURE_AGENTS.length || modelKeys.some((key) => !CAPTURE_AGENTS.includes(key)) || Object.values(modelRecord).some(
+  if (modelKeys.length !== CAPTURE_AGENTS.length || modelKeys.some((key2) => !CAPTURE_AGENTS.includes(key2)) || Object.values(modelRecord).some(
     (model) => model !== null && (typeof model !== "string" || !MODEL.test(model))
   ))
     return void 0;
@@ -654,7 +654,7 @@ function runProcess(binary, args, options) {
 
 // src/capture/queue/job.ts
 import { createHash as createHash2, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/project-session.ts
 import { createHash } from "node:crypto";
@@ -666,7 +666,7 @@ import {
   openSync as openSync2,
   readSync
 } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 
 // src/capture/hooks/guards.ts
 import { realpathSync } from "node:fs";
@@ -872,6 +872,81 @@ var NOT_A_TRANSCRIPT_ERRNO = NOT_A_TRANSCRIPT.map(
   (name) => osConstants.errno[name]
 ).filter((value) => typeof value === "number");
 
+// src/project-defaults.ts
+import { dirname as dirname3, join as join7 } from "node:path";
+var FILE = "project-defaults.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 256;
+var HINT_TTL_MS = 90 * 24 * 60 * 60 * 1e3;
+function filePath() {
+  return join7(memrootConfigDir(), FILE);
+}
+function key(agent, apiBase, userId) {
+  return `${agent}:${apiBase}:${userId}`;
+}
+function readStore() {
+  const raw = readPrivateFileIfExists(filePath(), MAX_FILE_BYTES);
+  if (raw === void 0) return {};
+  try {
+    const value = JSON.parse(raw);
+    const record2 = value;
+    if (record2.schemaVersion !== 1 || !record2.defaults || typeof record2.defaults !== "object" || Array.isArray(record2.defaults))
+      return {};
+    const store = record2.defaults;
+    const out = {};
+    for (const [name, entry] of Object.entries(store))
+      if (entry && typeof entry === "object" && !Array.isArray(entry))
+        out[name] = entry;
+    return out;
+  } catch {
+    return {};
+  }
+}
+function writeStore(store) {
+  ensurePrivateDir(memrootConfigDir(), dirname3(memrootConfigDir()), false);
+  writePrivateFileAtomic(
+    filePath(),
+    `${JSON.stringify({ schemaVersion: 1, defaults: store }, null, 2)}
+`
+  );
+}
+function readDefault(agent, apiBase, userId) {
+  if (!userId) return void 0;
+  try {
+    return readStore()[key(agent, apiBase, userId)];
+  } catch {
+    return void 0;
+  }
+}
+function writeDefault(record2) {
+  if (!record2.userId) return;
+  const store = readStore();
+  store[key(record2.agent, record2.apiBase, record2.userId)] = record2;
+  pruneStale(store);
+  writeStore(store);
+}
+function pruneDefaults(agent, apiBase, userId) {
+  if (!userId) return;
+  const store = readStore();
+  if (!(key(agent, apiBase, userId) in store)) return;
+  delete store[key(agent, apiBase, userId)];
+  writeStore(store);
+}
+function pruneStale(store) {
+  const cutoff = Date.now() - HINT_TTL_MS;
+  const names = Object.keys(store);
+  for (const name of names) {
+    const at = Date.parse(store[name]?.updatedAt ?? "");
+    if (Number.isNaN(at) || at < cutoff) delete store[name];
+  }
+  const remaining = Object.keys(store);
+  if (remaining.length <= MAX_RECORDS) return;
+  for (const name of remaining.sort(
+    (a, b) => Date.parse(store[a]?.updatedAt ?? "") - Date.parse(store[b]?.updatedAt ?? "")
+  ).slice(0, remaining.length - MAX_RECORDS))
+    delete store[name];
+}
+
 // src/project-session.ts
 var EMPTY_HASH = createHash("sha256").update("").digest("hex");
 var SESSION_RETENTION_MS = 14 * 24 * 60 * 60 * 1e3;
@@ -892,7 +967,7 @@ function projectSessionHandle(agent, id) {
 function path(handle) {
   if (!HANDLE.test(handle))
     throw new Error("PROJECT_SESSION_REQUIRED: Invalid session handle.");
-  return join7(stateDir(), "project-sessions", `${handle}.json`);
+  return join8(stateDir(), "project-sessions", `${handle}.json`);
 }
 function readProjectSession(handle) {
   const file = path(handle);
@@ -929,7 +1004,7 @@ function writeProjectSession(handle, session) {
     (name) => /^[a-f0-9]{64}\.json$/.test(name)
   );
   for (const name of files) {
-    const file = join7(directory, name);
+    const file = join8(directory, name);
     if (name !== `${handle}.json` && now - lstatSync3(file).mtimeMs > SESSION_RETENTION_MS)
       removeFile(file);
   }
@@ -973,7 +1048,7 @@ function sha256Hex(value) {
   return createHash2("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path2 = join8(stateSubdir(), "salt");
+  const path2 = join9(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path2, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -992,7 +1067,7 @@ function queueDir() {
   return stateSubdir("queue");
 }
 function jobPath(jobId) {
-  return join8(queueDir(), `${jobId}.json`);
+  return join9(queueDir(), `${jobId}.json`);
 }
 function parseJob(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -1772,7 +1847,9 @@ async function projectCommand(args, bundledAgent) {
   const noBrowser = parsed.values["no-browser"] ?? false;
   if (target !== void 0 && action !== "use" && action !== "create")
     throw new Error("INVALID_ARGUMENT: This project command takes no name.");
-  const base = resolveApiBase(apiBase ? { apiBase } : {}, await readConfig());
+  const config = await readConfig();
+  const base = resolveApiBase(apiBase ? { apiBase } : {}, config);
+  const userId = config.userId;
   if (action === "login") {
     await loginMcp(base, { noBrowser });
     return;
@@ -1784,7 +1861,7 @@ async function projectCommand(args, bundledAgent) {
   const client = new McpClient(
     base,
     new TokenBroker(base),
-    `memroot-cli/${"0.2.0"}`
+    `memroot-cli/${"0.3.0"}`
   );
   let projects;
   try {
@@ -1845,15 +1922,18 @@ async function projectCommand(args, bundledAgent) {
         throw new Error(
           "PROJECT_SELECTION_INVALID: The selected project is no longer authorized for this account; select a project again."
         );
+      const hint = readDefault(agent, base, userId);
       console.log(
         JSON.stringify({
           selected: selection ? { project_id: selection.projectId, name: selection.name } : null,
+          // The remembered default is a read-only hint, shown verbatim.
+          defaultProject: hint ? { projectId: hint.projectId, name: hint.name, hint: true } : null,
           session: handle
         })
       );
       return;
     }
-    if (!target?.trim())
+    if (!target?.trim() && action !== "use")
       throw new Error("INVALID_ARGUMENT: A project name or ID is required.");
     if (!session.transcriptPath)
       throw new Error(
@@ -1904,8 +1984,9 @@ async function projectCommand(args, bundledAgent) {
       prefixDigest = snapshot.prefixHash;
     }
     let selected;
+    let viaDefault = false;
     if (action === "create") {
-      const name = target.normalize("NFC").trim();
+      const name = (target ?? "").normalize("NFC").trim();
       if (!isConsoleProjectName(name))
         throw new Error(
           "INVALID_ARGUMENT: Use a visible, single-line project name of 1 to 64 characters."
@@ -1936,6 +2017,22 @@ async function projectCommand(args, bundledAgent) {
         );
       createdProjectId = created.project_id;
       selected = { project_id: created.project_id, name };
+    } else if (!target?.trim()) {
+      const hint = readDefault(agent, base, userId);
+      const hinted = hint && hint.apiBase === base && hint.principalId === projects.principal_id && hint.tenantId === projects.tenant_id ? projects.projects.find((p) => p.project_id === hint.projectId) : void 0;
+      if (hint && !hinted)
+        try {
+          pruneDefaults(agent, base, userId);
+        } catch {
+        }
+      viaDefault = true;
+      if (hinted) selected = hinted;
+      else if (projects.projects.length === 1)
+        selected = projects.projects[0];
+      else
+        throw new Error(
+          `PROJECT_CHOICE_REQUIRED: No remembered or sole-project default applies. Choose explicitly: memroot project use <name>; authorized projects: ${projects.projects.map((p) => `"${p.name ?? p.project_id}"`).join(", ") || "(none)"}.`
+        );
     } else {
       const matches = projects.projects.filter(
         (p) => p.project_id === target || p.name === target.normalize("NFC").trim()
@@ -1947,10 +2044,28 @@ async function projectCommand(args, bundledAgent) {
         );
       selected = match;
     }
+    const boundAgent = agent;
+    const rememberBind = (name) => {
+      if (!userId) return;
+      try {
+        writeDefault({
+          principalId: projects.principal_id,
+          tenantId: projects.tenant_id,
+          projectId: selected.project_id,
+          name,
+          apiBase: base,
+          userId,
+          agent: boundAgent,
+          updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      } catch {
+      }
+    };
     const previous = session.selection;
     if (previous?.projectId === selected.project_id && previous.apiBase === base && previous.principalId === projects.principal_id && previous.tenantId === projects.tenant_id && (captureId ? previous.captureConsentId === captureId && !!previous.trustedPrefixHash : !previous.captureConsentId)) {
+      rememberBind(selected.name ?? previous.name);
       console.log(
-        JSON.stringify({
+        viaDefault ? `Using default project ${JSON.stringify(previous.name)} (${previous.projectId}).` : JSON.stringify({
           project_id: previous.projectId,
           name: previous.name,
           session: handle
@@ -1992,8 +2107,9 @@ async function projectCommand(args, bundledAgent) {
         action === "create" ? `PROJECT_CREATED_SELECTION_FAILED: Project ${selected.project_id} was created. Do not repeat create; recover with project use ${selected.project_id} after repairing local session state.` : "PROJECT_SELECTION_FAILED: The session choice could not be persisted; retry use after repairing local session state."
       );
     }
+    rememberBind(session.selection.name);
     console.log(
-      JSON.stringify({
+      viaDefault ? `Using default project ${JSON.stringify(session.selection.name)} (${selected.project_id}).` : JSON.stringify({
         project_id: selected.project_id,
         name: session.selection.name,
         session: handle

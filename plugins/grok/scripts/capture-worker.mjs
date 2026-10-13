@@ -27,7 +27,7 @@ import {
   openSync as openSync3,
   readSync as readSync2
 } from "node:fs";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 
 // src/capture/hooks/guards.ts
 import { realpathSync } from "node:fs";
@@ -732,6 +732,45 @@ function parseGrokSession(dir, range) {
   };
 }
 
+// src/storage.ts
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile
+} from "node:fs/promises";
+import { homedir as homedir4 } from "node:os";
+import { dirname as dirname3, isAbsolute as isAbsolute4, join as join6 } from "node:path";
+function dataDirectory() {
+  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join6(homedir4(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join6(homedir4(), ".local", "share");
+  if (!isAbsolute4(base))
+    throw new Error(
+      "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
+    );
+  return join6(base, "memroot");
+}
+async function safeDirectory(path3) {
+  const boundary = dataDirectory();
+  if (path3 !== boundary && path3.startsWith(`${boundary}/`))
+    await safeDirectory(dirname3(path3));
+  await mkdir(path3, { recursive: true, mode: 448 });
+  const info = await lstat(path3);
+  if (!info.isDirectory() || info.isSymbolicLink())
+    throw new Error(`UNSAFE_PATH: Expected a real directory at ${path3}.`);
+}
+
+// src/config.ts
+function configDirectory() {
+  return memrootConfigDir();
+}
+
+// src/project-defaults.ts
+var MAX_FILE_BYTES = 256 * 1024;
+var HINT_TTL_MS = 90 * 24 * 60 * 60 * 1e3;
+
 // src/project-session.ts
 var EMPTY_HASH = createHash2("sha256").update("").digest("hex");
 var SESSION_RETENTION_MS = 14 * 24 * 60 * 60 * 1e3;
@@ -751,7 +790,7 @@ function projectSessionHandle(agent, id) {
 function path(handle) {
   if (!HANDLE.test(handle))
     throw new Error("PROJECT_SESSION_REQUIRED: Invalid session handle.");
-  return join6(stateDir(), "project-sessions", `${handle}.json`);
+  return join7(stateDir(), "project-sessions", `${handle}.json`);
 }
 function readProjectSession(handle) {
   const file2 = path(handle);
@@ -16809,7 +16848,7 @@ function renderExtractorInput(input) {
 // src/capture/extract/run.ts
 import { spawn } from "node:child_process";
 import { accessSync, constants as constants4, statSync } from "node:fs";
-import { delimiter, isAbsolute as isAbsolute4, join as join7 } from "node:path";
+import { delimiter, isAbsolute as isAbsolute5, join as join8 } from "node:path";
 var EXTRACTOR_TIMEOUT_MS = 18e4;
 var MAX_OUTPUT_BYTES = 256 * 1024;
 var MAX_STDERR_BYTES = 8 * 1024;
@@ -16822,8 +16861,8 @@ var RunnerError = class extends Error {
 };
 function findExecutable(name) {
   for (const directory of (process.env.PATH ?? "").split(delimiter)) {
-    if (!isAbsolute4(directory)) continue;
-    const path3 = join7(directory, name);
+    if (!isAbsolute5(directory)) continue;
+    const path3 = join8(directory, name);
     try {
       accessSync(path3, constants4.X_OK);
       if (statSync(path3).isFile()) return path3;
@@ -17018,7 +17057,7 @@ ${result.stderr}`;
 }
 
 // src/capture/extract/runners/codex.ts
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 function codexArgs(input, schemaPath, outPath) {
   const args = [
     "exec",
@@ -17068,8 +17107,8 @@ function codexArgs(input, schemaPath, outPath) {
   return args;
 }
 async function runCodex(input) {
-  const schemaPath = join8(input.workDir, "schema.json");
-  const outPath = join8(input.workDir, `${input.jobId}.out.json`);
+  const schemaPath = join9(input.workDir, "schema.json");
+  const outPath = join9(input.workDir, `${input.jobId}.out.json`);
   writePrivateFileAtomic(schemaPath, input.schemaJson);
   removeFile(outPath);
   try {
@@ -17101,8 +17140,8 @@ ${result.stdout}`) ? "quota" : "exit"
 
 // src/capture/extract/runners/grok.ts
 import { realpathSync as realpathSync2, rmSync as rmSync3 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-import { isAbsolute as isAbsolute5, join as join9 } from "node:path";
+import { homedir as homedir5 } from "node:os";
+import { isAbsolute as isAbsolute6, join as join10 } from "node:path";
 function grokArgs(input, promptFile) {
   const args = [
     "--prompt-file",
@@ -17131,14 +17170,14 @@ function grokArgs(input, promptFile) {
   return args;
 }
 function removeExtractorHistory(extractorCwd) {
-  const home = process.env.GROK_HOME && isAbsolute5(process.env.GROK_HOME) ? process.env.GROK_HOME : join9(homedir4(), ".grok");
+  const home = process.env.GROK_HOME && isAbsolute6(process.env.GROK_HOME) ? process.env.GROK_HOME : join10(homedir5(), ".grok");
   const candidates = /* @__PURE__ */ new Set([extractorCwd]);
   try {
     candidates.add(realpathSync2(extractorCwd));
   } catch {
   }
   for (const cwd of candidates) {
-    const group = join9(home, "sessions", encodeURIComponent(cwd));
+    const group = join10(home, "sessions", encodeURIComponent(cwd));
     if (!encodeURIComponent(cwd).includes("memroot-extractor-")) continue;
     rmSync3(group, { recursive: true, force: true });
   }
@@ -17153,7 +17192,7 @@ async function runGrok(input) {
   }
 }
 async function runGrokOnce(input) {
-  const promptFile = join9(input.workDir, `${input.jobId}.prompt`);
+  const promptFile = join10(input.workDir, `${input.jobId}.prompt`);
   let sessionId;
   writePrivateFileAtomic(promptFile, input.user);
   try {
@@ -17915,13 +17954,13 @@ function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
 var COMPACTION_REASON = /^compact(_auto|_manual)?$/;
 
 // src/capture/queue/cursor-source.ts
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 var PUBLISHED_SOURCE = "grok_chat_history";
 var SOURCES = ["grok_updates", "grok_chat_history"];
 var MAX_RECORDS = 1e3;
 var HEX642 = /^[a-f0-9]{64}$/;
 function path2() {
-  return join10(stateSubdir(), "cursor-sources.json");
+  return join11(stateSubdir(), "cursor-sources.json");
 }
 function read() {
   const records = {};
@@ -17970,7 +18009,7 @@ function recordCursorSource(sessionRef, source, cursor, ledgerSessions) {
 }
 
 // src/capture/queue/ledger.ts
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 var MAX_CURSORS = 1e3;
 var MAX_TITLE_HASHES = 200;
 var UPLOAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
@@ -17986,7 +18025,7 @@ function empty() {
   };
 }
 function ledgerPath() {
-  return join11(stateSubdir(), "ledger.json");
+  return join12(stateSubdir(), "ledger.json");
 }
 function sanitize(value) {
   const ledger = empty();
@@ -18083,12 +18122,12 @@ function uploadsInLastDay(ledger, now = Date.now()) {
 }
 
 // src/capture/queue/purge.ts
-import { join as join12 } from "node:path";
+import { join as join13 } from "node:path";
 function removeJobFiles(jobId) {
   deleteJob(jobId);
   const work = stateSubdir("work");
   for (const name of listFiles(work))
-    if (name.startsWith(`${jobId}.`)) removeFile(join12(work, name));
+    if (name.startsWith(`${jobId}.`)) removeFile(join13(work, name));
 }
 function purgeAgent(agent) {
   let removed = 0;
@@ -18103,12 +18142,12 @@ function purgeQueue() {
   const jobs = listJobIds();
   for (const jobId of jobs) removeJobFiles(jobId);
   const work = stateSubdir("work");
-  for (const name of listFiles(work)) removeFile(join12(work, name));
+  for (const name of listFiles(work)) removeFile(join13(work, name));
   return jobs.length;
 }
 
 // src/capture/transcript/claude.ts
-import { isAbsolute as isAbsolute6, relative } from "node:path";
+import { isAbsolute as isAbsolute7, relative } from "node:path";
 var NOISE_PREFIXES = [
   "<command-name>",
   "<command-message>",
@@ -18132,7 +18171,7 @@ function toolLine(name, input, cwd) {
   const safeName = name.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 64) || "tool";
   const path3 = typeof input?.file_path === "string" ? input.file_path : typeof input?.notebook_path === "string" ? input.notebook_path : void 0;
   if (path3) {
-    const display = isAbsolute6(path3) && (path3 === cwd || path3.startsWith(`${cwd}/`)) ? relative(cwd, path3) || "." : path3;
+    const display = isAbsolute7(path3) && (path3 === cwd || path3.startsWith(`${cwd}/`)) ? relative(cwd, path3) || "." : path3;
     return `${safeName} path=${display.replace(/\s+/g, " ").slice(0, 300)}`;
   }
   if (safeName === "Bash" && typeof input?.description === "string")
@@ -18481,43 +18520,6 @@ import {
   writeFile as writeFile2
 } from "node:fs/promises";
 import { join as join14 } from "node:path";
-
-// src/storage.ts
-import {
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  writeFile
-} from "node:fs/promises";
-import { homedir as homedir5 } from "node:os";
-import { dirname as dirname3, isAbsolute as isAbsolute7, join as join13 } from "node:path";
-function dataDirectory() {
-  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join13(homedir5(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join13(homedir5(), ".local", "share");
-  if (!isAbsolute7(base))
-    throw new Error(
-      "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
-    );
-  return join13(base, "memroot");
-}
-async function safeDirectory(path3) {
-  const boundary = dataDirectory();
-  if (path3 !== boundary && path3.startsWith(`${boundary}/`))
-    await safeDirectory(dirname3(path3));
-  await mkdir(path3, { recursive: true, mode: 448 });
-  const info = await lstat(path3);
-  if (!info.isDirectory() || info.isSymbolicLink())
-    throw new Error(`UNSAFE_PATH: Expected a real directory at ${path3}.`);
-}
-
-// src/config.ts
-function configDirectory() {
-  return memrootConfigDir();
-}
-
-// src/credentials.ts
 var SERVICE = "memroot";
 var TOOL_TIMEOUT_MS = 15e3;
 function credentialStoreKind() {
@@ -19890,7 +19892,7 @@ async function main2() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.2.0"}`
+        `memroot-capture/${"0.3.0"}`
       ),
       salt,
       redactor: createRedactor(salt),

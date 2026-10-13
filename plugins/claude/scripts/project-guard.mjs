@@ -406,6 +406,10 @@ function grokSessionDir(transcriptPath, cwd, sessionId) {
   return join5(home, "sessions", encodeURIComponent(cwd), sessionId);
 }
 
+// src/project-defaults.ts
+var MAX_FILE_BYTES = 256 * 1024;
+var HINT_TTL_MS = 90 * 24 * 60 * 60 * 1e3;
+
 // src/project-session.ts
 var EMPTY_HASH = createHash2("sha256").update("").digest("hex");
 var SESSION_RETENTION_MS = 14 * 24 * 60 * 60 * 1e3;
