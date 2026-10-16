@@ -737,7 +737,8 @@ function clearSelection(apiBase, principalId, onlyProjectId) {
 var CAPTURE_AGENTS = ["claude", "codex", "grok"];
 var CONSENT_TEXT_VERSION = "capture-consent-v2";
 var MAX_ITEMS_PER_CAPTURE_LIMIT = 50;
-var MAX_ITEMS_PER_24H_LIMIT = 500;
+var MAX_ITEMS_PER_24H_LIMIT = 2500;
+var PREVIOUS_MAX_ITEMS_PER_24H_LIMIT = 500;
 var KEYS = [
   "schemaVersion",
   "enabled",
@@ -794,14 +795,19 @@ function activeConsentFor(agent) {
   if (read.kind !== "ok") return void 0;
   return read.consent.enabled && read.consent.agents.includes(agent) ? read.consent : void 0;
 }
-var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
+var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v6";
+var PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
 function currentAgreement(consent) {
   if (!consent.enabled) return void 0;
   try {
     const raw = readPrivateFileIfExists(captureAgreementPath(), 4 * 1024);
     if (raw === void 0) return void 0;
     const value = JSON.parse(raw);
-    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(value.maxItemsPerDay, 1, MAX_ITEMS_PER_24H_LIMIT))
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION && value.consentTextVersion !== PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(
+      value.maxItemsPerDay,
+      1,
+      value.consentTextVersion === CAPTURE_AGREEMENT_TEXT_VERSION ? MAX_ITEMS_PER_24H_LIMIT : PREVIOUS_MAX_ITEMS_PER_24H_LIMIT
+    ))
       return void 0;
     return value;
   } catch {
@@ -835,7 +841,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.6.2"} project`;
+  return `npx -y memroot@${"0.7.0"} project`;
 }
 function legacySessionRecordsDir() {
   return join6(stateDir(), "project-sessions");
@@ -1827,7 +1833,7 @@ async function projectCommand(args, _bundledAgent) {
   const client = new McpClient(
     base,
     new TokenBroker(base),
-    `memroot-cli/${"0.6.2"}`
+    `memroot-cli/${"0.7.0"}`
   );
   const listProjects = async () => {
     let projects2;

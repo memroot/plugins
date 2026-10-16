@@ -418,7 +418,8 @@ function currentSelection(apiBase) {
 var CAPTURE_AGENTS = ["claude", "codex", "grok"];
 var CONSENT_TEXT_VERSION = "capture-consent-v2";
 var MAX_ITEMS_PER_CAPTURE_LIMIT = 50;
-var MAX_ITEMS_PER_24H_LIMIT = 500;
+var MAX_ITEMS_PER_24H_LIMIT = 2500;
+var PREVIOUS_MAX_ITEMS_PER_24H_LIMIT = 500;
 var KEYS = [
   "schemaVersion",
   "enabled",
@@ -475,14 +476,19 @@ function activeConsentFor(agent2) {
   if (read2.kind !== "ok") return void 0;
   return read2.consent.enabled && read2.consent.agents.includes(agent2) ? read2.consent : void 0;
 }
-var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
+var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v6";
+var PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
 function currentAgreement(consent) {
   if (!consent.enabled) return void 0;
   try {
     const raw = readPrivateFileIfExists(captureAgreementPath(), 4 * 1024);
     if (raw === void 0) return void 0;
     const value = JSON.parse(raw);
-    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(value.maxItemsPerDay, 1, MAX_ITEMS_PER_24H_LIMIT))
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION && value.consentTextVersion !== PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(
+      value.maxItemsPerDay,
+      1,
+      value.consentTextVersion === CAPTURE_AGREEMENT_TEXT_VERSION ? MAX_ITEMS_PER_24H_LIMIT : PREVIOUS_MAX_ITEMS_PER_24H_LIMIT
+    ))
       return void 0;
     return value;
   } catch {

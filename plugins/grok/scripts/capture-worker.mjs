@@ -447,7 +447,8 @@ function currentSelection(apiBase) {
 var CAPTURE_AGENTS = ["claude", "codex", "grok"];
 var CONSENT_TEXT_VERSION = "capture-consent-v2";
 var MAX_ITEMS_PER_CAPTURE_LIMIT = 50;
-var MAX_ITEMS_PER_24H_LIMIT = 500;
+var MAX_ITEMS_PER_24H_LIMIT = 2500;
+var PREVIOUS_MAX_ITEMS_PER_24H_LIMIT = 500;
 var KEYS = [
   "schemaVersion",
   "enabled",
@@ -499,14 +500,19 @@ function readConsent() {
     return { kind: "invalid" };
   }
 }
-var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
+var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v6";
+var PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
 function currentAgreement(consent) {
   if (!consent.enabled) return void 0;
   try {
     const raw = readPrivateFileIfExists(captureAgreementPath(), 4 * 1024);
     if (raw === void 0) return void 0;
     const value = JSON.parse(raw);
-    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(value.maxItemsPerDay, 1, MAX_ITEMS_PER_24H_LIMIT))
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION && value.consentTextVersion !== PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(
+      value.maxItemsPerDay,
+      1,
+      value.consentTextVersion === CAPTURE_AGREEMENT_TEXT_VERSION ? MAX_ITEMS_PER_24H_LIMIT : PREVIOUS_MAX_ITEMS_PER_24H_LIMIT
+    ))
       return void 0;
     return value;
   } catch {
@@ -15046,10 +15052,11 @@ var SESSION_CAPTURE_LIMITS = {
   maxEvidence: 4,
   maxProvenance: 1,
   maxLocatorBytes: 8192,
-  // Client capture caps (owner decision 2026-10-15): memories per capture
-  // run and per rolling 24 hours. The server enforces plan limits itself.
+  // Client capture caps (owner decisions 2026-10-15 and 2026-10-16):
+  // memories per capture run and per rolling 24 hours (500 until CLI 0.7.0).
+  // The server enforces plan limits itself.
   maxItemsPerSessionDefault: 50,
-  maxItemsPerDayDefault: 500
+  maxItemsPerDayDefault: 2500
 };
 var SESSION_CAPTURE_SOURCE_ID_PATTERN = /^sx1:[a-f0-9]{32}:[a-f0-9]{32}$/;
 var hex64 = external_exports.string().regex(/^[a-f0-9]{64}$/);
@@ -17831,8 +17838,8 @@ function listJobIds() {
 // src/capture/queue/ledger.ts
 import { join as join10 } from "node:path";
 var MAX_CURSORS = 1e3;
-var MAX_TITLE_HASHES = 2e3;
-var MAX_UPLOADS = 2e3;
+var MAX_TITLE_HASHES = 5e3;
+var MAX_UPLOADS = 5e3;
 var UPLOAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
 var HEX643 = /^[a-f0-9]{64}$/;
 function empty() {
@@ -20197,7 +20204,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.6.2"}`
+        `memroot-capture/${"0.7.0"}`
       ),
       salt,
       redactor: createRedactor(salt),
