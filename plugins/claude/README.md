@@ -1,6 +1,6 @@
 # Memroot for Claude Code
 
-This is the complete, self-contained Memroot plugin root, version `0.7.0`. The native agent plugin manager installs this folder from the public Memroot plugin marketplace and owns subsequent updates. Node.js is the only runtime requirement. Every script in `scripts/` is generated from the Memroot CLI source and bundled with its dependencies; no script refers to `npx`, the npm cache or files outside this bundle.
+This is the complete, self-contained Memroot plugin root, version `0.8.0`. The native agent plugin manager installs this folder from the public Memroot plugin marketplace and owns subsequent updates. Node.js is the only runtime requirement. Every script in `scripts/` is generated from the Memroot CLI source and bundled with its dependencies; no script refers to `npx`, the npm cache or files outside this bundle.
 
 The memroot-status skill and `node scripts/status.mjs` explain this release's capabilities. Setup registers the production MCP server with Claude Code and, when run from a terminal, signs it in with `claude mcp login memroot` (otherwise authorize it with `/mcp`); its tools provide retrieval and automatic saving. Setup also installs a global instruction file, `~/.claude/rules/memroot.md`, that names Memroot the default durable memory layer for every session.
 

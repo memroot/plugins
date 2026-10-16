@@ -814,10 +814,13 @@ function normalizeCaptureEvent(agent2, trigger, record) {
 import { realpathSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { isAbsolute as isAbsolute2, join as join5, normalize as normalize2 } from "node:path";
-function processGuard() {
+function inertProcess() {
   if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
   if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
   return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
 }
 function hostAgent(bundled) {
   return process.env.GROK_HOOK_EVENT ? "grok" : bundled;

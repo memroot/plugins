@@ -43,7 +43,7 @@ function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
 }
 
 // src/capture/hooks/guards.ts
-function processGuard() {
+function inertProcess() {
   if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
   if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
   return false;
@@ -424,12 +424,14 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.7.0"} project`;
+  return `npx -y memroot@${"0.8.0"} project`;
 }
 
 // src/plugin/project-guard.ts
 var memroot = false;
 var READ_ONLY_TOOL = /^(?:mcp__)?memroot__(?:connection_status|projects_list|memory_request_schema)$/;
+var ANY_MEMROOT_TOOL = /^(?:mcp__)?memroot__[a-z_]+$/;
+var IMPORT_TOOL = /^(?:mcp__)?memroot__(?:memory_create|memory_request_schema)$/;
 var MEMORY_TOOL = /^(?:mcp__)?memroot__memory_(?:retrieve|create|archive|restore)$/;
 var record = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 function decide(decision, reason, input) {
@@ -452,9 +454,20 @@ function grokArguments(input) {
 }
 async function main() {
   const event = await readEnvelope();
-  if (processGuard() || !event) return;
+  if (inertProcess() || !event) return;
   const name = event.tool_name ?? event.toolName;
   if (typeof name !== "string") return;
+  if (process.env.MEMROOT_IMPORT_RUN === "1") {
+    const wrapped = record(event.tool_input ?? event.toolInput)?.tool_name;
+    const tool = name === "use_tool" && typeof wrapped === "string" ? wrapped : name;
+    if (ANY_MEMROOT_TOOL.test(tool) && !IMPORT_TOOL.test(tool)) {
+      decide(
+        "deny",
+        "This memroot import run may only save memories with memory_create; other Memroot tools are not available in it."
+      );
+      return;
+    }
+  }
   if (READ_ONLY_TOOL.test(name)) {
     decide("allow", "Read-only Memroot tool; it takes no project.");
     return;

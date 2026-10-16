@@ -15328,6 +15328,16 @@ var ASSERTION_TYPE_BY_PREDICATE_V1 = {
   located_in: "location",
   defined_in: "location"
 };
+var isPredicateV1 = (value) => typeof value === "string" && Object.hasOwn(ASSERTION_TYPE_BY_PREDICATE_V1, value);
+var isAssertionTypeV1 = (value) => Object.values(ASSERTION_TYPE_BY_PREDICATE_V1).includes(value);
+function predicatesForAssertionTypeV1(type) {
+  return Object.entries(ASSERTION_TYPE_BY_PREDICATE_V1).filter(([, value]) => value === type).map(([predicate]) => predicate);
+}
+function predicateTypeMismatchRule(predicate, assertionType) {
+  if (!isPredicateV1(predicate) || !isAssertionTypeV1(assertionType))
+    return "predicate/type mismatch";
+  return `predicate/type mismatch: ${predicate} requires assertion_type ${ASSERTION_TYPE_BY_PREDICATE_V1[predicate]}; ${assertionType} allows predicates ${predicatesForAssertionTypeV1(assertionType).join(", ")}`;
+}
 var ROLE_HINTS = {
   has_property: "object must be a literal",
   uses: "subject and object must be code or engineering entities",
@@ -15429,7 +15439,10 @@ var AssertionInputSchema = external_exports.object({
   provenance_refs: external_exports.array(ref).min(1).max(64)
 }).strict().superRefine((x, ctx) => {
   if (ASSERTION_TYPE_BY_PREDICATE_V1[x.predicate] !== x.assertion_type)
-    ctx.addIssue({ code: "custom", message: "predicate/type mismatch" });
+    ctx.addIssue({
+      code: "custom",
+      message: predicateTypeMismatchRule(x.predicate, x.assertion_type)
+    });
   if (x.predicate === "has_property" !== "literal" in x.object)
     ctx.addIssue({ code: "custom", message: "object mismatch" });
 });
@@ -16650,7 +16663,7 @@ function runProcess(binary, args, options) {
     child.stdout.on("data", (chunk) => {
       bytes += chunk.length;
       if (failure) return;
-      if (stdout.length + chunk.length > MAX_OUTPUT_BYTES) {
+      if (stdout.length + chunk.length > (options.maxOutputBytes ?? MAX_OUTPUT_BYTES)) {
         failure = "output_too_large";
         settle2();
         return;
@@ -16869,7 +16882,7 @@ function grokArgs(input, promptFile) {
   if (input.model) args.push("-m", input.model);
   return args;
 }
-function removeExtractorHistory(extractorCwd) {
+function removeExtractorHistory(extractorCwd, prefix = "memroot-extractor-") {
   const home = process.env.GROK_HOME && isAbsolute3(process.env.GROK_HOME) ? process.env.GROK_HOME : join5(homedir2(), ".grok");
   const candidates = /* @__PURE__ */ new Set([extractorCwd]);
   try {
@@ -16878,7 +16891,7 @@ function removeExtractorHistory(extractorCwd) {
   }
   for (const cwd of candidates) {
     const group = join5(home, "sessions", encodeURIComponent(cwd));
-    if (!encodeURIComponent(cwd).includes("memroot-extractor-")) continue;
+    if (!encodeURIComponent(cwd).includes(prefix)) continue;
     rmSync3(group, { recursive: true, force: true });
   }
 }
@@ -20204,7 +20217,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.7.0"}`
+        `memroot-capture/${"0.8.0"}`
       ),
       salt,
       redactor: createRedactor(salt),

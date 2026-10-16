@@ -411,7 +411,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.7.0"} project`;
+  return `npx -y memroot@${"0.8.0"} project`;
 }
 function projectStatusLine() {
   const command = projectCommandPrefix();
@@ -553,10 +553,13 @@ function isRealSubagentEvent(record) {
 }
 
 // src/capture/hooks/guards.ts
-function processGuard() {
+function inertProcess() {
   if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
   if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
   return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
 }
 function hostAgent(bundled) {
   return process.env.GROK_HOOK_EVENT ? "grok" : bundled;

@@ -430,7 +430,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.7.0"} project`;
+  return `npx -y memroot@${"0.8.0"} project`;
 }
 function projectStatusLine() {
   const command = projectCommandPrefix();
@@ -903,10 +903,13 @@ function normalizeCaptureEvent(agent2, trigger, record) {
 import { realpathSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { isAbsolute as isAbsolute2, join as join7, normalize as normalize2 } from "node:path";
-function processGuard() {
+function inertProcess() {
   if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
   if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
   return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
 }
 function absoluteEnv2(name) {
   const value = process.env[name];

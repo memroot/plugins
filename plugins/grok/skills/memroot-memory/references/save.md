@@ -2,7 +2,7 @@
 
 Save one Memroot memory per call, a few sentences at most, in your own words. Write the summary so it makes sense to a future reader without this conversation.
 
-Use the template below for every kind of memory. Keep `"assertion_type": "descriptive"` with `"predicate": "has_property"` whatever the `memory.kind` is; the server requires that pair to match, and it does not follow the kind. Only `memory.kind`, `memory.title`, `memory.summary`, the assertion `statement`, the literal `value` and `qualifier`, the evidence `kind` and `summary`, and the two ids change. Other predicates (`requires`, `prefers`, `avoids`, `located_in`, ...) have entity role rules that are easy to get wrong, and some clients show only "Invalid or sensitive tool input" without the failing field, so stay with this form.
+Use the template below for every kind of memory. Keep `"assertion_type": "descriptive"` with `"predicate": "has_property"` whatever the `memory.kind` is; the server requires that pair to match, and it does not follow the kind, so a decision or a rule is still `descriptive` here (`normative` goes only with `requires`, `forbids` and `recommends`). Only `memory.kind`, `memory.title`, `memory.summary`, the assertion `statement`, the literal `value` and `qualifier`, the evidence `kind` and `summary`, and the two ids change. Other predicates (`requires`, `prefers`, `avoids`, `located_in`, ...) have entity role rules that are easy to get wrong, and some clients show only "Invalid or sensitive tool input" without the failing field, so stay with this form.
 
 ## Choosing `memory.kind`
 

@@ -311,6 +311,8 @@ async function readConfig() {
     if (installed.claude || installed.codex || installed.grok)
       config.instructionsInstalled = installed;
   }
+  const banner = optionalString(record.importBannerShown);
+  if (banner) config.importBannerShown = banner;
   return config;
 }
 async function writeConfig(config) {
@@ -841,7 +843,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.7.0"} project`;
+  return `npx -y memroot@${"0.8.0"} project`;
 }
 function legacySessionRecordsDir() {
   return join6(stateDir(), "project-sessions");
@@ -1833,7 +1835,7 @@ async function projectCommand(args, _bundledAgent) {
   const client = new McpClient(
     base,
     new TokenBroker(base),
-    `memroot-cli/${"0.7.0"}`
+    `memroot-cli/${"0.8.0"}`
   );
   const listProjects = async () => {
     let projects2;
