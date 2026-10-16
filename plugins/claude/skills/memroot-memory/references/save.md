@@ -20,6 +20,8 @@ Use the template below for every kind of memory. Keep `"assertion_type": "descri
 | Who owns or maintains a component | `ownership_boundary` |
 | Steps to do a recurring task (release, migration) | `procedure` |
 
+Use exactly one of these eleven values; any other is refused as `memory.kind` `invalid_value` (the server maps only `decision` to `architecture_decision`, and reports that in `adjusted`).
+
 ## Template
 
 Example for a root cause found while fixing a failing deploy (migrations ran after wrangler deploy):
@@ -68,7 +70,7 @@ Field notes:
 - `project_id`: the ID of the project selected on this computer, as the session context names it. If unavailable or revoked, stop; never select another project as a fallback.
 - `idempotency_key`: any unique string of 16 to 128 printable characters that you compose yourself (date, short slug, a few random characters). No command is needed to generate it or the other values. Keep the same key when you retry the same save; use a new one after `idempotency_conflict`.
 - `valid_time`: leave it out in both places; the server records the current time.
-- `confidence` and `importance`: keep the template's 0.8 and 4 or lower; a save with `agent_initiated` evidence is refused above them.
+- `confidence` and `importance`: keep the template's 0.8 and 4 or lower; a save with `agent_initiated` evidence is refused above them (confidence at most 0.8, importance at most 4).
 - `qualifier`: lowercase snake_case, starting with a letter, such as `package_manager` or `deploy_order`. The literal `value` is a short string, at most 512 bytes.
 - `evidence`: exactly one item with an empty `locator`. Use `agent_initiated` when you save on your own, which is the usual case; use `user_attestation` only when the user explicitly asked to save that lesson. Summarize truthfully what the lesson rests on: what the user said, or what the work showed, for example "Found while fixing the failing deploy; the smoke check passed once migrations ran first." Don't add other evidence.
 - `memory_relations`: keep it empty, except when the new memory replaces an older one: then add `{ "type": "supersedes", "target_memory_id": "<the older memory_id>", "evidence_refs": ["e1"] }` instead of archiving the older memory.

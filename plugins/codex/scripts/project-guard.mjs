@@ -365,7 +365,7 @@ function upsert(store, input) {
   const key = selectionKey(input.apiBase, input.principalId);
   const prior = store[key];
   const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
-  const record = {
+  const record2 = {
     apiBase: normalizeApiBase(input.apiBase),
     principalId: input.principalId.toLowerCase(),
     tenantId: input.tenantId,
@@ -375,16 +375,16 @@ function upsert(store, input) {
     selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
     source: input.source
   };
-  if (!valid(record))
+  if (!valid(record2))
     throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
-  store[key] = record;
+  store[key] = record2;
   const keys = Object.keys(store);
   if (keys.length > MAX_RECORDS)
     for (const old of keys.sort(
       (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
     ).slice(0, keys.length - MAX_RECORDS))
       delete store[old];
-  return record;
+  return record2;
 }
 function offlineIdentity() {
   let apiBase = PRODUCTION_API_BASE;
@@ -424,53 +424,70 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.6.0"} project`;
+  return `npx -y memroot@${"0.6.1"} project`;
 }
 
 // src/plugin/project-guard.ts
-var memoryTool = false;
-function deny(reason) {
-  process.stdout.write(
-    `${JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } })}
-`
-  );
-}
-async function main() {
-  const event = await readEnvelope();
-  if (processGuard() || !event) return;
-  const name = event.tool_name ?? event.toolName;
-  memoryTool = typeof name === "string" && // Claude Code and Codex: mcp__memroot__<tool>; Grok: memroot__<tool>.
-  /^(?:mcp__)?memroot__memory_(?:retrieve|create|archive|restore)$/.test(
-    name
-  );
-  if (!memoryTool) return;
-  const raw = event.tool_input ?? event.toolInput;
-  const input = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
-  const selected = currentSelection();
-  const command = projectCommandPrefix();
-  if (!selected) {
-    deny(
-      `No Memroot project is selected on this computer. Run: ${command} use (it selects the only project, or lists them; then ${command} use "<name>"), then retry.`
-    );
-    return;
-  }
-  if (hostAgent("codex") === "grok" && input.project_id === selected.projectId)
-    return;
+var memroot = false;
+var READ_ONLY_TOOL = /^(?:mcp__)?memroot__(?:connection_status|projects_list|memory_request_schema)$/;
+var MEMORY_TOOL = /^(?:mcp__)?memroot__memory_(?:retrieve|create|archive|restore)$/;
+var record = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+function decide(decision, reason, input) {
   process.stdout.write(
     `${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
-        permissionDecision: "allow",
-        permissionDecisionReason: `Memroot memory call for the project selected on this computer (${selected.projectId}).`,
-        updatedInput: { ...input, project_id: selected.projectId }
+        permissionDecision: decision,
+        permissionDecisionReason: reason,
+        ...input ? { updatedInput: input } : {}
       }
     })}
 `
   );
 }
+function grokArguments(input) {
+  if (typeof input.tool_name !== "string" || !("tool_input" in input))
+    return input;
+  return record(input.tool_input);
+}
+async function main() {
+  const event = await readEnvelope();
+  if (processGuard() || !event) return;
+  const name = event.tool_name ?? event.toolName;
+  if (typeof name !== "string") return;
+  if (READ_ONLY_TOOL.test(name)) {
+    decide("allow", "Read-only Memroot tool; it takes no project.");
+    return;
+  }
+  if (!MEMORY_TOOL.test(name)) return;
+  memroot = true;
+  const input = record(event.tool_input ?? event.toolInput) ?? {};
+  const selected = currentSelection();
+  const command = projectCommandPrefix();
+  if (!selected) {
+    decide(
+      "deny",
+      `No Memroot project is selected on this computer. Run: ${command} use (it selects the only project, or lists them; then ${command} use "<name>"), then retry.`
+    );
+    return;
+  }
+  const reason = `Memroot memory call for the project selected on this computer (${selected.projectId}).`;
+  if (hostAgent("codex") === "grok") {
+    if (grokArguments(input)?.project_id === selected.projectId)
+      decide("allow", reason);
+    else
+      decide(
+        "deny",
+        `Use the Memroot project selected on this computer: retry with project_id "${selected.projectId}" in the tool arguments.`
+      );
+    return;
+  }
+  decide("allow", reason, { ...input, project_id: selected.projectId });
+}
 main().catch(() => {
-  if (!memoryTool) return;
-  deny(
+  if (!memroot) return;
+  decide(
+    "deny",
     "Memroot could not read the project selected on this computer. Run the Memroot project command with use, then retry."
   );
 }).finally(() => process.exit(0));

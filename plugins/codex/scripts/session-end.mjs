@@ -641,10 +641,12 @@ var STATE_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
 var MAX_CLEANUP = 512;
 function shouldCapture(trigger, state, now) {
   const since = now - state.lastCaptureAt;
-  if (trigger === "turn_end" || trigger === "subagent_stop")
+  const idleAllowed = state.turnEnds >= MIN_TURNS && since >= IDLE_AFTER_MS;
+  if (trigger === "turn_end")
+    return state.turnEnds >= TURN_END_EVERY || state.turnEnds >= MIN_TURNS && since >= TURN_END_AFTER_MS || state.pendingIdle === true && idleAllowed;
+  if (trigger === "subagent_stop")
     return state.turnEnds >= TURN_END_EVERY || state.turnEnds >= MIN_TURNS && since >= TURN_END_AFTER_MS;
-  if (trigger === "idle")
-    return state.turnEnds >= MIN_TURNS && since >= IDLE_AFTER_MS;
+  if (trigger === "idle") return idleAllowed;
   return true;
 }
 function stateName(agent2, sessionId) {
@@ -656,7 +658,7 @@ function read(path) {
     const raw = readPrivateFileIfExists(path, 1024);
     if (raw === void 0) return void 0;
     const value = JSON.parse(raw);
-    return Number.isSafeInteger(value.turnEnds) && Number.isSafeInteger(value.lastCaptureAt) ? value : void 0;
+    return Number.isSafeInteger(value.turnEnds) && Number.isSafeInteger(value.lastCaptureAt) && (value.pendingIdle === void 0 || typeof value.pendingIdle === "boolean") ? value : void 0;
   } catch {
     return void 0;
   }
@@ -684,6 +686,9 @@ function noteTrigger(agent2, sessionId, trigger, now = Date.now()) {
   const state = prior ?? { turnEnds: 0, lastCaptureAt: now };
   if (trigger === "turn_end") state.turnEnds += 1;
   const capture = shouldCapture(trigger, state, now);
+  const deferredIdle = capture && trigger === "turn_end" && !shouldCapture(trigger, { ...state, pendingIdle: false }, now);
+  if (!capture && trigger === "idle" && state.turnEnds >= MIN_TURNS)
+    state.pendingIdle = true;
   const next = capture ? { turnEnds: 0, lastCaptureAt: now } : state;
   writePrivateFileAtomic(path, `${JSON.stringify(next)}
 `);
@@ -692,7 +697,7 @@ function noteTrigger(agent2, sessionId, trigger, now = Date.now()) {
       cleanup(stateSubdir("triggers"), path.split("/").pop() ?? "");
     } catch {
     }
-  return capture;
+  return deferredIdle ? "idle_prompt" : capture;
 }
 
 // src/capture/hooks/envelope.ts
@@ -892,8 +897,11 @@ function queueCapture(agent2, record, trigger, options = {}) {
     enqueueFromHook({ ...job, reason: "session_fork", floorBytes });
     return true;
   }
-  if (!noteTrigger(agent2, envelope.sessionId, trigger)) return false;
-  enqueueFromHook(job);
+  const decision = noteTrigger(agent2, envelope.sessionId, trigger);
+  if (!decision) return false;
+  enqueueFromHook(
+    decision === "idle_prompt" ? { ...job, reason: "idle_prompt" } : job
+  );
   return true;
 }
 

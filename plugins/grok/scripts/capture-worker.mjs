@@ -15628,13 +15628,13 @@ var CreateMemoryRequestV1Schema = external_exports.object({
         ctx.addIssue({
           code: "custom",
           path: ["assertions", index, "confidence"],
-          message: "agent_initiated saves have confidence at most 0.8"
+          message: `evidence kind agent_initiated caps confidence at ${AGENT_INITIATED_LIMITS.maxConfidence}: send "confidence": ${AGENT_INITIATED_LIMITS.maxConfidence} or lower`
         });
       if (assertion.importance > AGENT_INITIATED_LIMITS.maxImportance)
         ctx.addIssue({
           code: "custom",
           path: ["assertions", index, "importance"],
-          message: "agent_initiated saves have importance at most 4"
+          message: `evidence kind agent_initiated caps importance at ${AGENT_INITIATED_LIMITS.maxImportance}: send "importance": ${AGENT_INITIATED_LIMITS.maxImportance} or lower`
         });
     }
   if (value.schema_version !== 1) return;
@@ -20197,7 +20197,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.6.0"}`
+        `memroot-capture/${"0.6.1"}`
       ),
       salt,
       redactor: createRedactor(salt),
