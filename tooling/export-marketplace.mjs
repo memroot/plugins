@@ -113,8 +113,13 @@ const pluginFiles = (agent, version) => {
   // 0.2.0 through 0.5.0; the machine-wide project selection removed it.
   const snapshotWorker =
     major === 0n && minor <= 5n && !(minor === 5n && patch > 0n);
-  // scripts/failure-nudge.mjs (Claude Code PostToolUseFailure) from 0.6.0.
-  const failureNudge = agent === "claude" && (major > 0n || minor >= 6n);
+  // scripts/failure-nudge.mjs: Claude Code (PostToolUseFailure) from 0.6.0,
+  // Codex and Grok (PostToolUse) from 0.8.1.
+  const failureNudge =
+    major > 0n ||
+    (agent === "claude"
+      ? minor >= 6n
+      : minor > 8n || (minor === 8n && patch >= 1n));
   return [
     `${agent === "codex" ? ".codex-plugin" : ".claude-plugin"}/plugin.json`,
     "README.md",
