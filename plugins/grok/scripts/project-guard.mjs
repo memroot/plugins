@@ -3,6 +3,7 @@
 // src/capture/hooks/envelope.ts
 var MAX_ENVELOPE_BYTES = 64 * 1024;
 var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
 var STDIN_DEADLINE_MS = 500;
 function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
   return new Promise((resolve) => {
@@ -424,7 +425,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.8.0"} project`;
+  return `npx -y memroot@${"0.8.1"} project`;
 }
 
 // src/plugin/project-guard.ts

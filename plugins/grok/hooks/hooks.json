@@ -19,6 +19,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Bash|run_terminal_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_PLUGIN_ROOT}/scripts/failure-nudge.mjs\"",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "SessionEnd": [

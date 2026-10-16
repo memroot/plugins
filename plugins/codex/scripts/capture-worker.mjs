@@ -17627,6 +17627,7 @@ function validateExtraction(output, segments, redactor, maxItems) {
 // src/capture/hooks/envelope.ts
 var MAX_ENVELOPE_BYTES = 64 * 1024;
 var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
 var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|session_resume|session_fork)$/;
 
 // src/capture/hooks/guards.ts
@@ -20217,7 +20218,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.8.0"}`
+        `memroot-capture/${"0.8.1"}`
       ),
       salt,
       redactor: createRedactor(salt),

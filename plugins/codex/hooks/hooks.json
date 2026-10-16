@@ -33,6 +33,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/failure-nudge.mjs\"",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "SessionEnd": [
