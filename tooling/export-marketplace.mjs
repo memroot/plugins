@@ -107,8 +107,14 @@ const pluginFiles = (agent, version) => {
   // scripts/memory-mirror.mjs and scripts/prompt-nudge.mjs first ship in
   // 0.3.0; published tarballs before it do not carry the hooks and must still
   // export cleanly.
-  const [major, minor] = releaseParts(version);
+  const [major, minor, patch] = releaseParts(version);
   const memoryHooks = major > 0n || (major === 0n && minor >= 3n);
+  // scripts/snapshot-worker.mjs sealed per-session project segments in
+  // 0.2.0 through 0.5.0; the machine-wide project selection removed it.
+  const snapshotWorker =
+    major === 0n && minor <= 5n && !(minor === 5n && patch > 0n);
+  // scripts/failure-nudge.mjs (Claude Code PostToolUseFailure) from 0.6.0.
+  const failureNudge = agent === "claude" && (major > 0n || minor >= 6n);
   return [
     `${agent === "codex" ? ".codex-plugin" : ".claude-plugin"}/plugin.json`,
     "README.md",
@@ -129,12 +135,13 @@ const pluginFiles = (agent, version) => {
       : [
           "scripts/project.mjs",
           "scripts/project-guard.mjs",
-          "scripts/snapshot-worker.mjs",
+          ...(snapshotWorker ? ["scripts/snapshot-worker.mjs"] : []),
           `skills/${agent === "claude" ? "project" : "memroot-project"}/SKILL.md`,
         ]),
     ...(memoryHooks
       ? ["scripts/memory-mirror.mjs", "scripts/prompt-nudge.mjs"]
       : []),
+    ...(failureNudge ? ["scripts/failure-nudge.mjs"] : []),
     `scripts/${agent === "grok" ? "session-reminder" : "session-start"}.mjs`,
   ];
 };
