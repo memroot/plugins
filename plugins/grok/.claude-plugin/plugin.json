@@ -1,7 +1,7 @@
 {
   "name": "memroot",
-  "version": "0.5.0",
-  "description": "Memroot status, memory usage guidance and opt-in session capture.",
+  "version": "0.6.0",
+  "description": "Memroot status, automatic memory guidance, project selection and session capture.",
   "author": {
     "name": "Memroot"
   },

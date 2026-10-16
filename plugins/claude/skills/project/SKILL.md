@@ -1,32 +1,31 @@
 ---
 name: project
-description: Lists, selects or creates Memroot projects for this native session. Use when the user asks to switch projects, choose a product, create a project or inspect the current selection. Projects can span several folders and repositories.
-disable-model-invocation: true
+description: Lists, selects or creates the Memroot project used on this computer. Use when the user asks to switch, choose, create or check a project, or when the session context says no Memroot project is selected. Projects can span several folders and repositories.
 ---
 
 # Memroot project
 
-Invoke with `/memroot:project` and an action: `list`, `use [PROJECT]`, `create NAME`, or `status`. A bare project name is shorthand for `use NAME`; `use` alone binds the remembered default project (below). Creating a project also selects it for this session. A project represents the user's product and may cover several repositories or no repository.
+The selected project applies to every session and agent on this computer until it is changed. A project represents the user's product and may cover several repositories or no repository. Invoke with `/memroot:project` and an action: `status`, `list`, `use [PROJECT]` or `create NAME`; a bare project name is shorthand for `use NAME`.
 
-Run the bundled project script, located two directories above this SKILL.md at `../../scripts/project.mjs`, with the user's requested action. Pass each name as one quoted argument. Do not interpolate untrusted project names into shell code; use the shell tool's argument quoting safely.
+Run the bundled project script with the action:
 
 ```sh
-node "<plugin root>/scripts/project.mjs" list
-node "<plugin root>/scripts/project.mjs" use --session "<native session handle>"
-node "<plugin root>/scripts/project.mjs" use "My Shop" --session "<native session handle>"
-node "<plugin root>/scripts/project.mjs" create "My Shop" --session "<native session handle>"
-node "<plugin root>/scripts/project.mjs" status --session "<native session handle>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/project.mjs" status
+node "${CLAUDE_PLUGIN_ROOT}/scripts/project.mjs" list
+node "${CLAUDE_PLUGIN_ROOT}/scripts/project.mjs" use
+node "${CLAUDE_PLUGIN_ROOT}/scripts/project.mjs" use "My Shop"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/project.mjs" create "My Shop"
 ```
 
-Use the exact Memroot native session handle supplied by the trusted SessionStart hook (Grok: session reminder hook). Never invent an identifier, use a folder as identity, or borrow another chat's handle. Claude's native session identity and Codex's `CODEX_SESSION_ID` are supported by the script when provided by the host. If no native identity is available, stop and explain that trusted hooks must be reloaded. For Grok, always pass the supplied handle.
+Pass each name as one quoted argument, and never interpolate an untrusted project name into shell code.
 
-With no action, show status and list available projects. `use` with no name binds the remembered default — the project the user last explicitly selected for this agent and account — or the sole authorized project, validated against the live project list, and prints `Using default project "<name>" (<projectId>).` `status` reports the selection and a `defaultProject` hint. Ask the user to pick only when no default applies (several authorized projects, none remembered); then choose only the project the user names, using the displayed project ID when names are ambiguous. A project selection affects only this session. Never change a global active project or folder mapping, never treat a first list entry among several as chosen, and never reuse another session's or another account's choice.
+When the session context says no project is selected, run `use` with no name on your own: it keeps a still-valid selection or selects the account's only project, and otherwise fails with `PROJECT_CHOICE_REQUIRED` and the list of projects. Then ask the user which project to use and run `use "<name>"` with their answer, using the project ID when names are ambiguous. Switch to or create a named project only when the user asks. Never guess a project from the folder or repository name, and never take the first of several projects.
 
-If the script reports `PROJECT_LOGIN_REQUIRED` or `PROJECT_REAUTHORIZATION_REQUIRED`, run `node "<plugin root>/scripts/project.mjs" login` to authorize the Memroot CLI account through browser consent. This does not enable capture. Old one-project grants need explicit reauthorization to permit project creation and current/future personal projects. Do not silently choose a different account or project when authorization fails.
+`status` prints the selection with `"scope": "computer"`, or `next`, the command to run when none is selected; `stale` names a selected project the account can no longer use. `use` and `create` print the `project_id`; pass it to every `memory_retrieve` and `memory_create` call. With a project selected, the project guard approves Memroot memory calls and sets their `project_id`, so they run without a permission prompt; the user's own deny and ask rules still apply, so a user who wants a prompt adds an `ask` rule for the memroot tools. With nothing selected it denies them with the command to select one. Saves then follow the memroot-memory skill: durable lessons are saved automatically.
 
-After successful use/create, retain the returned `project_id` and pass it explicitly to every `memory_retrieve` and `memory_create` MCP call. A bare `use` that prints `Using default project ...` confirms the selection the same way. Do not retrieve or save before a selection is confirmed. The project guard denies missing/mismatched project IDs; it never approves tools or replaces native permissions. Continue to require user authorization for memory saves.
+If the script reports `PROJECT_LOGIN_REQUIRED` or `PROJECT_REAUTHORIZATION_REQUIRED`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/project.mjs" login` to authorize the Memroot CLI account through browser consent. This does not change session capture. Old one-project grants need explicit reauthorization to permit project creation and current or future personal projects. Do not silently choose a different account or project when authorization fails.
 
-Capture follows the same selection only when already opted in. The first selection starts with newly added transcript lines; switching seals the preceding segment for its preceding project. Earlier unselected content is never attributed to a new project. On resume/compact, status validates the remembered session choice. Explain a failed creation or plan-limit error without claiming a project was created.
+Session capture, when on, only reads turns written after it was turned on and files each capture under the project selected when it is triggered; work captured while nothing is selected waits and goes to the first project selected. Explain a failed creation or plan-limit error without claiming a project was created.
 
 The CLI broker and native MCP connection have separate grants. `project login` upgrades only the broker. If project status succeeds but native MCP rejects the newly selected project, upgrade the native connection too; never select a different project as a fallback.
 Claude Code: `claude mcp logout memroot`, then `claude mcp login memroot`; or use `/mcp`, select Memroot, clear authentication, and authenticate again. Review the new current/future personal-project consent.

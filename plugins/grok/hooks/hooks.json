@@ -11,7 +11,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [
           {
             "type": "command",
@@ -50,6 +50,28 @@
             "type": "command",
             "command": "node \"${GROK_PLUGIN_ROOT}/scripts/project-guard.mjs\"",
             "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_PLUGIN_ROOT}/scripts/session-end.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${GROK_PLUGIN_ROOT}/scripts/session-end.mjs\"",
+            "timeout": 5
           }
         ]
       }

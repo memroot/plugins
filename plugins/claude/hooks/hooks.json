@@ -2,7 +2,7 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume|clear|compact",
+        "matcher": "startup|resume|clear|compact|fork",
         "hooks": [
           {
             "type": "command",
@@ -25,7 +25,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [
           {
             "type": "command",
@@ -62,6 +62,63 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/project-guard.mjs\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-end.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/failure-nudge.mjs\"",
             "timeout": 3
           }
         ]

@@ -48,6 +48,28 @@ function memrootConfigDir() {
 function consentPath() {
   return join(memrootConfigDir(), "capture.json");
 }
+function assertRealDirectory(path) {
+  const info = lstatSync(path);
+  if (info.isSymbolicLink() || !info.isDirectory()) throw new UnsafePathError();
+}
+function ensurePrivateDir(path, boundary, checkRoot = false) {
+  const target = normalize(path);
+  const root = normalize(boundary);
+  if (target !== root && !target.startsWith(`${root}/`))
+    throw new UnsafePathError();
+  mkdirSync(target, { recursive: true, mode: 448 });
+  let current = target;
+  for (; ; ) {
+    if (current === root) {
+      if (checkRoot) assertRealDirectory(current);
+      break;
+    }
+    assertRealDirectory(current);
+    current = dirname(current);
+  }
+  const info = lstatSync(target);
+  if ((info.mode & 511) !== 448) chmodSync(target, 448);
+}
 function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
   const fd = openSync(
     path,
@@ -72,10 +94,24 @@ function readPrivateFileIfExists(path, maxBytes) {
     throw error;
   }
 }
+function listFiles(path) {
+  try {
+    assertRealDirectory(path);
+    return readdirSync(path).sort();
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+function captureAgreementPath() {
+  return join(memrootConfigDir(), "capture-agreement.json");
+}
 
 // src/capture/consent.ts
 var CAPTURE_AGENTS = ["claude", "codex", "grok"];
 var CONSENT_TEXT_VERSION = "capture-consent-v2";
+var MAX_ITEMS_PER_CAPTURE_LIMIT = 50;
+var MAX_ITEMS_PER_24H_LIMIT = 500;
 var KEYS = [
   "schemaVersion",
   "enabled",
@@ -127,6 +163,275 @@ function readConsent() {
     return { kind: "invalid" };
   }
 }
+var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
+function currentAgreement(consent2) {
+  if (!consent2.enabled) return void 0;
+  try {
+    const raw = readPrivateFileIfExists(captureAgreementPath(), 4 * 1024);
+    if (raw === void 0) return void 0;
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent2.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(value.maxItemsPerDay, 1, MAX_ITEMS_PER_24H_LIMIT))
+      return void 0;
+    return value;
+  } catch {
+    return void 0;
+  }
+}
+
+// src/project-selection.ts
+import { randomBytes, randomUUID } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join2 } from "node:path";
+var PROJECT_SELECTION_FILE = "project-selection.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 64;
+var PRODUCTION_API_BASE = "https://api.memroot.dev";
+var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectSelectionPath() {
+  return join2(memrootConfigDir(), PROJECT_SELECTION_FILE);
+}
+function normalizeApiBase(apiBase) {
+  try {
+    const url = new URL(apiBase);
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return apiBase.replace(/\/+$/, "");
+  }
+}
+function selectionKey(apiBase, principalId) {
+  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
+}
+var LOCK_STALE_MS = 5e3;
+var LOCK_TRIES = 40;
+var TMP_STALE_MS = 6e4;
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function withLock(update) {
+  const directory = memrootConfigDir();
+  ensurePrivateDir(directory, dirname2(directory), false);
+  const lock = `${projectSelectionPath()}.lock`;
+  const nonce = randomBytes(8).toString("hex");
+  const owner = join2(lock, "owner");
+  let held = false;
+  for (let i = 0; i < LOCK_TRIES && !held; i++) {
+    try {
+      mkdirSync2(lock, { mode: 448 });
+      writeFileSync2(owner, nonce, { mode: 384 });
+      held = true;
+    } catch (error) {
+      if (error.code !== "EEXIST") break;
+      try {
+        if (Date.now() - lstatSync2(lock).mtimeMs > LOCK_STALE_MS)
+          rmSync2(lock, { recursive: true, force: true });
+      } catch {
+      }
+      pause(25);
+    }
+  }
+  try {
+    return update();
+  } finally {
+    if (held)
+      try {
+        if (readFileSync2(owner, "utf8") === nonce)
+          rmSync2(lock, { recursive: true, force: true });
+      } catch {
+      }
+  }
+}
+function persist(store) {
+  const directory = memrootConfigDir();
+  ensurePrivateDir(directory, dirname2(directory), false);
+  const path = projectSelectionPath();
+  try {
+    const now = Date.now();
+    for (const name of listFiles(directory))
+      if (name.startsWith(`${PROJECT_SELECTION_FILE}.`) && name.endsWith(".tmp"))
+        try {
+          if (now - lstatSync2(join2(directory, name)).mtimeMs > TMP_STALE_MS)
+            rmSync2(join2(directory, name), { force: true });
+        } catch {
+        }
+  } catch {
+  }
+  const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  try {
+    const fd = openSync2(temporary, "wx", 384);
+    try {
+      fchmodSync(fd, 384);
+      writeSync(
+        fd,
+        `${JSON.stringify({ schemaVersion: 1, selections: store }, null, 2)}
+`
+      );
+      fsyncSync(fd);
+    } finally {
+      closeSync2(fd);
+    }
+    for (let attempt = 0; ; attempt++)
+      try {
+        renameSync2(temporary, path);
+        break;
+      } catch (error) {
+        const code = error.code;
+        if (attempt >= 5 || code !== "EPERM" && code !== "EBUSY") throw error;
+        pause(20);
+      }
+  } finally {
+    rmSync2(temporary, { force: true });
+  }
+}
+function valid(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.apiBase === "string" && isAllowedApiBase(v.apiBase) && !v.apiBase.endsWith("/") && UUID.test(String(v.principalId)) && UUID.test(String(v.tenantId)) && UUID.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID.test(String(v.selectionId)) && typeof v.selectedAt === "string" && !Number.isNaN(Date.parse(v.selectedAt)) && (v.source === "explicit" || v.source === "sole_project");
+}
+function readStore() {
+  try {
+    const raw = readPrivateFileIfExists(projectSelectionPath(), MAX_FILE_BYTES);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.selections || typeof value.selections !== "object" || Array.isArray(value.selections))
+      return {};
+    const out = {};
+    for (const [key, entry] of Object.entries(
+      value.selections
+    ))
+      if (valid(entry) && key === selectionKey(entry.apiBase, entry.principalId))
+        out[key] = entry;
+    return out;
+  } catch {
+    return {};
+  }
+}
+function readSelection(apiBase, principalId) {
+  if (!principalId) return void 0;
+  const key = selectionKey(apiBase, principalId);
+  const found = readStore()[key];
+  if (found) return found;
+  migrateLegacyDefaults();
+  return readStore()[key];
+}
+var LEGACY_DEFAULTS = "project-defaults.json";
+function migrateLegacyDefaults() {
+  const legacy = join2(memrootConfigDir(), LEGACY_DEFAULTS);
+  try {
+    lstatSync2(legacy);
+  } catch {
+    return false;
+  }
+  try {
+    return withLock(() => {
+      let raw;
+      try {
+        raw = readPrivateFileIfExists(legacy, MAX_FILE_BYTES);
+      } catch {
+        raw = void 0;
+      }
+      if (raw === void 0) return false;
+      const store = readStore();
+      let adopted = 0;
+      try {
+        const value = JSON.parse(raw);
+        const newest = /* @__PURE__ */ new Map();
+        if (value?.schemaVersion === 1 && value.defaults)
+          for (const d of Object.values(value.defaults)) {
+            if (!d || typeof d.apiBase !== "string" || typeof d.userId !== "string" || d.principalId !== d.userId || typeof d.updatedAt !== "string")
+              continue;
+            const key = selectionKey(d.apiBase, d.userId);
+            const prior = newest.get(key);
+            if (!prior || String(prior.updatedAt) < d.updatedAt)
+              newest.set(key, d);
+          }
+        for (const [key, d] of newest)
+          if (!store[key])
+            try {
+              upsert(store, {
+                apiBase: String(d.apiBase),
+                principalId: String(d.principalId),
+                tenantId: String(d.tenantId),
+                projectId: String(d.projectId),
+                name: String(d.name || d.projectId),
+                source: "explicit"
+              });
+              adopted++;
+            } catch {
+            }
+      } catch {
+      }
+      if (adopted > 0) persist(store);
+      renameSync2(legacy, `${legacy}.migrated`);
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+function upsert(store, input) {
+  const key = selectionKey(input.apiBase, input.principalId);
+  const prior = store[key];
+  const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
+  const record = {
+    apiBase: normalizeApiBase(input.apiBase),
+    principalId: input.principalId.toLowerCase(),
+    tenantId: input.tenantId,
+    projectId: input.projectId,
+    name: input.name,
+    selectionId: input.selectionId ?? (same && prior ? prior.selectionId : randomUUID()),
+    selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    source: input.source
+  };
+  if (!valid(record))
+    throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
+  store[key] = record;
+  const keys = Object.keys(store);
+  if (keys.length > MAX_RECORDS)
+    for (const old of keys.sort(
+      (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
+    ).slice(0, keys.length - MAX_RECORDS))
+      delete store[old];
+  return record;
+}
+function offlineIdentity() {
+  let apiBase = PRODUCTION_API_BASE;
+  let userId;
+  try {
+    const raw = readPrivateFileIfExists(
+      join2(memrootConfigDir(), "config.json"),
+      64 * 1024
+    );
+    if (raw !== void 0) {
+      const config = JSON.parse(raw);
+      if (config.schemaVersion === 1) {
+        if (typeof config.apiBase === "string" && config.apiBase)
+          apiBase = config.apiBase;
+        if (typeof config.userId === "string" && config.userId)
+          userId = config.userId;
+      }
+    }
+  } catch {
+  }
+  apiBase = normalizeApiBase(process.env.MEMROOT_API_BASE ?? apiBase);
+  return userId ? { apiBase, userId } : { apiBase };
+}
+function currentSelection(apiBase) {
+  const identity = offlineIdentity();
+  const base = apiBase ?? identity.apiBase;
+  if (!isAllowedApiBase(base)) return void 0;
+  return readSelection(base, identity.userId);
+}
 
 // src/plugin/status.ts
 var agent = "grok";
@@ -135,7 +440,8 @@ var consent = readConsent();
 var capture = consent.kind === "ok" ? {
   enabled: consent.consent.enabled,
   agents: consent.consent.agents,
-  thisAgent: consent.consent.enabled && consent.consent.agents.includes(agent)
+  thisAgent: consent.consent.enabled && consent.consent.agents.includes(agent),
+  paused: consent.consent.enabled && !currentAgreement(consent.consent)
 } : {
   enabled: false,
   agents: [],
@@ -145,7 +451,7 @@ var capture = consent.kind === "ok" ? {
 process.stdout.write(
   `${JSON.stringify({
     plugin: "memroot",
-    version: "0.5.0",
+    version: "0.6.0",
     agent,
     connection: "not_checked",
     capabilities: {
@@ -159,7 +465,15 @@ process.stdout.write(
       extraction: true
     },
     capture,
-    message: `Memroot plugin is installed. This report does not verify a connection. Setup registers the production MCP server; ${check}. Explicit saves and retrieval use the memroot MCP tools. Session capture is ${capture.thisAgent ? "enabled for this agent" : "not enabled for this agent"}; it is opt-in (memroot capture on|off|status). When enabled, after a session ends a bundled background worker redacts the transcript locally, runs your own agent CLI without tools to extract candidates, and uploads only typed, session-extracted memories.`
+    project: (() => {
+      const selected = currentSelection();
+      return selected ? {
+        project_id: selected.projectId,
+        name: selected.name,
+        scope: "computer"
+      } : null;
+    })(),
+    message: `Memroot plugin is installed. This report does not verify a connection. Setup registers the production MCP server; ${check}. Retrieval and automatic saves use the memroot MCP tools. Session capture is ${capture.thisAgent ? "enabled for this agent" : "not enabled for this agent"}; it is on by default after setup or update and memroot capture off turns it off (memroot capture on|off|status). When enabled, when a session ends, is compacted, or every few turns while it runs, a bundled background worker redacts the transcript locally, runs your own agent CLI without tools to extract candidates, and uploads only typed, session-extracted memories to the project selected on this computer.`
   })}
 `
 );

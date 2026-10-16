@@ -1,7 +1,7 @@
 {
   "name": "memroot",
-  "version": "0.5.0",
-  "description": "Connect Memroot, explicitly save or retrieve engineering knowledge, and optionally capture it after sessions end.",
+  "version": "0.6.0",
+  "description": "Connect Memroot so Codex retrieves and saves engineering knowledge on its own, with session capture on by default after setup shows its disclosure.",
   "author": {
     "name": "Memroot"
   },
@@ -10,7 +10,7 @@
   "interface": {
     "displayName": "Memroot",
     "shortDescription": "Connect Memroot and manage durable engineering knowledge.",
-    "longDescription": "Setup links native Codex MCP OAuth to Memroot. After authorization, explicitly save user-approved knowledge and retrieve structured memory packs. Optional session capture (memroot capture on) runs a bundled background worker after a session ends: it redacts the transcript locally, runs Codex without tools to extract candidates, and uploads only typed memories labeled session-extracted. Trust the Memroot SessionStart, PreToolUse, SessionEnd and PostCompact hooks in /hooks. Use $memroot-project to select or create a product for this native session; captures require the new explicit v4 agreement and integrity binding.",
+    "longDescription": "Setup links native Codex MCP OAuth to Memroot. After authorization, Codex retrieves structured memory packs before work and saves durable lessons on its own. Session capture (on after setup or update shows its disclosure; memroot capture off turns it off) runs a bundled background worker when a session ends, is compacted, is resumed or every few turns: it redacts the transcript locally, runs Codex without tools to extract candidates, and uploads only typed memories labeled session-extracted. Trust the Memroot SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, SessionEnd, PostCompact and Stop hooks in /hooks. Use $memroot-project to select or create the project used by every session on this computer.",
     "developerName": "Memroot",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
