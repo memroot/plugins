@@ -15,6 +15,6 @@ Answer from live checks rather than assumptions, because an installed plugin doe
 3. Run the bundled project script's `status` command (`scripts/project.mjs status`, beside the status script) for the project selected on this computer; it applies to every session until changed. A connection with authorized projects does not itself select a project.
 4. Report briefly: plugin version, connected or not, project id, retrieval mode, and whether session capture is on.
 
-If the memroot tools aren't available or `connection_status` fails, say that Memroot isn't connected in this session and suggest `npx memroot setup --agent claude --yes`, then `npx memroot doctor` for diagnostics. A successful connection check doesn't prove a memory was saved; only a save followed by a retrieval in a fresh session does.
+If the memroot tools aren't available or `connection_status` fails, say that Memroot isn't connected in this session. When `claude mcp get memroot` shows the server but `Needs authentication`, ask the user to run `/mcp` in Claude Code, select memroot and authenticate (or run `claude mcp login memroot` in a terminal); otherwise suggest `npx memroot setup --agent claude` from a terminal, then `npx memroot doctor` for diagnostics. A successful connection check doesn't prove a memory was saved; only a save followed by a retrieval in a fresh session does.
 
 Don't read transcripts or credential files to answer, and don't invent endpoints.

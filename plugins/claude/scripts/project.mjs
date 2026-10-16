@@ -835,7 +835,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.6.1"} project`;
+  return `npx -y memroot@${"0.6.2"} project`;
 }
 function legacySessionRecordsDir() {
   return join6(stateDir(), "project-sessions");
@@ -1827,7 +1827,7 @@ async function projectCommand(args, _bundledAgent) {
   const client = new McpClient(
     base,
     new TokenBroker(base),
-    `memroot-cli/${"0.6.1"}`
+    `memroot-cli/${"0.6.2"}`
   );
   const listProjects = async () => {
     let projects2;
