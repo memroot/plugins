@@ -33,6 +33,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "^mcp__.*memroot__memory_retrieve$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/recall-check.mjs\"",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -62,6 +72,16 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/project-guard.mjs\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Agent|Task|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/recall-check.mjs\"",
             "timeout": 3
           }
         ]
@@ -119,6 +139,27 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/failure-nudge.mjs\"",
+            "timeout": 3
+          }
+        ]
+      },
+      {
+        "matcher": "^mcp__.*memroot__memory_retrieve$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/recall-check.mjs\"",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/recall-check.mjs\"",
             "timeout": 3
           }
         ]

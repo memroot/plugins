@@ -20218,7 +20218,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.8.1"}`
+        `memroot-capture/${"0.9.0"}`
       ),
       salt,
       redactor: createRedactor(salt),

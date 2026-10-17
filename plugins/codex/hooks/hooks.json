@@ -43,6 +43,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "^mcp__.*memroot__memory_retrieve$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/recall-check.mjs\"",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -76,6 +86,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "apply_patch|Edit|Write|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/recall-check.mjs\"",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "Stop": [
@@ -96,6 +116,17 @@
             "type": "command",
             "command": "node \"${PLUGIN_ROOT}/scripts/session-end.mjs\"",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/recall-check.mjs\"",
+            "timeout": 3
           }
         ]
       }
