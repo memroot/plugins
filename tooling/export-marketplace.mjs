@@ -120,6 +120,10 @@ const pluginFiles = (agent, version) => {
     (agent === "claude"
       ? minor >= 6n
       : minor > 8n || (minor === 8n && patch >= 1n));
+  // scripts/recall-check.mjs (SubagentStart context, recall state, recall
+  // gate): Claude Code and Codex from 0.9.0; Grok never ships it.
+  const recallCheck =
+    agent !== "grok" && (major > 0n || (major === 0n && minor >= 9n));
   return [
     `${agent === "codex" ? ".codex-plugin" : ".claude-plugin"}/plugin.json`,
     "README.md",
@@ -147,6 +151,7 @@ const pluginFiles = (agent, version) => {
       ? ["scripts/memory-mirror.mjs", "scripts/prompt-nudge.mjs"]
       : []),
     ...(failureNudge ? ["scripts/failure-nudge.mjs"] : []),
+    ...(recallCheck ? ["scripts/recall-check.mjs"] : []),
     `scripts/${agent === "grok" ? "session-reminder" : "session-start"}.mjs`,
   ];
 };
