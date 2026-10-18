@@ -8,7 +8,7 @@
         "path": "./plugins/grok"
       },
       "description": "Memroot coding-agent plugin",
-      "version": "0.9.1"
+      "version": "0.9.2"
     }
   ]
 }
