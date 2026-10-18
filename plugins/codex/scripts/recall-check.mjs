@@ -681,7 +681,7 @@ function safeName(name) {
 }
 function projectFact(project) {
   if (project === void 0) return RECALL_PROJECT;
-  return project ? `The Memroot project selected on this computer is "${safeName(project.name)}" (project_id ${project.projectId}); every Memroot call passes this project_id, never a placeholder or the nil UUID.` : "No Memroot project is selected on this computer yet, so Memroot calls are refused until the user selects one with the Memroot project command.";
+  return project ? `The Memroot project selected on this computer is "${safeName(project.name)}" (project_id ${project.projectId}); every Memroot call passes this project_id, never a placeholder or the nil UUID.` : "No Memroot project is selected on this computer yet; the Memroot project line in the session context gives the command that selects one.";
 }
 function gateAction(mode, counts, firstForPrompt) {
   if (mode === "off" || !counts || counts.prompts < 1) return "none";
