@@ -549,8 +549,15 @@ var RECALL_CLAUSES = {
   project: RECALL_PROJECT,
   untrusted: RECALL_UNTRUSTED
 };
+
+// ../../packages/contracts/src/recall-guidance-v3.ts
+var RECALL_CONTEXT = "With each retrieval_request, add context.task: your own short summary of the current work (5-15 words, at most 512 characters), and context.paths: up to 32 known relevant or changed repository-relative file paths (at most 512 characters each). Omit unknown fields; never paste the user's message, conversation, file contents, logs, secrets or personal data into context.";
+var RECALL_CLAUSES2 = {
+  ...RECALL_CLAUSES,
+  context: RECALL_CONTEXT
+};
 function recallGuidance(...clauses) {
-  return clauses.map((clause) => RECALL_CLAUSES[clause]).join(" ");
+  return clauses.map((clause) => RECALL_CLAUSES2[clause]).join(" ");
 }
 
 // src/capture/hooks/session-context.ts
@@ -559,6 +566,7 @@ var SESSION_START_CONTEXT = [
   recallGuidance("primary", "rule", "tasks", "skip", "familiarity", "cost"),
   "To check, call the memroot server's memory_retrieve tool; the memroot-memory skill has the details.",
   RECALL_QUERY,
+  RECALL_CONTEXT,
   "Save to Memroot automatically: as soon as work surfaces a durable lesson (a decision and its reason, a root cause and its fix, an approach that failed, a convention, a user preference), save it with memory_create right away without asking, then tell the user in one short line what you saved. Save only durable knowledge to Memroot, never the task's goal or progress, transcripts or secrets.",
   RECALL_PROJECT,
   "The selected project is in the Memroot project line in this context and applies to every session on this computer until it is changed. If none is selected, run the command that line gives, and if it lists several projects ask the user which one.",
@@ -569,6 +577,7 @@ var PROMPT_NUDGE_SAVE = "Save each durable lesson to Memroot with memory_create 
 var PROMPT_NUDGE = [
   recallGuidance("rule", "primary"),
   "Each memory_retrieve call passes the selected project_id and a short query the agent writes.",
+  RECALL_CONTEXT,
   recallGuidance("tasks", "skip"),
   PROMPT_NUDGE_SAVE
 ].join(" ");
@@ -602,6 +611,7 @@ function stateNudge(counts, project) {
     recallGuidance("primary", "rule", "tasks", "skip", "familiarity"),
     projectFact(project),
     "Each memory_retrieve call passes the selected project_id and a short query the agent writes.",
+    RECALL_CONTEXT,
     PROMPT_NUDGE_SAVE
   ].join(" ");
 }

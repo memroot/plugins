@@ -15690,6 +15690,12 @@ var BudgetSchema = external_exports.object({
 var RetrieveMemoryPackRequestV1Schema = external_exports.object({
   schema_version: external_exports.literal(1),
   query: scalar(1, 16e3),
+  context: external_exports.strictObject({
+    task: scalar(1, 512).optional(),
+    paths: external_exports.array(
+      external_exports.string().min(1).max(512).refine(storableText, "well-formed Unicode without U+0000").regex(/^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[^\\]+$/u)
+    ).max(32).optional()
+  }).optional(),
   git_state: external_exports.object({
     repository_entity_id: opaque,
     commit_oid: external_exports.string().regex(/^[a-f0-9]{40,128}$/),
@@ -15716,6 +15722,9 @@ var MemoryPackResponseV1Schema = external_exports.object({
   // When vectors cannot answer the request fails with one of the two
   // `vector_retrieval_*` codes; no pack is ever degraded.
   retrieval_mode: external_exports.literal("vector"),
+  // Historical responses retain their version. Current r5v gates metadata
+  // signals (confidence, usage, importance, freshness, applicability) by
+  // match eligibility and query relevance.
   ranking_version: shown,
   index_generation: shown.nullable(),
   d1_bookmark: shown.nullable(),
@@ -15753,15 +15762,21 @@ var MemoryPackResponseV1Schema = external_exports.object({
       score: external_exports.number(),
       /**
        * The terms the ranking formula read for this item, by name; together
-       * they reproduce `score`. Which names there are depends on
-       * `ranking_version`, which is `r4v` for every answer of the deployed
+       * with the item's lifecycle multiplier and the version's scorer
+       * (`scoreR4v` or `scoreR5v`) they reproduce `score`. Which names there
+       * are depends on
+       * `ranking_version`, which is `r5v` for every answer of the deployed
        * route. `semantic` is the similarity term as the formula reads it:
-       * under `r4v` that is the cosine similarity above the version's
-       * origin, rescaled to 0..1, not the cosine itself. `r4v` therefore
-       * also reports `similarity`, the cosine similarity between the query
+       * under `r4v`/`r5v` that is the cosine similarity above the version's
+       * origin, rescaled to 0..1, not the cosine itself. Both versions therefore
+       * also report `similarity`, the cosine similarity between the query
        * and the item's best assertion as the index gave it, clamped to
        * 0..1: a negative cosine is reported as 0, and so is an assertion
-       * without a hit. Values are ordinal ranking inputs, not probabilities.
+       * without a hit. Under `r5v`, metadata signals (`confidence`, `usage`,
+       * `importance`, `freshness`, `applicability`) are gated by match
+       * eligibility and query relevance so high importance breaks ties among
+       * strong or anchored hits without overriding weak similarity. Values are
+       * ordinal ranking inputs, not probabilities.
        */
       score_signals: external_exports.record(external_exports.string(), external_exports.number())
     })
@@ -16981,7 +16996,7 @@ ${result.stderr}`) ? "quota" : "exit"
 import { createHash as createHash2 } from "node:crypto";
 import { hostname as hostname3, userInfo } from "node:os";
 
-// src/capture/redact/entropy.ts
+// ../../packages/domain/src/redaction/entropy.ts
 function shannon(value) {
   if (!value) return 0;
   const counts = /* @__PURE__ */ new Map();
@@ -17008,7 +17023,7 @@ function looksLikeHighEntropySecret(token) {
   return shannon(token) >= 4.5;
 }
 
-// src/capture/redact/rules.ts
+// ../../packages/domain/src/redaction/rules.ts
 var whole = (kind) => (mark, match) => mark(kind, match);
 var keepPrefix = (kind) => (mark, _match, groups) => {
   const secret = groups[groups.length - 1] ?? "";
@@ -19676,6 +19691,9 @@ async function existingMemories(context, projectId, query) {
       retrieval_request: {
         schema_version: 1,
         query,
+        context: {
+          task: "Find existing durable lessons before extracting new session memories"
+        },
         budget: { max_items: 8 }
       }
     });
@@ -20218,7 +20236,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.9.2"}`
+        `memroot-capture/${"0.10.0"}`
       ),
       salt,
       redactor: createRedactor(salt),

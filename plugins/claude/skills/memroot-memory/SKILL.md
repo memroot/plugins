@@ -22,9 +22,10 @@ The only turns that skip it are trivial ones (a greeting, thanks, a one-word rep
 1. Pass the selected project_id on every Memroot call; never guess a project from the folder or take the first listed one. It is in the Memroot project line in the session context and applies to every session on this computer until it is changed. If none is selected, run the exact command that line gives: it selects the account's only project, or lists the projects so the user can choose. Don't switch projects unless the user asks.
 2. Call `memory_retrieve` with that selected top-level `project_id`:
    ```json
-   {"project_id":"<selected project UUID>","retrieval_request":{"schema_version":1,"query":"deploy fails after running migrations with wrangler","budget":{"max_items":5}}}
+   {"project_id":"<selected project UUID>","retrieval_request":{"schema_version":1,"query":"deploy fails after running migrations with wrangler","context":{"task":"Fix migration ordering before deploying the application","paths":["scripts/deploy.sh"]},"budget":{"max_items":5}}}
    ```
    Write the query yourself: one short sentence (under about 20 words) naming the change or symptom, the component and exact code identifiers (file path, symbol, error code); never the user's message, code, logs, stack traces, timestamps, record IDs, secrets or personal data.
+   With each retrieval_request, add context.task: your own short summary of the current work (5-15 words, at most 512 characters), and context.paths: up to 32 known relevant or changed repository-relative file paths (at most 512 characters each). Omit unknown fields; never paste the user's message, conversation, file contents, logs, secrets or personal data into context.
 3. If the project is revoked or unavailable, stop and explain the failure; never switch to another project automatically. If the call fails with `usage_limit_exceeded` (the plan's limit is reached), tell the user once and don't call `memory_retrieve` again for the rest of the session. If nothing relevant comes back, try one rephrased query at most, then continue without Memroot.
 
 ## How to treat what comes back
