@@ -1,6 +1,6 @@
 # Memroot for Codex
 
-This is the complete, self-contained Memroot plugin root, version `0.10.0`. The native agent plugin manager installs this folder from the public Memroot plugin marketplace and owns subsequent updates. Node.js is the only runtime requirement. Every script in `scripts/` is generated from the Memroot CLI source and bundled with its dependencies; no script refers to `npx`, the npm cache or files outside this bundle.
+This is the complete, self-contained Memroot plugin root, version `0.11.0`. The native agent plugin manager installs this folder from the public Memroot plugin marketplace and owns subsequent updates. Node.js is the only runtime requirement. Every script in `scripts/` is generated from the Memroot CLI source and bundled with its dependencies; no script refers to `npx`, the npm cache or files outside this bundle.
 
 Codex plugin support is a Codex feature and must be enabled. If `codex plugin list` fails or setup cannot find the plugin manager, run `codex features enable plugins` and restart Codex, then re-run `npx memroot@latest setup`.
 
