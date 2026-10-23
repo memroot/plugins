@@ -96,6 +96,16 @@
             "timeout": 3
           }
         ]
+      },
+      {
+        "matcher": "^mcp__.*memroot__memory_retrieve$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${PLUGIN_ROOT}/scripts/recall-check.mjs\"",
+            "timeout": 3
+          }
+        ]
       }
     ],
     "Stop": [

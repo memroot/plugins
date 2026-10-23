@@ -623,7 +623,7 @@ function noteCheck(agent2, key, options = {}) {
     // A check before any counted prompt (a host without the prompt hook)
     // belongs to the session's first prompt.
     lastCheck: Math.max(1, counts.prompts),
-    checks: counts.checks + (options.failed ? 0 : 1),
+    checks: counts.checks + (options.started || options.failed ? 0 : 1),
     stopped: counts.stopped || options.quotaExhausted === true
   }));
 }
@@ -705,10 +705,9 @@ function gateWouldAct(mode, counts) {
 function gateText(action, counts, project, options) {
   const prompt = Math.max(1, counts.prompts);
   const since = counts.lastCheck < 1 ? "no check yet" : `last check during ${options.subagent ? "task" : "prompt"} ${counts.lastCheck}`;
-  const what = options.delegation ? "delegation" : "change";
   const head = options.subagent ? `Memroot check pending for this subagent's task ${prompt}, ${since}.` : `Memroot check pending for prompt ${prompt} of this session, ${since}.`;
-  const practice = `The user set up Memroot; the first ${what} of each task waits for memory_retrieve with ${project ? `project_id ${project.projectId}` : "the selected project_id"} and a short query naming the task.`;
-  const tail = action === "deny" ? "This call was held for that check." : `This call is the first ${what} of the task.`;
+  const practice = `The user set up Memroot; the first change of each task waits for memory_retrieve with ${project ? `project_id ${project.projectId}` : "the selected project_id"} and a short query naming the task.`;
+  const tail = action === "deny" ? "This call was held for that check." : "This call is the first change of the task.";
   return [head, practice, tail].join(" ");
 }
 function subagentContext(project, options = {}) {
@@ -1003,7 +1002,6 @@ var EDIT_TOOLS = {
   codex: /* @__PURE__ */ new Set(["apply_patch", "Edit", "Write"]),
   grok: /* @__PURE__ */ new Set()
 };
-var SPAWN_TOOLS = /* @__PURE__ */ new Set(["Agent", "Task"]);
 var READ_ONLY_AGENTS = /* @__PURE__ */ new Set(["Explore", "Plan"]);
 function exit(output) {
   if (!output) {
@@ -1023,11 +1021,6 @@ function selectedProject() {
   } catch {
     return void 0;
   }
-}
-function spawnType(input) {
-  if (!input || typeof input !== "object") return void 0;
-  const value = input.subagent_type;
-  return typeof value === "string" ? value : void 0;
 }
 function onSubagentStart(event, sessionId) {
   const project = selectedProject();
@@ -1063,19 +1056,30 @@ function onRetrieved(event, sessionId) {
   }
   exit("");
 }
+function unparsedInput(input) {
+  if (!input || typeof input !== "object") return false;
+  const args = input;
+  return "__unparsedToolInput" in args || "raw" in args && "len" in args;
+}
+function onRetrieveStarted(event, sessionId) {
+  if (!unparsedInput(event.tool_input))
+    try {
+      noteCheck(agent, recallKey(sessionId, event.agent_id), {
+        started: true
+      });
+    } catch {
+    }
+  exit("");
+}
 function onToolUse(event, sessionId) {
-  if (gateMode === "off") return exit("");
   const tool = event.tool_name;
   if (typeof tool !== "string") return exit("");
+  if (RETRIEVE_TOOL.test(tool)) return onRetrieveStarted(event, sessionId);
+  if (gateMode === "off") return exit("");
   if (validAgentId(event.agent_id) && typeof event.agent_type === "string" && READ_ONLY_AGENTS.has(event.agent_type))
     return exit("");
-  const spawn = agent === "claude" && SPAWN_TOOLS.has(tool);
   const shell = tool === "Bash" && mutatingShellCommand(shellCommandText(event.tool_input));
-  if (!spawn && !shell && !EDIT_TOOLS[agent].has(tool)) return exit("");
-  if (spawn) {
-    const type = spawnType(event.tool_input);
-    if (type !== void 0 && READ_ONLY_AGENTS.has(type)) return exit("");
-  }
+  if (!shell && !EDIT_TOOLS[agent].has(tool)) return exit("");
   const subagent = validAgentId(event.agent_id);
   const key = recallKey(sessionId, event.agent_id);
   const counts = readRecallState(agent, key);
@@ -1094,10 +1098,7 @@ function onToolUse(event, sessionId) {
   }
   const action = gateAction(gateMode, counts, first);
   if (action === "none") return exit("");
-  const text = gateText(action, counts, project, {
-    subagent,
-    delegation: spawn
-  });
+  const text = gateText(action, counts, project, { subagent });
   if (action === "deny")
     return reply({
       hookEventName: "PreToolUse",
