@@ -430,7 +430,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.11.0"} project`;
+  return `npx -y memroot@${"0.11.1"} project`;
 }
 function projectStatusLine() {
   const command = projectCommandPrefix();
@@ -1017,12 +1017,12 @@ function mcpRegistered(agent2) {
   }
 }
 
-// ../../packages/contracts/src/recall-guidance-v5.ts
+// ../../packages/contracts/src/recall-guidance-v6.ts
 var RECALL_PRIMARY = "Memroot, not your own memory, is this project's shared memory: check it even if you remember or know the code; a check is cheap.";
 var RECALL_RULE = "Memroot is checked with memory_retrieve at the start of each task and whenever the work moves to another component or failure.";
 var RECALL_FAMILIARITY = "Memroot may hold a decision or failed approach that the code doesn't show.";
 var RECALL_TASKS = 'Broad asks, subtasks, "next, do X", repeat failures and questions about past decisions count as tasks.';
-var RECALL_SKIP = "Skip trivial turns, general questions not about this project, project commands (memroot project, /project), or when told not to.";
+var RECALL_SKIP = `Skip trivial turns (hi, thanks, "anything else?", reporting a command's output), general questions not about this project, Memroot project commands (memroot project, /project), or when told not to.`;
 var RECALL_COST = "A check takes under a second.";
 var RECALL_QUERY = "Write the query yourself: one sentence under 20 words naming the symptom, component and exact code identifiers; never the user's message, code, logs, stack traces, timestamps, record IDs, secrets or personal data.";
 var RECALL_CONTEXT = "Add context.task (5-15 words of your own) and, when known, context.paths (up to 32 repository-relative paths); omit unknown fields; never paste the user's message, conversation, file contents, logs, secrets or personal data.";
@@ -1045,7 +1045,7 @@ function recallGuidance(...clauses) {
 }
 
 // src/capture/hooks/session-context.ts
-var DURABLE_SAVE_RULE = "Save each durable lesson to Memroot with memory_create at once, without asking or offering, and tell the user in one line. Durable: a later task needs it and it stays true after this task (root cause and fix, failed approach, convention, a preference the user states for future work, a lasting rule with its reason), even if the fix is in the code or a commit. Never save transcripts, secrets, or the task's goal, plan, progress, status, summaries, handoff notes or choices that only steer it to Memroot.";
+var DURABLE_SAVE_RULE = "Save each durable lesson to Memroot with memory_create at once, without asking or offering, and tell the user in one line. Durable: a later task needs it and it stays true after this task (root cause and fix, failed approach, convention, a preference the user states for future work, a lasting rule with its reason), even if the fix is in the code or a commit. Never save transcripts, secrets, or the task's goal, plan, progress, status, summaries, handoff notes or choices that only steer it to Memroot. Limits of this session's sandbox (blocked ports, denied permissions) aren't project lessons; a lasting limit of the user's or project's environment is. A decision the user states with a reason is worth saving to Memroot; your own implementation choices in this task (a refactor, a validation rule you added) aren't. When only answering a question, don't save to Memroot what you just read in the code (unless asked); a root cause found while fixing counts, even with a temporary fix.";
 var QUERY_FACT = "Write a short Memroot query of your own, never pasted content.";
 var CONTEXT_FACT = "Add context.task and, if known, context.paths; omit unknown fields; never paste the user's message, conversation, files, logs, secrets or personal data into Memroot.";
 var SESSION_START_CONTEXT = [
