@@ -1,9 +1,94 @@
 #!/usr/bin/env node
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __commonJS = (cb, mod) => function __require() {
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// ../../node_modules/.pnpm/sisteransi@1.0.5/node_modules/sisteransi/src/index.js
+var require_src = __commonJS({
+  "../../node_modules/.pnpm/sisteransi@1.0.5/node_modules/sisteransi/src/index.js"(exports, module) {
+    "use strict";
+    var ESC2 = "\x1B";
+    var CSI2 = `${ESC2}[`;
+    var beep = "\x07";
+    var cursor3 = {
+      to(x, y2) {
+        if (!y2) return `${CSI2}${x + 1}G`;
+        return `${CSI2}${y2 + 1};${x + 1}H`;
+      },
+      move(x, y2) {
+        let ret = "";
+        if (x < 0) ret += `${CSI2}${-x}D`;
+        else if (x > 0) ret += `${CSI2}${x}C`;
+        if (y2 < 0) ret += `${CSI2}${-y2}A`;
+        else if (y2 > 0) ret += `${CSI2}${y2}B`;
+        return ret;
+      },
+      up: (count = 1) => `${CSI2}${count}A`,
+      down: (count = 1) => `${CSI2}${count}B`,
+      forward: (count = 1) => `${CSI2}${count}C`,
+      backward: (count = 1) => `${CSI2}${count}D`,
+      nextLine: (count = 1) => `${CSI2}E`.repeat(count),
+      prevLine: (count = 1) => `${CSI2}F`.repeat(count),
+      left: `${CSI2}G`,
+      hide: `${CSI2}?25l`,
+      show: `${CSI2}?25h`,
+      save: `${ESC2}7`,
+      restore: `${ESC2}8`
+    };
+    var scroll = {
+      up: (count = 1) => `${CSI2}S`.repeat(count),
+      down: (count = 1) => `${CSI2}T`.repeat(count)
+    };
+    var erase3 = {
+      screen: `${CSI2}2J`,
+      up: (count = 1) => `${CSI2}1J`.repeat(count),
+      down: (count = 1) => `${CSI2}J`.repeat(count),
+      line: `${CSI2}2K`,
+      lineEnd: `${CSI2}K`,
+      lineStart: `${CSI2}1K`,
+      lines(count) {
+        let clear = "";
+        for (let i2 = 0; i2 < count; i2++)
+          clear += this.line + (i2 < count - 1 ? cursor3.up() : "");
+        if (count)
+          clear += cursor3.left;
+        return clear;
+      }
+    };
+    module.exports = { cursor: cursor3, scroll, erase: erase3, beep };
+  }
+});
 
 // src/project-command.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { existsSync as existsSync3, lstatSync as lstatSync4, rmSync as rmSync4 } from "node:fs";
-import { join as join9 } from "node:path";
+import { existsSync as existsSync3, lstatSync as lstatSync4, rmSync as rmSync5 } from "node:fs";
+import { join as join10 } from "node:path";
 import { parseArgs } from "node:util";
 
 // ../../packages/contracts/src/console-rules-v1.ts
@@ -17,8 +102,757 @@ function isConsoleProjectName(value) {
 // src/auth.ts
 import { spawn } from "node:child_process";
 import { createHash, randomBytes as randomBytes4 } from "node:crypto";
+import { mkdtempSync, rmSync as rmSync4, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer, request as httpRequest2 } from "node:http";
 import { request as httpsRequest2 } from "node:https";
+import { tmpdir } from "node:os";
+import { join as join8 } from "node:path";
+
+// ../../node_modules/.pnpm/@clack+core@1.5.1/node_modules/@clack/core/dist/index.mjs
+import { stdout, stdin } from "node:process";
+import l__default from "node:readline";
+
+// ../../node_modules/.pnpm/fast-string-truncated-width@3.0.3/node_modules/fast-string-truncated-width/dist/utils.js
+var getCodePointsLength = /* @__PURE__ */ (() => {
+  const SURROGATE_PAIR_RE = /[\uD800-\uDBFF][\uDC00-\uDFFF]/g;
+  return (input) => {
+    let surrogatePairsNr = 0;
+    SURROGATE_PAIR_RE.lastIndex = 0;
+    while (SURROGATE_PAIR_RE.test(input)) {
+      surrogatePairsNr += 1;
+    }
+    return input.length - surrogatePairsNr;
+  };
+})();
+var isFullWidth = (x) => {
+  return x === 12288 || x >= 65281 && x <= 65376 || x >= 65504 && x <= 65510;
+};
+var isWideNotCJKTNotEmoji = (x) => {
+  return x === 8987 || x === 9001 || x >= 12272 && x <= 12287 || x >= 12289 && x <= 12350 || x >= 12441 && x <= 12543 || x >= 12549 && x <= 12591 || x >= 12593 && x <= 12686 || x >= 12688 && x <= 12771 || x >= 12783 && x <= 12830 || x >= 12832 && x <= 12871 || x >= 12880 && x <= 19903 || x >= 65040 && x <= 65049 || x >= 65072 && x <= 65106 || x >= 65108 && x <= 65126 || x >= 65128 && x <= 65131 || x >= 127488 && x <= 127490 || x >= 127504 && x <= 127547 || x >= 127552 && x <= 127560 || x >= 131072 && x <= 196605 || x >= 196608 && x <= 262141;
+};
+
+// ../../node_modules/.pnpm/fast-string-truncated-width@3.0.3/node_modules/fast-string-truncated-width/dist/index.js
+var ANSI_RE = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]|\u001b\]8;[^;]*;.*?(?:\u0007|\u001b\u005c)/y;
+var CONTROL_RE = /[\x00-\x08\x0A-\x1F\x7F-\x9F]{1,1000}/y;
+var CJKT_WIDE_RE = /(?:(?![\uFF61-\uFF9F\uFF00-\uFFEF])[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Tangut}]){1,1000}/yu;
+var TAB_RE = /\t{1,1000}/y;
+var EMOJI_RE = new RegExp("[\\u{1F1E6}-\\u{1F1FF}]{2}|\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}|(?:\\p{Emoji}\\uFE0F\\u20E3?|\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation})(?:\\u200D(?:\\p{Emoji_Modifier_Base}\\p{Emoji_Modifier}?|\\p{Emoji_Presentation}|\\p{Emoji}\\uFE0F\\u20E3?))*", "yu");
+var LATIN_RE = /(?:[\x20-\x7E\xA0-\xFF](?!\uFE0F)){1,1000}/y;
+var MODIFIER_RE = new RegExp("\\p{M}+", "gu");
+var NO_TRUNCATION = { limit: Infinity, ellipsis: "" };
+var getStringTruncatedWidth = (input, truncationOptions = {}, widthOptions = {}) => {
+  const LIMIT = truncationOptions.limit ?? Infinity;
+  const ELLIPSIS = truncationOptions.ellipsis ?? "";
+  const ELLIPSIS_WIDTH = truncationOptions?.ellipsisWidth ?? (ELLIPSIS ? getStringTruncatedWidth(ELLIPSIS, NO_TRUNCATION, widthOptions).width : 0);
+  const ANSI_WIDTH = 0;
+  const CONTROL_WIDTH = widthOptions.controlWidth ?? 0;
+  const TAB_WIDTH = widthOptions.tabWidth ?? 8;
+  const EMOJI_WIDTH = widthOptions.emojiWidth ?? 2;
+  const FULL_WIDTH_WIDTH = 2;
+  const REGULAR_WIDTH = widthOptions.regularWidth ?? 1;
+  const WIDE_WIDTH = widthOptions.wideWidth ?? FULL_WIDTH_WIDTH;
+  const PARSE_BLOCKS = [
+    [LATIN_RE, REGULAR_WIDTH],
+    [ANSI_RE, ANSI_WIDTH],
+    [CONTROL_RE, CONTROL_WIDTH],
+    [TAB_RE, TAB_WIDTH],
+    [EMOJI_RE, EMOJI_WIDTH],
+    [CJKT_WIDE_RE, WIDE_WIDTH]
+  ];
+  let indexPrev = 0;
+  let index = 0;
+  let length = input.length;
+  let lengthExtra = 0;
+  let truncationEnabled = false;
+  let truncationIndex = length;
+  let truncationLimit = Math.max(0, LIMIT - ELLIPSIS_WIDTH);
+  let unmatchedStart = 0;
+  let unmatchedEnd = 0;
+  let width = 0;
+  let widthExtra = 0;
+  outer: while (true) {
+    if (unmatchedEnd > unmatchedStart || index >= length && index > indexPrev) {
+      const unmatched = input.slice(unmatchedStart, unmatchedEnd) || input.slice(indexPrev, index);
+      lengthExtra = 0;
+      for (const char of unmatched.replaceAll(MODIFIER_RE, "")) {
+        const codePoint = char.codePointAt(0) || 0;
+        if (isFullWidth(codePoint)) {
+          widthExtra = FULL_WIDTH_WIDTH;
+        } else if (isWideNotCJKTNotEmoji(codePoint)) {
+          widthExtra = WIDE_WIDTH;
+        } else {
+          widthExtra = REGULAR_WIDTH;
+        }
+        if (width + widthExtra > truncationLimit) {
+          truncationIndex = Math.min(truncationIndex, Math.max(unmatchedStart, indexPrev) + lengthExtra);
+        }
+        if (width + widthExtra > LIMIT) {
+          truncationEnabled = true;
+          break outer;
+        }
+        lengthExtra += char.length;
+        width += widthExtra;
+      }
+      unmatchedStart = unmatchedEnd = 0;
+    }
+    if (index >= length) {
+      break outer;
+    }
+    for (let i2 = 0, l = PARSE_BLOCKS.length; i2 < l; i2++) {
+      const [BLOCK_RE, BLOCK_WIDTH] = PARSE_BLOCKS[i2];
+      BLOCK_RE.lastIndex = index;
+      if (BLOCK_RE.test(input)) {
+        lengthExtra = BLOCK_RE === CJKT_WIDE_RE ? getCodePointsLength(input.slice(index, BLOCK_RE.lastIndex)) : BLOCK_RE === EMOJI_RE ? 1 : BLOCK_RE.lastIndex - index;
+        widthExtra = lengthExtra * BLOCK_WIDTH;
+        if (width + widthExtra > truncationLimit) {
+          truncationIndex = Math.min(truncationIndex, index + Math.floor((truncationLimit - width) / BLOCK_WIDTH));
+        }
+        if (width + widthExtra > LIMIT) {
+          truncationEnabled = true;
+          break outer;
+        }
+        width += widthExtra;
+        unmatchedStart = indexPrev;
+        unmatchedEnd = index;
+        index = indexPrev = BLOCK_RE.lastIndex;
+        continue outer;
+      }
+    }
+    index += 1;
+  }
+  return {
+    width: truncationEnabled ? truncationLimit : width,
+    index: truncationEnabled ? truncationIndex : length,
+    truncated: truncationEnabled,
+    ellipsed: truncationEnabled && LIMIT >= ELLIPSIS_WIDTH
+  };
+};
+var dist_default = getStringTruncatedWidth;
+
+// ../../node_modules/.pnpm/fast-string-width@3.0.2/node_modules/fast-string-width/dist/index.js
+var NO_TRUNCATION2 = {
+  limit: Infinity,
+  ellipsis: "",
+  ellipsisWidth: 0
+};
+var fastStringWidth = (input, options = {}) => {
+  return dist_default(input, NO_TRUNCATION2, options).width;
+};
+var dist_default2 = fastStringWidth;
+
+// ../../node_modules/.pnpm/fast-wrap-ansi@0.2.2/node_modules/fast-wrap-ansi/lib/main.js
+var ESC = "\x1B";
+var CSI = "\x9B";
+var END_CODE = 39;
+var ANSI_ESCAPE_BELL = "\x07";
+var ANSI_CSI = "[";
+var ANSI_OSC = "]";
+var ANSI_SGR_TERMINATOR = "m";
+var ANSI_ESCAPE_LINK = `${ANSI_OSC}8;;`;
+var GROUP_REGEX = new RegExp(`(?:\\${ANSI_CSI}(?<code>\\d+)m|\\${ANSI_ESCAPE_LINK}(?<uri>.*)${ANSI_ESCAPE_BELL})`, "y");
+var getClosingCode = (openingCode) => {
+  if (openingCode >= 30 && openingCode <= 37)
+    return 39;
+  if (openingCode >= 90 && openingCode <= 97)
+    return 39;
+  if (openingCode >= 40 && openingCode <= 47)
+    return 49;
+  if (openingCode >= 100 && openingCode <= 107)
+    return 49;
+  if (openingCode === 1 || openingCode === 2)
+    return 22;
+  if (openingCode === 3)
+    return 23;
+  if (openingCode === 4)
+    return 24;
+  if (openingCode === 7)
+    return 27;
+  if (openingCode === 8)
+    return 28;
+  if (openingCode === 9)
+    return 29;
+  if (openingCode === 0)
+    return 0;
+  return void 0;
+};
+var wrapAnsiCode = (code) => `${ESC}${ANSI_CSI}${code}${ANSI_SGR_TERMINATOR}`;
+var wrapAnsiHyperlink = (url) => `${ESC}${ANSI_ESCAPE_LINK}${url}${ANSI_ESCAPE_BELL}`;
+var wrapWord = (rows, word, columns) => {
+  const characters = word[Symbol.iterator]();
+  let isInsideEscape = false;
+  let isInsideLinkEscape = false;
+  let lastRow = rows.at(-1);
+  let visible = lastRow === void 0 ? 0 : dist_default2(lastRow);
+  let currentCharacter = characters.next();
+  let nextCharacter = characters.next();
+  let rawCharacterIndex = 0;
+  while (!currentCharacter.done) {
+    const character = currentCharacter.value;
+    const characterLength = dist_default2(character);
+    if (visible + characterLength <= columns) {
+      rows[rows.length - 1] += character;
+    } else {
+      rows.push(character);
+      visible = 0;
+    }
+    if (character === ESC || character === CSI) {
+      isInsideEscape = true;
+      isInsideLinkEscape = word.startsWith(ANSI_ESCAPE_LINK, rawCharacterIndex + 1);
+    }
+    if (isInsideEscape) {
+      if (isInsideLinkEscape) {
+        if (character === ANSI_ESCAPE_BELL) {
+          isInsideEscape = false;
+          isInsideLinkEscape = false;
+        }
+      } else if (character === ANSI_SGR_TERMINATOR) {
+        isInsideEscape = false;
+      }
+    } else {
+      visible += characterLength;
+      if (visible === columns && !nextCharacter.done) {
+        rows.push("");
+        visible = 0;
+      }
+    }
+    currentCharacter = nextCharacter;
+    nextCharacter = characters.next();
+    rawCharacterIndex += character.length;
+  }
+  lastRow = rows.at(-1);
+  if (!visible && lastRow !== void 0 && lastRow.length && rows.length > 1) {
+    rows[rows.length - 2] += rows.pop();
+  }
+};
+var stringVisibleTrimSpacesRight = (string) => {
+  const words = string.split(" ");
+  let last = words.length;
+  while (last) {
+    if (dist_default2(words[last - 1])) {
+      break;
+    }
+    last--;
+  }
+  if (last === words.length) {
+    return string;
+  }
+  return words.slice(0, last).join(" ") + words.slice(last).join("");
+};
+var exec = (string, columns, options = {}) => {
+  if (options.trim !== false && string.trim() === "") {
+    return "";
+  }
+  let returnValue = "";
+  let escapeCode;
+  let escapeUrl;
+  const words = string.split(" ");
+  let rows = [""];
+  let rowLength = 0;
+  for (let index = 0; index < words.length; index++) {
+    const word = words[index];
+    if (options.trim !== false) {
+      const row = rows.at(-1) ?? "";
+      const trimmed = row.trimStart();
+      if (row.length !== trimmed.length) {
+        rows[rows.length - 1] = trimmed;
+        rowLength = dist_default2(trimmed);
+      }
+    }
+    if (index !== 0) {
+      if (rowLength >= columns && (options.wordWrap === false || options.trim === false)) {
+        rows.push("");
+        rowLength = 0;
+      }
+      if (rowLength || options.trim === false) {
+        rows[rows.length - 1] += " ";
+        rowLength++;
+      }
+    }
+    const wordLength = dist_default2(word);
+    if (options.hard && wordLength > columns) {
+      const remainingColumns = columns - rowLength;
+      const breaksStartingThisLine = 1 + Math.floor((wordLength - remainingColumns - 1) / columns);
+      const breaksStartingNextLine = Math.floor((wordLength - 1) / columns);
+      if (breaksStartingNextLine < breaksStartingThisLine) {
+        rows.push("");
+      }
+      wrapWord(rows, word, columns);
+      rowLength = dist_default2(rows.at(-1) ?? "");
+      continue;
+    }
+    if (rowLength + wordLength > columns && rowLength && wordLength) {
+      if (options.wordWrap === false && rowLength < columns) {
+        wrapWord(rows, word, columns);
+        rowLength = dist_default2(rows.at(-1) ?? "");
+        continue;
+      }
+      rows.push("");
+      rowLength = 0;
+    }
+    if (rowLength + wordLength > columns && options.wordWrap === false) {
+      wrapWord(rows, word, columns);
+      rowLength = dist_default2(rows.at(-1) ?? "");
+      continue;
+    }
+    rows[rows.length - 1] += word;
+    rowLength += wordLength;
+  }
+  if (options.trim !== false) {
+    rows = rows.map((row) => stringVisibleTrimSpacesRight(row));
+  }
+  const preString = rows.join("\n");
+  let inSurrogate = false;
+  for (let i2 = 0; i2 < preString.length; i2++) {
+    const character = preString[i2];
+    returnValue += character;
+    if (!inSurrogate) {
+      inSurrogate = character >= "\uD800" && character <= "\uDBFF";
+      if (inSurrogate) {
+        continue;
+      }
+    } else {
+      inSurrogate = false;
+    }
+    if (character === ESC || character === CSI) {
+      GROUP_REGEX.lastIndex = i2 + 1;
+      const groupsResult = GROUP_REGEX.exec(preString);
+      const groups = groupsResult?.groups;
+      if (groups?.code !== void 0) {
+        const code = Number.parseFloat(groups.code);
+        escapeCode = code === END_CODE ? void 0 : code;
+      } else if (groups?.uri !== void 0) {
+        escapeUrl = groups.uri.length === 0 ? void 0 : groups.uri;
+      }
+    }
+    if (preString[i2 + 1] === "\n") {
+      if (escapeUrl) {
+        returnValue += wrapAnsiHyperlink("");
+      }
+      const closingCode = escapeCode ? getClosingCode(escapeCode) : void 0;
+      if (escapeCode && closingCode) {
+        returnValue += wrapAnsiCode(closingCode);
+      }
+    } else if (character === "\n") {
+      if (escapeCode && getClosingCode(escapeCode)) {
+        returnValue += wrapAnsiCode(escapeCode);
+      }
+      if (escapeUrl) {
+        returnValue += wrapAnsiHyperlink(escapeUrl);
+      }
+    }
+  }
+  return returnValue;
+};
+var CRLF_OR_LF = /\r?\n/;
+function wrapAnsi(string, columns, options) {
+  return String(string).normalize().split(CRLF_OR_LF).map((line) => exec(line, columns, options)).join("\n");
+}
+
+// ../../node_modules/.pnpm/@clack+core@1.5.1/node_modules/@clack/core/dist/index.mjs
+var import_sisteransi = __toESM(require_src(), 1);
+var a$1 = ["up", "down", "left", "right", "space", "enter", "cancel"];
+var t = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+var settings = {
+  actions: new Set(a$1),
+  aliases: /* @__PURE__ */ new Map([
+    // vim support
+    ["k", "up"],
+    ["j", "down"],
+    ["h", "left"],
+    ["l", "right"],
+    ["", "cancel"],
+    // opinionated defaults!
+    ["escape", "cancel"]
+  ]),
+  messages: {
+    cancel: "Canceled",
+    error: "Something went wrong"
+  },
+  withGuide: true,
+  accessible: void 0,
+  date: {
+    monthNames: [...t],
+    messages: {
+      required: "Please enter a valid date",
+      invalidMonth: "There are only 12 months in a year",
+      invalidDay: (n2, e) => `There are only ${n2} days in ${e}`,
+      afterMin: (n2) => `Date must be on or after ${n2.toISOString().slice(0, 10)}`,
+      beforeMax: (n2) => `Date must be on or before ${n2.toISOString().slice(0, 10)}`
+    }
+  }
+};
+function isAccessible(n2) {
+  if (n2 !== void 0) return n2;
+  if (settings.accessible !== void 0) return settings.accessible;
+  const e = process.env.ACCESSIBLE;
+  return e !== void 0 && e !== "" && e !== "0" && e !== "false";
+}
+function isActionKey(n2, e) {
+  if (typeof n2 == "string")
+    return settings.aliases.get(n2) === e;
+  for (const s of n2)
+    if (s !== void 0 && isActionKey(s, e))
+      return true;
+  return false;
+}
+function diffLines(i2, s) {
+  if (i2 === s) return;
+  const e = i2.split(`
+`), t2 = s.split(`
+`), r2 = Math.max(e.length, t2.length), f = [];
+  for (let n2 = 0; n2 < r2; n2++)
+    e[n2] !== t2[n2] && f.push(n2);
+  return {
+    lines: f,
+    numLinesBefore: e.length,
+    numLinesAfter: t2.length,
+    numLines: r2
+  };
+}
+var R = globalThis.process.platform.startsWith("win");
+var CANCEL_SYMBOL = /* @__PURE__ */ Symbol("clack:cancel");
+function isCancel(e) {
+  return e === CANCEL_SYMBOL;
+}
+function setRawMode(e, r2) {
+  const o = e;
+  o.isTTY && o.setRawMode(r2);
+}
+var getColumns = (e) => "columns" in e && typeof e.columns == "number" ? e.columns : 80;
+var getRows = (e) => "rows" in e && typeof e.rows == "number" ? e.rows : 20;
+function wrapTextWithPrefix(e, r2, o, n2 = o, s = o, t2) {
+  const f = getColumns(e ?? stdout);
+  return wrapAnsi(r2, f - o.length, {
+    hard: true,
+    trim: false
+  }).split(`
+`).map((c, i2, m) => {
+    const d = t2 ? t2(c, i2) : c;
+    return i2 === 0 ? `${n2}${d}` : i2 === m.length - 1 ? `${s}${d}` : `${o}${d}`;
+  }).join(`
+`);
+}
+function runValidation(e, a2) {
+  if ("~standard" in e) {
+    const n2 = e["~standard"].validate(a2);
+    return n2 instanceof Promise ? n2.then((r2) => r2.issues?.at(0)?.message) : n2.issues?.at(0)?.message;
+  }
+  return e(a2);
+}
+var y = class {
+  input;
+  output;
+  _abortSignal;
+  rl;
+  opts;
+  _render;
+  _track = false;
+  _prevFrame = "";
+  _subscribers = /* @__PURE__ */ new Map();
+  _cursor = 0;
+  state = "initial";
+  error = "";
+  value;
+  userInput = "";
+  /**
+   * Whether accessible (static, screen-reader friendly) output is enabled for
+   * this prompt, resolved from the `accessible` option, the global setting,
+   * and the `ACCESSIBLE` env var.
+   */
+  get accessible() {
+    return isAccessible(this.opts.accessible);
+  }
+  constructor(t2, e = true) {
+    const { input: i2 = stdin, output: s = stdout, render: r2, signal: n2, ...o } = t2;
+    this.opts = o, this.onKeypress = this.onKeypress.bind(this), this.close = this.close.bind(this), this.render = this.render.bind(this), this._render = r2.bind(this), this._track = e, this._abortSignal = n2, this.input = i2, this.output = s;
+  }
+  /**
+   * Unsubscribe all listeners
+   */
+  unsubscribe() {
+    this._subscribers.clear();
+  }
+  /**
+   * Set a subscriber with opts
+   * @param event - The event name
+   */
+  setSubscriber(t2, e) {
+    const i2 = this._subscribers.get(t2) ?? [];
+    i2.push(e), this._subscribers.set(t2, i2);
+  }
+  /**
+   * Subscribe to an event
+   * @param event - The event name
+   * @param cb - The callback
+   */
+  on(t2, e) {
+    this.setSubscriber(t2, { cb: e });
+  }
+  /**
+   * Subscribe to an event once
+   * @param event - The event name
+   * @param cb - The callback
+   */
+  once(t2, e) {
+    this.setSubscriber(t2, { cb: e, once: true });
+  }
+  /**
+   * Emit an event with data
+   * @param event - The event name
+   * @param data - The data to pass to the callback
+   */
+  emit(t2, ...e) {
+    const i2 = this._subscribers.get(t2) ?? [], s = [];
+    for (const r2 of i2)
+      r2.cb(...e), r2.once && s.push(() => i2.splice(i2.indexOf(r2), 1));
+    for (const r2 of s)
+      r2();
+  }
+  prompt() {
+    return new Promise((t2) => {
+      if (this._abortSignal) {
+        if (this._abortSignal.aborted)
+          return this.state = "cancel", this.close(), t2(CANCEL_SYMBOL);
+        this._abortSignal.addEventListener(
+          "abort",
+          () => {
+            this.state = "cancel", this.close();
+          },
+          { once: true }
+        );
+      }
+      this.rl = l__default.createInterface({
+        input: this.input,
+        tabSize: 2,
+        prompt: "",
+        escapeCodeTimeout: 50,
+        terminal: true
+      }), this.rl.prompt(), this.opts.initialUserInput !== void 0 && this._setUserInput(this.opts.initialUserInput, true), this.input.on("keypress", this.onKeypress), setRawMode(this.input, true), this.output.on("resize", this.render), this.render(), this.once("submit", () => {
+        this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(this.value);
+      }), this.once("cancel", () => {
+        this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(CANCEL_SYMBOL);
+      });
+    });
+  }
+  _isActionKey(t2, e) {
+    return t2 === "	";
+  }
+  _shouldSubmit(t2, e) {
+    return true;
+  }
+  _setValue(t2) {
+    this.value = t2, this.emit("value", this.value);
+  }
+  _setUserInput(t2, e) {
+    this.userInput = t2 ?? "", this.emit("userInput", this.userInput), e && this._track && this.rl && (this.rl.write(this.userInput), this._cursor = this.rl.cursor);
+  }
+  _clearUserInput() {
+    this.rl?.write(null, { ctrl: true, name: "u" }), this._setUserInput("");
+  }
+  async onKeypress(t2, e) {
+    if (this.state !== "validating") {
+      if (this._track && e.name !== "return" && (e.name && this._isActionKey(t2, e) && this.rl?.write(null, { ctrl: true, name: "h" }), this._cursor = this.rl?.cursor ?? 0, this._setUserInput(this.rl?.line)), this.state === "error" && (this.state = "active"), e?.name && (!this._track && settings.aliases.has(e.name) && this.emit("cursor", settings.aliases.get(e.name)), settings.actions.has(e.name) && this.emit("cursor", e.name)), t2 && (t2.toLowerCase() === "y" || t2.toLowerCase() === "n") && this.emit("confirm", t2.toLowerCase() === "y"), this.emit("key", t2, e), e?.name === "return" && this._shouldSubmit(t2, e)) {
+        if (this.opts.validate) {
+          const i2 = runValidation(this.opts.validate, this.value);
+          let s;
+          i2 instanceof Promise ? (this.state = "validating", this.render(), s = await i2) : s = i2, s && (this.error = s instanceof Error ? s.message : s, this.state = "error", this.rl?.write(this.userInput));
+        }
+        this.state !== "error" && (this.state = "submit");
+      }
+      isActionKey([t2, e?.name, e?.sequence], "cancel") && (this.state = "cancel"), (this.state === "submit" || this.state === "cancel") && this.emit("finalize"), this.render(), (this.state === "submit" || this.state === "cancel") && this.close();
+    }
+  }
+  close() {
+    this.input.unpipe(), this.input.removeListener("keypress", this.onKeypress), this.output.write(`
+`), setRawMode(this.input, false), this.rl?.close(), this.rl = void 0, this.emit(`${this.state}`, this.value), this.unsubscribe();
+  }
+  restoreCursor() {
+    const t2 = wrapAnsi(this._prevFrame, process.stdout.columns, { hard: true, trim: false }).split(`
+`).length - 1;
+    this.output.write(import_sisteransi.cursor.move(-999, t2 * -1));
+  }
+  render() {
+    const t2 = wrapAnsi(this._render(this) ?? "", process.stdout.columns, {
+      hard: true,
+      trim: false
+    });
+    if (t2 !== this._prevFrame) {
+      if (this.state === "initial")
+        this.output.write(import_sisteransi.cursor.hide);
+      else {
+        const e = diffLines(this._prevFrame, t2), i2 = getRows(this.output);
+        if (this.restoreCursor(), e) {
+          const s = Math.max(0, e.numLinesAfter - i2), r2 = Math.max(0, e.numLinesBefore - i2);
+          let n2 = e.lines.find((o) => o >= s);
+          if (n2 === void 0) {
+            this._prevFrame = t2;
+            return;
+          }
+          if (e.lines.length === 1) {
+            this.output.write(import_sisteransi.cursor.move(0, n2 - r2)), this.output.write(import_sisteransi.erase.lines(1));
+            const o = t2.split(`
+`);
+            this.output.write(o[n2]), this._prevFrame = t2, this.output.write(import_sisteransi.cursor.move(0, o.length - n2 - 1));
+            return;
+          } else if (e.lines.length > 1) {
+            if (s < r2)
+              n2 = s;
+            else {
+              const h2 = n2 - r2;
+              h2 > 0 && this.output.write(import_sisteransi.cursor.move(0, h2));
+            }
+            this.output.write(import_sisteransi.erase.down());
+            const f = t2.split(`
+`).slice(n2);
+            this.output.write(f.join(`
+`)), this._prevFrame = t2;
+            return;
+          }
+        }
+        this.output.write(import_sisteransi.erase.down());
+      }
+      this.output.write(t2), this.state === "initial" && (this.state = "active"), this._prevFrame = t2;
+    }
+  }
+};
+var r = class extends y {
+  get cursor() {
+    return this.value ? 0 : 1;
+  }
+  get _value() {
+    return this.cursor === 0;
+  }
+  constructor(t2) {
+    super(t2, false), this.value = !!t2.initialValue, this.on("userInput", () => {
+      this.value = this._value;
+    }), this.on("confirm", (i2) => {
+      this.output.write(import_sisteransi.cursor.move(0, -1)), this.value = i2, this.state = "submit", this.close();
+    }), this.on("cursor", () => {
+      this.value = !this.value;
+    });
+  }
+};
+
+// ../../node_modules/.pnpm/@clack+prompts@1.8.1/node_modules/@clack/prompts/dist/index.mjs
+import { styleText, stripVTControlCharacters } from "node:util";
+import process$1 from "node:process";
+var import_sisteransi2 = __toESM(require_src(), 1);
+function isUnicodeSupported() {
+  if (process$1.platform !== "win32") {
+    return process$1.env.TERM !== "linux";
+  }
+  return Boolean(process$1.env.CI) || Boolean(process$1.env.WT_SESSION) || Boolean(process$1.env.TERMINUS_SUBLIME) || process$1.env.ConEmuTask === "{cmd::Cmder}" || process$1.env.TERM_PROGRAM === "Terminus-Sublime" || process$1.env.TERM_PROGRAM === "vscode" || process$1.env.TERM === "xterm-256color" || process$1.env.TERM === "alacritty" || process$1.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
+}
+var unicode = isUnicodeSupported();
+var unicodeOr = (o, e) => unicode ? o : e;
+var S_STEP_ACTIVE = unicodeOr("\u25C6", "*");
+var S_STEP_CANCEL = unicodeOr("\u25A0", "x");
+var S_STEP_ERROR = unicodeOr("\u25B2", "x");
+var S_STEP_SUBMIT = unicodeOr("\u25C7", "o");
+var S_BAR_START = unicodeOr("\u250C", "T");
+var S_BAR = unicodeOr("\u2502", "|");
+var S_BAR_END = unicodeOr("\u2514", "\u2014");
+var S_BAR_START_RIGHT = unicodeOr("\u2510", "T");
+var S_BAR_END_RIGHT = unicodeOr("\u2518", "\u2014");
+var S_RADIO_ACTIVE = unicodeOr("\u25CF", ">");
+var S_RADIO_INACTIVE = unicodeOr("\u25CB", " ");
+var S_CHECKBOX_ACTIVE = unicodeOr("\u25FB", "[\u2022]");
+var S_CHECKBOX_SELECTED = unicodeOr("\u25FC", "[+]");
+var S_CHECKBOX_INACTIVE = unicodeOr("\u25FB", "[ ]");
+var S_PASSWORD_MASK = unicodeOr("\u25AA", "\u2022");
+var S_BAR_H = unicodeOr("\u2500", "-");
+var S_CORNER_TOP_RIGHT = unicodeOr("\u256E", "+");
+var S_CONNECT_LEFT = unicodeOr("\u251C", "+");
+var S_CORNER_BOTTOM_RIGHT = unicodeOr("\u256F", "+");
+var S_CORNER_BOTTOM_LEFT = unicodeOr("\u2570", "+");
+var S_CORNER_TOP_LEFT = unicodeOr("\u256D", "+");
+var S_INFO = unicodeOr("\u25CF", "\u2022");
+var S_SUCCESS = unicodeOr("\u25C6", "*");
+var S_WARN = unicodeOr("\u25B2", "!");
+var S_ERROR = unicodeOr("\u25A0", "x");
+var symbol = (o) => {
+  switch (o) {
+    case "initial":
+    case "active":
+      return styleText("cyan", S_STEP_ACTIVE);
+    case "cancel":
+      return styleText("red", S_STEP_CANCEL);
+    case "error":
+      return styleText("yellow", S_STEP_ERROR);
+    case "submit":
+      return styleText("green", S_STEP_SUBMIT);
+    case "validating":
+      return styleText("dim", S_STEP_ACTIVE);
+  }
+};
+var confirm = (e) => {
+  const a2 = e.active ?? "Yes", o = e.inactive ?? "No";
+  return new r({
+    active: a2,
+    inactive: o,
+    signal: e.signal,
+    input: e.input,
+    output: e.output,
+    initialValue: e.initialValue ?? true,
+    render() {
+      const i2 = e.withGuide ?? settings.withGuide, u3 = `${symbol(this.state)}  `, l = i2 ? `${styleText("gray", S_BAR)}  ` : "", f = wrapTextWithPrefix(
+        e.output,
+        e.message,
+        l,
+        u3
+      ), s = `${i2 ? `${styleText("gray", S_BAR)}
+` : ""}${f}
+`, c = this.value ? a2 : o;
+      switch (this.state) {
+        case "submit": {
+          const r2 = i2 ? `${styleText("gray", S_BAR)}  ` : "";
+          return `${s}${r2}${styleText("dim", c)}`;
+        }
+        case "cancel": {
+          const r2 = i2 ? `${styleText("gray", S_BAR)}  ` : "";
+          return `${s}${r2}${styleText(["strikethrough", "dim"], c)}${i2 ? `
+${styleText("gray", S_BAR)}` : ""}`;
+        }
+        default: {
+          const r2 = i2 ? `${styleText("cyan", S_BAR)}  ` : "", g = i2 ? styleText("cyan", S_BAR_END) : "";
+          return `${s}${r2}${this.value ? `${styleText("green", S_RADIO_ACTIVE)} ${a2}` : `${styleText("dim", S_RADIO_INACTIVE)} ${styleText("dim", a2)}`}${e.vertical ? i2 ? `
+${styleText("cyan", S_BAR)}  ` : `
+` : ` ${styleText("dim", "/")} `}${this.value ? `${styleText("dim", S_RADIO_INACTIVE)} ${styleText("dim", o)}` : `${styleText("green", S_RADIO_ACTIVE)} ${o}`}
+${g}
+`;
+        }
+      }
+    }
+  }).prompt();
+};
+var MULTISELECT_INSTRUCTIONS = [
+  `${styleText("dim", "\u2191/\u2193")} to navigate`,
+  `${styleText("dim", "Space:")} select`,
+  `${styleText("dim", "Enter:")} confirm`
+];
+var u2 = {
+  light: unicodeOr("\u2500", "-"),
+  heavy: unicodeOr("\u2501", "="),
+  block: unicodeOr("\u2588", "#")
+};
+var SELECT_INSTRUCTIONS = [
+  `${styleText("dim", "\u2191/\u2193")} to navigate`,
+  `${styleText("dim", "Enter:")} confirm`
+];
+var i = `${styleText("gray", S_BAR)}  `;
 
 // src/credentials.ts
 import { spawnSync } from "node:child_process";
@@ -332,10 +1166,23 @@ async function writeConfig(config) {
     await rm2(temporary, { force: true });
   }
 }
-async function recordAccount(apiBase, principalId) {
+var AccountMismatchError = class extends Error {
+  constructor(previous, next) {
+    super(
+      "ACCOUNT_MISMATCH: The Memroot CLI connection belongs to another account than the one this computer is signed in to. Run memroot logout first, or pass --switch-account."
+    );
+    this.previous = previous;
+    this.next = next;
+  }
+  previous;
+  next;
+};
+async function recordAccount(apiBase, principalId, options = {}) {
   if (!/^[a-f0-9-]{36}$/i.test(principalId)) return;
   const config = await readConfig();
   if (config.userId === principalId && config.apiBase) return;
+  if (config.userId && config.userId !== principalId && (!config.apiBase || config.apiBase === apiBase) && !options.allowSwitch)
+    throw new AccountMismatchError(config.userId, principalId);
   config.userId = principalId;
   if (!config.apiBase) config.apiBase = apiBase;
   await writeConfig(config);
@@ -488,6 +1335,36 @@ async function readSecret(account) {
   const secret = result.stdout.replace(/\n$/, "");
   return secret.length ? secret : void 0;
 }
+async function deleteSecret(account) {
+  const kind = credentialStoreKind();
+  if (kind === "test-file") {
+    const entries = await readTestStore();
+    if (account in entries) {
+      delete entries[account];
+      await writeTestStore(entries);
+    }
+    return;
+  }
+  if (kind === "macos-keychain") {
+    const result = run(
+      "security",
+      ["delete-generic-password", "-s", SERVICE, "-a", account],
+      void 0,
+      true
+    );
+    if (result.status !== 0 && !/could not be found|item not found/i.test(result.stderr))
+      throw new Error(
+        `AUTH_KEYCHAIN_FAILED: security delete-generic-password failed (${result.status ?? "signal"}).`
+      );
+    return;
+  }
+  run(
+    "secret-tool",
+    ["clear", "service", SERVICE, "account", account],
+    void 0,
+    true
+  );
+}
 
 // src/project-selection.ts
 import { randomBytes as randomBytes2, randomUUID as randomUUID2 } from "node:crypto";
@@ -536,7 +1413,7 @@ function withLock(update) {
   const nonce = randomBytes2(8).toString("hex");
   const owner = join5(lock, "owner");
   let held2 = false;
-  for (let i = 0; i < LOCK_TRIES && !held2; i++) {
+  for (let i2 = 0; i2 < LOCK_TRIES && !held2; i2++) {
     try {
       mkdirSync2(lock, { mode: 448 });
       writeFileSync2(owner, nonce, { mode: 384 });
@@ -709,7 +1586,7 @@ function upsert(store, input) {
   const keys = Object.keys(store);
   if (keys.length > MAX_RECORDS)
     for (const old of keys.sort(
-      (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
+      (x, y2) => (store[x]?.selectedAt ?? "").localeCompare(store[y2]?.selectedAt ?? "")
     ).slice(0, keys.length - MAX_RECORDS))
       delete store[old];
   return record;
@@ -843,7 +1720,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.12.0"} project`;
+  return `npx -y memroot@${"0.12.1"} project`;
 }
 function legacySessionRecordsDir() {
   return join6(stateDir(), "project-sessions");
@@ -1070,15 +1947,27 @@ function mcpResource(apiBase) {
   return `${apiBase}/mcp`;
 }
 var TokenBroker = class {
-  constructor(apiBase) {
+  /**
+   * `pending`: a fresh sign-in's access token, held in memory only while the
+   * connection's account is checked before its refresh token is stored. Such
+   * a broker never reads the credential store, which still holds the
+   * previous connection.
+   */
+  constructor(apiBase, pending) {
     this.apiBase = apiBase;
+    this.pending = pending;
   }
   apiBase;
+  pending;
   cached;
   invalidate() {
     this.cached = void 0;
   }
   async accessToken() {
+    if (this.pending) {
+      if (this.pending.expiresAt <= Date.now()) throw new AuthRequiredError();
+      return this.pending.token;
+    }
     if (this.cached && this.cached.expiresAt - Date.now() > REFRESH_SKEW_MS)
       return this.cached.token;
     const release = await acquireLock("auth.lock", {
@@ -1343,6 +2232,14 @@ function request(target, method, contentType, payload) {
     request2.end(payload);
   });
 }
+async function getJson(url) {
+  const response = await request(new URL(url), "GET");
+  if (response.status >= 400)
+    throw new Error(
+      `AUTH_METADATA_FAILED: ${url} returned ${response.status}.`
+    );
+  return parseJsonBody(response.body);
+}
 function parseJsonBody(text) {
   let body;
   try {
@@ -1424,6 +2321,41 @@ async function exchangeCode(apiBase, clientId, redirectUri, code, verifier, reso
     })
   );
 }
+function sameOrigin(url, apiBase) {
+  try {
+    return new URL(url).origin === new URL(apiBase).origin;
+  } catch {
+    return false;
+  }
+}
+function terminalSafe(text, max = 200) {
+  const clean = text.replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+  return clean.length > max ? `${clean.slice(0, max)}\u2026` : clean;
+}
+async function revokeRefreshToken(apiBase, refreshToken, clientId) {
+  const metadata = await getJson(
+    `${apiBase}/.well-known/oauth-authorization-server`
+  );
+  const endpoint = metadata.revocation_endpoint;
+  if (typeof endpoint !== "string" || !endpoint || !isAllowedApiBase(endpoint) || !sameOrigin(endpoint, apiBase))
+    throw new Error(
+      "AUTH_REVOKE_UNSUPPORTED: The server does not advertise a usable revocation endpoint."
+    );
+  const response = await request(
+    new URL(endpoint),
+    "POST",
+    "application/x-www-form-urlencoded",
+    new URLSearchParams({
+      token: refreshToken,
+      token_type_hint: "refresh_token",
+      client_id: clientId
+    }).toString()
+  );
+  if (response.status >= 400)
+    throw new Error(
+      `AUTH_REVOKE_FAILED: Revocation returned ${response.status}.`
+    );
+}
 function page(title, detail) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Memroot \u2014 ${title}</title></head><body><h1>${title}</h1><p>${detail}</p></body></html>`;
 }
@@ -1445,12 +2377,16 @@ function startCallbackServer(expectedState, apiBase) {
     }
     const errorParam = url.searchParams.get("error");
     if (errorParam) {
+      if (url.searchParams.get("state") !== expectedState) {
+        response.writeHead(400).end("State mismatch; rejected.");
+        return;
+      }
       const description = url.searchParams.get("error_description");
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(page("Sign-in failed", "Return to the terminal for details."));
       deliver({
         kind: "error",
-        error: errorParam,
-        ...typeof description === "string" ? { description } : {}
+        error: terminalSafe(errorParam, 64),
+        ...typeof description === "string" ? { description: terminalSafe(description) } : {}
       });
       return;
     }
@@ -1531,10 +2467,58 @@ function startCallbackServer(expectedState, apiBase) {
     });
   });
 }
+function htmlAttribute(value) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+function appleScriptString(value) {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
+}
 function openBrowser(url) {
-  const tool = process.platform === "darwin" ? "open" : "xdg-open";
+  if (process.platform === "darwin") {
+    try {
+      const child = spawn("osascript", ["-"], {
+        detached: true,
+        stdio: ["pipe", "ignore", "ignore"],
+        shell: false
+      });
+      child.on("error", () => {
+      });
+      child.stdin?.on("error", () => {
+      });
+      child.stdin?.end(`open location ${appleScriptString(url)}
+`);
+      child.unref();
+    } catch {
+    }
+    return () => {
+    };
+  }
+  let directory;
+  const onSignal = (signal) => {
+    cleanup();
+    process.kill(process.pid, signal);
+  };
+  const cleanup = () => {
+    if (!directory) return;
+    rmSync4(directory, { recursive: true, force: true });
+    directory = void 0;
+    process.off("exit", cleanup);
+    process.off("SIGINT", onSignal);
+    process.off("SIGTERM", onSignal);
+  };
   try {
-    const child = spawn(tool, [url], {
+    directory = mkdtempSync(join8(tmpdir(), "memroot-login-"));
+    process.on("exit", cleanup);
+    process.once("SIGINT", onSignal);
+    process.once("SIGTERM", onSignal);
+    const file = join8(directory, "sign-in.html");
+    const target = htmlAttribute(url);
+    writeFileSync4(
+      file,
+      `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${target}"><title>Memroot sign-in</title></head><body><p><a href="${target}">Continue to Memroot sign-in</a></p></body></html>`,
+      { flag: "wx", mode: 384 }
+    );
+    const child = spawn("xdg-open", [file], {
       detached: true,
       stdio: "ignore",
       shell: false
@@ -1544,13 +2528,17 @@ function openBrowser(url) {
     child.unref();
   } catch {
   }
+  return cleanup;
 }
+var cachedAccessToken;
 async function authorizePkce(requestOptions) {
   const { apiBase, resource } = requestOptions;
   const state = randomBytes4(24).toString("base64url");
   const verifier = randomBytes4(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   const waiter = await startCallbackServer(state, apiBase);
+  let closePage = () => {
+  };
   try {
     const redirectUri = `http://127.0.0.1:${waiter.port}${CALLBACK_PATH}`;
     let clientId = requestOptions.clientId;
@@ -1570,14 +2558,16 @@ async function authorizePkce(requestOptions) {
         console.log(`Open this URL to sign in:
 ${url}`);
       else {
-        openBrowser(url);
+        closePage();
+        closePage = openBrowser(url);
         console.log(
-          `Opening ${apiBase} for sign-in. If the browser did not open, visit:
+          `Opening ${apiBase} for sign-in. If the browser did not open or shows an error, visit:
 ${url}`
         );
       }
       console.log("Waiting for the browser sign-in callback\u2026");
       const result = await waiter.next();
+      closePage();
       if (result.kind === "code") {
         const tokens = await exchangeCode(
           apiBase,
@@ -1620,13 +2610,57 @@ ${url}`
       );
     }
   } finally {
+    closePage();
     waiter.close();
+  }
+}
+async function confirmAccountSwitch(previous, next, options) {
+  console.error(
+    `This sign-in is for Memroot account ${terminalSafe(next)}, but this computer is signed in as ${terminalSafe(previous)}.`
+  );
+  if (options.switchAccount) {
+    console.error(
+      `Switching this computer to ${terminalSafe(next)} (--switch-account).`
+    );
+    return;
+  }
+  if (process.stdin.isTTY && process.stdout.isTTY) {
+    const confirmed = await confirm({
+      message: `Switch this computer to account ${terminalSafe(next)}? Answer yes only if you signed in with that account yourself.`,
+      initialValue: false
+    });
+    if (!isCancel(confirmed) && confirmed) return;
+  }
+  throw new Error(
+    `ACCOUNT_SWITCH_REFUSED: The sign-in returned another account (${terminalSafe(next)}) than the one this computer uses (${terminalSafe(previous)}); it was discarded. To change accounts, run memroot logout first or pass --switch-account.`
+  );
+}
+async function discardCredential(apiBase, account) {
+  const stored = await readSecret(account).catch(() => void 0);
+  if (!stored) return;
+  const config = await readConfig().catch(() => void 0);
+  const clientId = account === apiBase && config?.clientId && config.clientIdApiBase === apiBase ? config.clientId : STATIC_CLIENT_ID;
+  await revokeRefreshToken(apiBase, stored, clientId).catch(() => {
+  });
+  await deleteSecret(account).catch(() => {
+  });
+  if (account === apiBase) cachedAccessToken = void 0;
+}
+async function acceptConnectionAccount(apiBase, principalId, options) {
+  try {
+    await recordAccount(apiBase, principalId);
+    return;
+  } catch (error) {
+    if (!(error instanceof AccountMismatchError)) throw error;
+    await confirmAccountSwitch(error.previous, principalId, options);
+    await discardCredential(apiBase, apiBase);
+    await recordAccount(apiBase, principalId, { allowSwitch: true });
   }
 }
 function mcpCredentialAccount(apiBase) {
   return `${apiBase}#mcp`;
 }
-async function loginMcp(apiBase, options = {}) {
+async function loginMcp(apiBase, options, settle) {
   assertCredentialStoreAvailable();
   const { tokens } = await authorizePkce({
     apiBase,
@@ -1635,10 +2669,22 @@ async function loginMcp(apiBase, options = {}) {
     resource: `${apiBase}/mcp`,
     allowDcr: false
   });
-  await storeSecret(
-    mcpCredentialAccount(apiBase),
-    tokens.refreshToken
-  );
+  const refreshToken = tokens.refreshToken;
+  try {
+    await settle(
+      new TokenBroker(apiBase, {
+        token: tokens.accessToken,
+        expiresAt: Date.now() + (tokens.expiresIn ?? 300) * 1e3
+      })
+    );
+  } catch (error) {
+    await revokeRefreshToken(apiBase, refreshToken, STATIC_CLIENT_ID).catch(
+      () => {
+      }
+    );
+    throw error;
+  }
+  await storeSecret(mcpCredentialAccount(apiBase), refreshToken);
   console.log(
     "Memroot CLI connection authorized; its refresh token is stored in the OS credential store. Session capture remains controlled by memroot capture on|off."
   );
@@ -1647,13 +2693,13 @@ async function loginMcp(apiBase, options = {}) {
 // src/capture/hooks/spawn.ts
 import { spawn as spawn2 } from "node:child_process";
 import { existsSync as existsSync2 } from "node:fs";
-import { dirname as dirname5, join as join8 } from "node:path";
+import { dirname as dirname5, join as join9 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 function spawnWorker() {
   try {
     const here = dirname5(fileURLToPath2(import.meta.url));
-    const sibling = join8(here, "capture-worker.mjs");
-    const worker = existsSync2(sibling) ? sibling : join8(here, "plugins", "claude", "scripts", "capture-worker.mjs");
+    const sibling = join9(here, "capture-worker.mjs");
+    const worker = existsSync2(sibling) ? sibling : join9(here, "plugins", "claude", "scripts", "capture-worker.mjs");
     if (!existsSync2(worker)) return;
     const child = spawn2(process.execPath, [worker], {
       detached: true,
@@ -1680,7 +2726,7 @@ function parseProjectList(value) {
 }
 var PENDING_FILE = "project-create-pending.json";
 function pendingPath() {
-  return join9(memrootConfigDir(), PENDING_FILE);
+  return join10(memrootConfigDir(), PENDING_FILE);
 }
 function readPending() {
   try {
@@ -1698,7 +2744,7 @@ function removeLegacySessionRecords() {
     const info = lstatSync4(dir);
     if (!info.isDirectory() || info.isSymbolicLink()) return;
     const records = listFiles(dir).filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).map((name) => {
-      const path = join9(dir, name);
+      const path = join10(dir, name);
       try {
         const value = JSON.parse(
           readPrivateFileIfExists(path, 16 * 1024) ?? "null"
@@ -1707,7 +2753,7 @@ function removeLegacySessionRecords() {
       } catch {
         return { at: 0, selection: void 0 };
       }
-    }).sort((a, b) => b.at - a.at);
+    }).sort((a2, b) => b.at - a2.at);
     const adopted = /* @__PURE__ */ new Set();
     const fresh = !existsSync3(projectSelectionPath());
     for (const { selection } of fresh ? records : []) {
@@ -1733,12 +2779,12 @@ function removeLegacySessionRecords() {
     const cutoff = Date.now() - LEGACY_RECORD_TTL_MS;
     for (const name of listFiles(dir))
       try {
-        if (lstatSync4(join9(dir, name)).mtimeMs < cutoff)
-          rmSync4(join9(dir, name), { force: true });
+        if (lstatSync4(join10(dir, name)).mtimeMs < cutoff)
+          rmSync5(join10(dir, name), { force: true });
       } catch {
       }
     if (listFiles(dir).length === 0)
-      rmSync4(dir, { recursive: true, force: true });
+      rmSync5(dir, { recursive: true, force: true });
   } catch {
   }
 }
@@ -1817,7 +2863,8 @@ async function projectCommand(args, _bundledAgent) {
       agent: { type: "string" },
       session: { type: "string" },
       "api-base": { type: "string" },
-      "no-browser": { type: "boolean" }
+      "no-browser": { type: "boolean" },
+      "switch-account": { type: "boolean" }
     }
   });
   if (parsed.positionals.length > 1)
@@ -1828,19 +2875,17 @@ async function projectCommand(args, _bundledAgent) {
   const target = parsed.positionals[0];
   const apiBase = parsed.values["api-base"];
   const noBrowser = parsed.values["no-browser"] ?? false;
+  const switchAccount = parsed.values["switch-account"] ?? false;
   if (target !== void 0 && action !== "use" && action !== "create")
     throw new Error("INVALID_ARGUMENT: This project command takes no name.");
   const config = await readConfig();
   const base = resolveApiBase(apiBase ? { apiBase } : {}, config);
-  const client = new McpClient(
-    base,
-    new TokenBroker(base),
-    `memroot-cli/${"0.12.0"}`
-  );
-  const listProjects = async () => {
+  const userAgent = `memroot-cli/${"0.12.1"}`;
+  const client = new McpClient(base, new TokenBroker(base), userAgent);
+  const listProjects = async (via = client) => {
     let projects2;
     try {
-      projects2 = parseProjectList(await client.call("projects_list", {}));
+      projects2 = parseProjectList(await via.call("projects_list", {}));
     } catch (e) {
       if (e instanceof AuthRequiredError)
         throw new Error(
@@ -1848,12 +2893,17 @@ async function projectCommand(args, _bundledAgent) {
         );
       throw e;
     }
-    await recordAccount(base, projects2.principal_id);
+    await acceptConnectionAccount(base, projects2.principal_id, {
+      switchAccount
+    });
     return projects2;
   };
   if (action === "login") {
-    await loginMcp(base, { noBrowser });
-    const projects2 = await listProjects();
+    let projects2;
+    await loginMcp(base, { noBrowser }, async (broker) => {
+      projects2 = await listProjects(new McpClient(base, broker, userAgent));
+    });
+    if (!projects2) throw new Error("PROJECT_LOGIN_FAILED");
     const { selection } = resolveSelection(base, projects2);
     console.log(
       selection ? `Project for this computer: ${JSON.stringify(selection.name)} (${selection.projectId}).` : `No project is selected on this computer yet. Choose one: ${projectCommandPrefix()} use "<name>".`

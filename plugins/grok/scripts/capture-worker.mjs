@@ -16722,6 +16722,11 @@ function childEnv(extra = {}) {
 }
 
 // src/capture/extract/runners/claude.ts
+var CLAUDE_EXTRACTOR_DENY = [
+  "mcp__*",
+  "mcp__plugin_*",
+  "mcp__claude_ai_*"
+];
 function claudeArgs(input) {
   const args = [
     "-p",
@@ -16730,6 +16735,12 @@ function claudeArgs(input) {
     "--strict-mcp-config",
     "--tools",
     "",
+    "--allowedTools",
+    "StructuredOutput",
+    "--disallowedTools",
+    CLAUDE_EXTRACTOR_DENY.join(","),
+    "--permission-mode",
+    "dontAsk",
     "--no-session-persistence",
     "--max-turns",
     "4",
@@ -16759,7 +16770,8 @@ async function runClaudeOnce(input) {
     cwd: input.extractorCwd,
     env: childEnv({
       ...input.tuning?.claudeEnv ?? {},
-      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1"
+      CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1",
+      ENABLE_CLAUDEAI_MCP_SERVERS: "false"
     }),
     stdin: input.user,
     ...input.timeoutMs ? { timeoutMs: input.timeoutMs } : {}
@@ -16870,6 +16882,27 @@ ${result.stdout}`) ? "quota" : "exit"
 import { realpathSync, rmSync as rmSync3 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
 import { isAbsolute as isAbsolute3, join as join5 } from "node:path";
+var GROK_EXTRACTOR_DENY = [
+  "read_file",
+  "hashline_read",
+  "search_tool",
+  "use_tool",
+  "run_terminal_cmd",
+  "run_terminal_command",
+  "search_replace",
+  "hashline_edit",
+  "write",
+  "write_file",
+  "edit_file",
+  "grep",
+  "hashline_grep",
+  "list_dir",
+  "web_search",
+  "web_fetch",
+  "spawn_subagent",
+  "Agent",
+  "Task"
+];
 function grokArgs(input, promptFile) {
   const args = [
     "--prompt-file",
@@ -16878,10 +16911,20 @@ function grokArgs(input, promptFile) {
     input.system,
     "--json-schema",
     input.schemaJson,
+    // Aligned with the import runner (security audit 2026-10-24): no rule
+    // pre-approves anything under dontAsk, and the deny-list names the read,
+    // shell, edit, write, search, web and sub-agent tools by their Grok ids,
+    // so the run stays toolless even if read_file stopped being a known
+    // tool id. Not `--sandbox read-only`: Grok 1.0.60 refuses to start with
+    // it when a container runtime's socket under /var/run is a symlink (a
+    // common macOS desktop setup, observed 2026-10-24), which would stop
+    // capture on such machines (ADR 0008 addendum 2026-10-24).
+    "--permission-mode",
+    "dontAsk",
     "--tools",
     "read_file",
     "--disallowed-tools",
-    "read_file,search_tool,use_tool,run_terminal_cmd,search_replace,web_search,web_fetch,spawn_subagent,Agent",
+    GROK_EXTRACTOR_DENY.join(","),
     "--no-subagents",
     "--disable-web-search",
     "--max-turns",
@@ -17030,6 +17073,7 @@ var keepPrefix = (kind) => (mark, _match, groups) => {
   return `${groups.slice(0, -1).join("")}${mark(kind, secret)}`;
 };
 var NOT_MARKER = "(?!\\[REDACTED)";
+var LINE_SPACE = "[^\\S\\r\\n\\u2028\\u2029]";
 var PLACEHOLDER = /^(?:changeme|change_me|example|placeholder|redacted|secret|password|token|undefined|null|none|true|false|your[_-].*|x{3,}.*|\*{3,}.*|<.*>|\$\{.*\}|\{\{.*\}\}|\$[A-Za-z_][A-Za-z0-9_]*|process\.env.*|os\.environ.*|env\(.*|getenv.*)$/i;
 var RULES = [
   {
@@ -17112,7 +17156,11 @@ var RULES = [
   {
     name: "jwt",
     keywords: ["eyj"],
-    pattern: /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
+    // A token starts only where a run of base64url characters starts (not
+    // `\b`, which also matched after every `-` inside a run), so each run is
+    // scanned from one start and the rule is linear on long `eyJ-eyJ-...`
+    // runs.
+    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
     replace: whole("jwt")
   },
   {
@@ -17150,8 +17198,14 @@ var RULES = [
   },
   {
     name: "env_assignment",
+    // Bounded: the indentation (which never crosses a newline), the name
+    // around its keyword and the spacing around `=`/`:` have fixed upper
+    // bounds, so each line start costs a bounded number of steps. The
+    // unbounded form backtracked cubically on a newline run followed by a
+    // long name. A value on the next line (YAML `key:` then the value) is
+    // still matched, as before.
     pattern: new RegExp(
-      `^(\\s*(?:export\\s+)?[A-Za-z_][A-Za-z0-9_]*(?:KEY|SECRET|TOKEN|PASS(?:WORD|WD)?|PWD|CREDENTIALS?|AUTH|PRIVATE|SALT|DSN|CONN(?:ECTION)?_?STRING)[A-Za-z0-9_]*\\s*[=:]\\s*["']?)(?!\\$\\{?[A-Za-z_])(?!<)${NOT_MARKER}([^\\s"'#]{4,})`,
+      `^(${LINE_SPACE}{0,64}(?:export${LINE_SPACE}{1,16})?[A-Za-z_][A-Za-z0-9_]{0,100}(?:KEY|SECRET|TOKEN|PASS(?:WORD|WD)?|PWD|CREDENTIALS?|AUTH|PRIVATE|SALT|DSN|CONN(?:ECTION)?_?STRING)[A-Za-z0-9_]{0,100}\\s{0,64}[=:]\\s{0,64}["']?)(?!\\$\\{?[A-Za-z_])(?!<)${NOT_MARKER}([^\\s"'#]{4,})`,
       "gmi"
     ),
     replace: keepPrefix("env_secret")
@@ -17178,7 +17232,10 @@ var RULES = [
   {
     name: "email",
     keywords: ["@"],
-    pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    // RFC 5321/1035 lengths: local part up to 64, domain up to 253, label
+    // up to 63. Bounded so a long `a-a-a-...` run is not rescanned from
+    // every word boundary.
+    pattern: /\b[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}\b/g,
     replace: (mark, match) => /^noreply@|users\.noreply\.github\.com$|@example\.(?:com|org)$/i.test(
       match
     ) ? match : mark("email", match)
@@ -18932,15 +18989,27 @@ function mcpResource(apiBase) {
   return `${apiBase}/mcp`;
 }
 var TokenBroker = class {
-  constructor(apiBase) {
+  /**
+   * `pending`: a fresh sign-in's access token, held in memory only while the
+   * connection's account is checked before its refresh token is stored. Such
+   * a broker never reads the credential store, which still holds the
+   * previous connection.
+   */
+  constructor(apiBase, pending) {
     this.apiBase = apiBase;
+    this.pending = pending;
   }
   apiBase;
+  pending;
   cached;
   invalidate() {
     this.cached = void 0;
   }
   async accessToken() {
+    if (this.pending) {
+      if (this.pending.expiresAt <= Date.now()) throw new AuthRequiredError();
+      return this.pending.token;
+    }
     if (this.cached && this.cached.expiresAt - Date.now() > REFRESH_SKEW_MS)
       return this.cached.token;
     const release = await acquireLock("auth.lock", {
@@ -20236,7 +20305,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.12.0"}`
+        `memroot-capture/${"0.12.1"}`
       ),
       salt,
       redactor: createRedactor(salt),
