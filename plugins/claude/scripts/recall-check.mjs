@@ -706,7 +706,8 @@ function gateText(action, counts, project, options) {
   const prompt = Math.max(1, counts.prompts);
   const since = counts.lastCheck < 1 ? "no check yet" : `last check during ${options.subagent ? "task" : "prompt"} ${counts.lastCheck}`;
   const head = options.subagent ? `Memroot check pending for this subagent's task ${prompt}, ${since}.` : `Memroot check pending for prompt ${prompt} of this session, ${since}.`;
-  const practice = `The user set up Memroot; the first change of each task waits for memory_retrieve with ${project ? `project_id ${project.projectId}` : "the selected project_id"} and a short query naming the task.`;
+  const id = project ? `project_id ${project.projectId}` : "the selected project_id";
+  const practice = options.subagent ? `The user set up Memroot; a subagent that has the Memroot tools makes the first change of each task after memory_retrieve with ${id} and a short query naming the task.` : `The user set up Memroot; the first change of each task waits for memory_retrieve with ${id} and a short query naming the task.`;
   const tail = action === "deny" ? "This call was held for that check." : "This call is the first change of the task.";
   return [head, practice, tail].join(" ");
 }
@@ -1096,7 +1097,7 @@ function onToolUse(event, sessionId) {
   } catch {
     first = false;
   }
-  const action = gateAction(gateMode, counts, first);
+  const action = gateAction(subagent ? "context" : gateMode, counts, first);
   if (action === "none") return exit("");
   const text = gateText(action, counts, project, { subagent });
   if (action === "deny")
