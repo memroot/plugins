@@ -430,7 +430,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.12.2"} project`;
+  return `npx -y memroot@${"0.12.3"} project`;
 }
 function projectStatusLine() {
   const command = projectCommandPrefix();
@@ -1017,9 +1017,9 @@ function mcpRegistered(agent2) {
   }
 }
 
-// ../../packages/contracts/src/recall-guidance-v6.ts
+// ../../packages/contracts/src/recall-guidance-v7.ts
 var RECALL_PRIMARY = "Memroot, not your own memory, is this project's shared memory: check it even if you remember or know the code; a check is cheap.";
-var RECALL_RULE = "Memroot is checked with memory_retrieve at the start of each task and whenever the work moves to another component or failure.";
+var RECALL_RULE = "Memroot is checked with memory_retrieve at the start of each task, whenever the work moves to another component or failure, and again before an action others will see or that is hard to undo, with a query naming that action.";
 var RECALL_FAMILIARITY = "Memroot may hold a decision or failed approach that the code doesn't show.";
 var RECALL_TASKS = 'Broad asks, subtasks, "next, do X", repeat failures and questions about past decisions count as tasks.';
 var RECALL_SKIP = `Skip trivial turns (hi, thanks, "anything else?", reporting a command's output), general questions not about this project, Memroot project commands (memroot project, /project), or when told not to.`;

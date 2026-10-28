@@ -11,7 +11,7 @@ Tools of the `memroot` MCP server: `projects_list`, `memory_retrieve`, `memory_c
 
 ## When to check Memroot
 
-Memroot, not your own memory, is this project's shared memory: check it even if you remember or know the code; a check is cheap. Memroot is checked with memory_retrieve at the start of each task and whenever the work moves to another component or failure. Broad asks, subtasks, "next, do X", repeat failures and questions about past decisions count as tasks. Skip trivial turns (hi, thanks, "anything else?", reporting a command's output), general questions not about this project, Memroot project commands (memroot project, /project), or when told not to.
+Memroot, not your own memory, is this project's shared memory: check it even if you remember or know the code; a check is cheap. Memroot is checked with memory_retrieve at the start of each task, whenever the work moves to another component or failure, and again before an action others will see or that is hard to undo, with a query naming that action. Broad asks, subtasks, "next, do X", repeat failures and questions about past decisions count as tasks. Skip trivial turns (hi, thanks, "anything else?", reporting a command's output), general questions not about this project, Memroot project commands (memroot project, /project), or when told not to.
 
 ## How to check Memroot
 
