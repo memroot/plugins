@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// src/capture/hooks/recall-check.ts
+import { realpathSync } from "node:fs";
+import { homedir as homedir4, tmpdir } from "node:os";
+import { isAbsolute as isAbsolute4 } from "node:path";
+
 // src/project-selection.ts
 import { randomBytes as randomBytes2, randomUUID } from "node:crypto";
 import {
@@ -399,13 +404,109 @@ function currentSelection(apiBase) {
   return readSelection(base, identity.userId);
 }
 
+// src/capture/hooks/claude-memory-dirs.ts
+import {
+  closeSync as closeSync3,
+  constants as constants2,
+  fstatSync as fstatSync2,
+  openSync as openSync3,
+  readFileSync as readFileSync3
+} from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { isAbsolute as isAbsolute2, join as join3, relative, resolve } from "node:path";
+var MAX_SETTINGS_BYTES = 256 * 1024;
+function claudeConfigDir() {
+  const value = process.env.CLAUDE_CONFIG_DIR;
+  return value && isAbsolute2(value) ? resolve(value) : join3(homedir2(), ".claude");
+}
+function insideDirectory(path, directory) {
+  const inside = relative(directory, path);
+  return !inside.startsWith("..") && !isAbsolute2(inside);
+}
+function readSettings(path) {
+  let fd;
+  try {
+    fd = openSync3(path, constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0));
+    const info = fstatSync2(fd);
+    if (!info.isFile() || info.size > MAX_SETTINGS_BYTES) return void 0;
+    return readFileSync3(fd, "utf8");
+  } catch {
+    return void 0;
+  } finally {
+    if (fd !== void 0) closeSync3(fd);
+  }
+}
+function autoMemoryDirectory(path) {
+  const text = readSettings(path);
+  if (!text) return void 0;
+  let value;
+  try {
+    value = JSON.parse(text)?.autoMemoryDirectory;
+  } catch {
+    return void 0;
+  }
+  if (typeof value !== "string" || !value || value.includes("\0"))
+    return void 0;
+  if (value.startsWith("~/")) return resolve(homedir2(), value.slice(2));
+  return isAbsolute2(value) ? resolve(value) : void 0;
+}
+function policySettings() {
+  if (process.platform === "darwin")
+    return ["/Library/Application Support/ClaudeCode/managed-settings.json"];
+  if (process.platform === "linux")
+    return ["/etc/claude-code/managed-settings.json"];
+  return [];
+}
+var cached;
+function configuredMemoryDirectories(cwd) {
+  if (cached && cached.cwd === cwd) return cached.directories;
+  const files = [join3(claudeConfigDir(), "settings.json"), ...policySettings()];
+  if (cwd && isAbsolute2(cwd))
+    files.push(
+      join3(cwd, ".claude", "settings.json"),
+      join3(cwd, ".claude", "settings.local.json")
+    );
+  const directories = files.map(autoMemoryDirectory).filter((value) => value !== void 0);
+  cached = { cwd, directories };
+  return directories;
+}
+function claudeConfiguredMemoryWrite(path, cwd) {
+  const projects = join3(claudeConfigDir(), "projects");
+  if (insideDirectory(path, projects)) {
+    const parts = relative(projects, path).toLowerCase().split(/[\\/]+/);
+    for (let j = 1; j + 1 < parts.length; j++)
+      if (parts[j] === "memory") return true;
+  }
+  return configuredMemoryDirectories(cwd).some(
+    (directory) => path !== directory && insideDirectory(path, directory)
+  );
+}
+
+// src/capture/hooks/codex-memory-dirs.ts
+import { homedir as homedir3 } from "node:os";
+import { isAbsolute as isAbsolute3, join as join4, relative as relative2, resolve as resolve2 } from "node:path";
+function codexHome() {
+  const value = process.env.CODEX_HOME;
+  return resolve2(
+    value && isAbsolute3(value) ? value : join4(homedir3(), ".codex")
+  );
+}
+function codexHomeMemoryWrite(path) {
+  const inside = relative2(codexHome(), path);
+  if (!inside || inside.startsWith("..") || isAbsolute3(inside)) return false;
+  const parts = inside.toLowerCase().split(/[\\/]+/).filter(Boolean);
+  if (parts.length === 1 && (parts[0] === "agents.md" || parts[0] === "agents.override.md"))
+    return true;
+  return parts.length > 1 && (parts[0] === "memories" || parts[0] === "memory");
+}
+
 // src/capture/hooks/envelope.ts
 var MAX_ENVELOPE_BYTES = 64 * 1024;
 var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
 var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
 var STDIN_DEADLINE_MS = 500;
 function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve) => {
+  return new Promise((resolve3) => {
     let bytes = 0;
     let chunks = [];
     let settled = false;
@@ -418,7 +519,7 @@ function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
       if (bytes > maxBytes) process.stdin.on("data", () => {
       });
       else process.stdin.destroy();
-      resolve(value);
+      resolve3(value);
     };
     const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
     process.stdin.on("error", () => finish(void 0));
@@ -462,17 +563,17 @@ function hostAgent(bundled) {
 
 // src/capture/hooks/markers.ts
 import { lstatSync as lstatSync3 } from "node:fs";
-import { join as join4 } from "node:path";
+import { join as join6 } from "node:path";
 
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join3 } from "node:path";
+import { join as join5 } from "node:path";
 var HEX64 = /^[a-f0-9]{64}$/;
 function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path = join3(stateSubdir(), "salt");
+  const path = join5(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -496,7 +597,7 @@ function cleanup(directory, keep, pattern) {
   for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
     if (name === keep || !pattern.test(name)) continue;
     try {
-      const path = join4(directory, name);
+      const path = join6(directory, name);
       const info = lstatSync3(path);
       if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
     } catch {
@@ -509,7 +610,7 @@ function markerName(agent2, sessionId) {
 function claimSessionMarker(subdir, agent2, sessionId) {
   const directory = stateSubdir(subdir);
   const name = markerName(agent2, sessionId);
-  if (!createPrivateFileExclusive(join4(directory, name), "")) return false;
+  if (!createPrivateFileExclusive(join6(directory, name), "")) return false;
   try {
     cleanup(directory, name, new RegExp(`^${agent2}-[a-f0-9]{32}$`));
   } catch {
@@ -526,7 +627,7 @@ function recallGateMode(override) {
 
 // src/capture/hooks/recall-state.ts
 import { lstatSync as lstatSync4 } from "node:fs";
-import { join as join5 } from "node:path";
+import { join as join7 } from "node:path";
 var DIRECTORY = "recall-state";
 var STATE_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
 var MAX_CLEANUP2 = 512;
@@ -562,7 +663,7 @@ function readRecallState(agent2, key) {
   try {
     return parse(
       readPrivateFileIfExists(
-        join5(stateSubdir(DIRECTORY), fileName(agent2, key)),
+        join7(stateSubdir(DIRECTORY), fileName(agent2, key)),
         1024
       )
     );
@@ -576,7 +677,7 @@ function cleanup2(directory, keep) {
     if (name === keep || !/^(claude|codex|grok)-[a-f0-9]{32}\.json$/u.test(name))
       continue;
     try {
-      const path = join5(directory, name);
+      const path = join7(directory, name);
       if (lstatSync4(path).mtimeMs < cutoff) removeFile(path);
     } catch {
     }
@@ -585,7 +686,7 @@ function cleanup2(directory, keep) {
 function updateRecallState(agent2, key, change) {
   const directory = stateSubdir(DIRECTORY);
   const name = fileName(agent2, key);
-  const path = join5(directory, name);
+  const path = join7(directory, name);
   const prior = parse(readPrivateFileIfExists(path, 1024));
   const next = change(
     prior ?? {
@@ -735,11 +836,11 @@ function subagentContext(project, options = {}) {
 }
 
 // src/capture/hooks/registration.ts
-import { join as join6 } from "node:path";
+import { join as join8 } from "node:path";
 function mcpRegistered(agent2) {
   try {
     const raw = readPrivateFileIfExists(
-      join6(memrootConfigDir(), "config.json"),
+      join8(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw === void 0) return false;
@@ -762,7 +863,17 @@ var PREFIXES = /* @__PURE__ */ new Set([
   "builtin",
   "exec",
   "nohup",
-  "env"
+  "env",
+  "time",
+  "!",
+  "{",
+  "if",
+  "then",
+  "elif",
+  "else",
+  "do",
+  "while",
+  "until"
 ]);
 var OPERATORS = [
   "&>>",
@@ -786,8 +897,10 @@ var OPERATORS = [
 ];
 function lex(source) {
   const tokens = [];
+  let incomplete = false;
   const heredocs = [];
   let word;
+  let quoted = false;
   let expectDelimiter;
   let i = 0;
   const push = (token) => {
@@ -798,19 +911,25 @@ function lex(source) {
     if (expectDelimiter !== void 0) {
       heredocs.push({ delimiter: word, strip: expectDelimiter });
       expectDelimiter = void 0;
-    } else push({ word });
+    } else push({ word, quoted });
     word = void 0;
+    quoted = false;
   };
   const skipHeredocBodies = () => {
     for (const { delimiter, strip } of heredocs.splice(0)) {
+      let found = false;
       while (i < source.length) {
         const end = source.indexOf("\n", i);
         const stop = end < 0 ? source.length : end;
         let line = source.slice(i, stop);
         if (strip) line = line.replace(/^\t+/, "");
         i = stop + 1;
-        if (line === delimiter) break;
+        if (line === delimiter) {
+          found = true;
+          break;
+        }
       }
+      if (!found) incomplete = true;
     }
   };
   while (i < source.length && tokens.length < MAX_TOKENS) {
@@ -827,6 +946,27 @@ function lex(source) {
       skipHeredocBodies();
       continue;
     }
+    if (c === "(" && source.charAt(i + 1) === "(") {
+      let depth = 0;
+      let end = i;
+      for (; end < source.length; end++) {
+        const d = source.charAt(end);
+        if (d === "(") depth++;
+        else if (d === ")" && --depth === 0) break;
+        else if (d === "\n") {
+          end = source.length;
+          break;
+        }
+      }
+      if (end >= source.length) {
+        incomplete = true;
+        i = source.length;
+        continue;
+      }
+      word = (word ?? "") + source.slice(i, end + 1);
+      i = end + 1;
+      continue;
+    }
     if (c === "#" && word === void 0) {
       const end = source.indexOf("\n", i);
       i = end < 0 ? source.length : end;
@@ -836,6 +976,7 @@ function lex(source) {
       const end = source.indexOf("'", i + 1);
       const stop = end < 0 ? source.length : end;
       word = (word ?? "") + source.slice(i + 1, stop);
+      quoted = true;
       i = stop + 1;
       continue;
     }
@@ -860,12 +1001,16 @@ function lex(source) {
         i++;
       }
       word = (word ?? "") + text;
+      quoted = true;
       i++;
       continue;
     }
     if (c === "\\") {
       const next = source.charAt(i + 1);
-      if (next !== "\n") word = (word ?? "") + next;
+      if (next !== "\n") {
+        word = (word ?? "") + next;
+        quoted = true;
+      }
       i += 2;
       continue;
     }
@@ -875,16 +1020,19 @@ function lex(source) {
         word = void 0;
       endWord();
       i += operator.length;
-      if (operator === "<<" || operator === "<<-")
+      if (operator === "<<" || operator === "<<-") {
         expectDelimiter = operator === "<<-";
-      else push({ op: operator });
+        push({ op: "<<" });
+      } else push({ op: operator });
       continue;
     }
     word = (word ?? "") + c;
     i++;
   }
   endWord();
-  return tokens;
+  if (i < source.length || heredocs.length > 0 || expectDelimiter !== void 0)
+    incomplete = true;
+  return { tokens, incomplete };
 }
 function copyTargets(args) {
   const operands = [];
@@ -915,24 +1063,265 @@ function copyTargets(args) {
   if (directory) return [directory];
   return operands.length >= 2 ? [operands[operands.length - 1]] : [];
 }
+function operandsOf(args, valueShorts = "", valueLongs = []) {
+  const operands = [];
+  let options = true;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (!options || arg === "-" || !arg.startsWith("-")) {
+      operands.push(arg);
+      continue;
+    }
+    if (arg === "--") {
+      options = false;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      if (!arg.includes("=") && valueLongs.includes(arg.slice(2))) k++;
+      continue;
+    }
+    for (let j = 1; j < arg.length; j++)
+      if (valueShorts.includes(arg.charAt(j))) {
+        if (j === arg.length - 1) k++;
+        break;
+      }
+  }
+  return operands;
+}
+function sedInPlace(args) {
+  let inPlace = false;
+  let script = false;
+  const files = [];
+  let options = true;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (options && arg === "--") {
+      options = false;
+      continue;
+    }
+    if (options && arg.startsWith("--")) {
+      if (arg.startsWith("--in-place")) inPlace = true;
+      else if (arg === "--expression" || arg === "--file") {
+        script = true;
+        k++;
+      } else if (/^--(?:expression|file)=/.test(arg)) script = true;
+      continue;
+    }
+    if (options && arg.startsWith("-") && arg !== "-") {
+      for (let j = 1; j < arg.length; j++) {
+        const c = arg.charAt(j);
+        if (c === "i") {
+          inPlace = true;
+          const next = args[k + 1];
+          if (j === arg.length - 1 && next !== void 0 && (next === "" || /^\.[\w.-]*$/.test(next)))
+            k++;
+          break;
+        }
+        if (c === "e" || c === "f" || c === "l") {
+          if (c !== "l") script = true;
+          if (j === arg.length - 1) k++;
+          break;
+        }
+      }
+      continue;
+    }
+    if (!script) {
+      script = true;
+      continue;
+    }
+    files.push(arg);
+  }
+  return inPlace ? files : [];
+}
+function perlInPlace(args) {
+  let inPlace = false;
+  let script = false;
+  const files = [];
+  let options = true;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (options && arg === "--") {
+      options = false;
+      continue;
+    }
+    if (options && arg.startsWith("-") && arg !== "-") {
+      for (let j = 1; j < arg.length; j++) {
+        const c = arg.charAt(j);
+        if (c === "i") {
+          inPlace = true;
+          break;
+        }
+        if (c === "e" || c === "E") {
+          script = true;
+          if (j === arg.length - 1) k++;
+          break;
+        }
+        if ("MmIlx0".includes(c)) break;
+      }
+      continue;
+    }
+    if (!script) {
+      script = true;
+      continue;
+    }
+    files.push(arg);
+  }
+  return inPlace ? files : [];
+}
+var ARGUMENT_COMMANDS = /* @__PURE__ */ new Set([
+  "rm",
+  "rmdir",
+  "mv",
+  "cp",
+  "mkdir",
+  "touch",
+  "truncate",
+  "chmod",
+  "ln"
+]);
+var SHELLS = /* @__PURE__ */ new Set(["sh", "bash", "zsh", "dash", "ksh"]);
+var MAX_SHELL_DEPTH = 2;
 function commandName(words) {
   let index = 0;
-  while (index < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? "") || PREFIXES.has(words[index] ?? "")))
+  while (index < words.length && (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index]?.word ?? "") || PREFIXES.has(words[index]?.word ?? "")))
     index++;
-  const name = (words[index] ?? "").split("/").pop() ?? "";
+  const name = (words[index]?.word ?? "").split("/").pop() ?? "";
   return { name, args: words.slice(index + 1) };
 }
-function shellWriteTargets(command) {
-  if (command.length > MAX_SHELL_COMMAND) return [];
-  const tokens = lex(command);
-  const targets = [];
+function directoryOperand(name, args) {
+  let k = 0;
+  if (name === "cd")
+    while (k < args.length && /^-[LPe@]+$/.test(args[k]?.word ?? "")) k++;
+  if (args[k]?.word === "--") k++;
+  const operands = args.slice(k).map((arg) => arg.word);
+  if (operands.length === 0) return name === "cd" ? "~" : null;
+  const operand = operands[0];
+  if (operands.length > 1 || !operand || operand === "-") return null;
+  if (/[$`*?[{]/.test(operand) || /^[+-]/.test(operand)) return null;
+  if (operand.startsWith("~") && operand !== "~" && !operand.startsWith("~/"))
+    return null;
+  return operand;
+}
+function shellReadsStdin(args, heredoc) {
+  if (heredoc) return true;
+  for (let k = 0; k < args.length; k++) {
+    const arg = args[k];
+    if (arg === "--version" || arg === "--help") return false;
+    if (arg === "-") return true;
+    if (arg === "--") return k + 1 >= args.length;
+    if (/^[-+][A-Za-z]+$/.test(arg)) {
+      if (arg.startsWith("-") && arg.includes("s")) return true;
+      if (/[oO]$/.test(arg)) k++;
+      continue;
+    }
+    if (arg.startsWith("--")) continue;
+    return false;
+  }
+  return true;
+}
+function commandPaths(name, args) {
+  const none = { write: [], change: [] };
+  switch (name) {
+    case "tee":
+      return { write: args.filter((arg) => !arg.startsWith("-")), change: [] };
+    case "cp": {
+      const write = copyTargets(args);
+      return write.length > 0 ? { write, change: [] } : null;
+    }
+    case "mv": {
+      const write = copyTargets(args);
+      const sources = operandsOf(args, "tS", ["target-directory", "suffix"]);
+      return write.length > 0 ? { write, change: sources } : null;
+    }
+    case "ln": {
+      const target = copyTargets(args);
+      if (target.length > 0) return { write: [], change: target };
+      const operands = operandsOf(args, "tS", ["target-directory", "suffix"]);
+      return operands.length === 1 ? { write: [], change: ["."] } : null;
+    }
+    case "rm":
+    case "rmdir":
+    case "mkdir":
+    case "touch":
+    case "truncate":
+    case "chmod": {
+      const valued = { mkdir: "m", touch: "tdr", truncate: "sr" };
+      let operands = operandsOf(args, valued[name] ?? "", [
+        "mode",
+        "date",
+        "reference",
+        "size"
+      ]);
+      if (name === "chmod" && !args.some((arg) => arg.startsWith("--reference")))
+        operands = operands.slice(1);
+      return operands.length > 0 ? { write: [], change: operands } : null;
+    }
+    case "sed": {
+      const files = sedInPlace(args);
+      return { write: [], change: files };
+    }
+    case "perl":
+      return { write: [], change: perlInPlace(args) };
+    case "patch":
+      return null;
+    default:
+      return none;
+  }
+}
+function walk(command, depth) {
+  const { tokens, incomplete } = lex(command);
+  const entries = [];
+  let unknown = incomplete;
+  let directory = [];
+  const groups = [];
   let words = [];
-  const flush = () => {
+  let heredoc = false;
+  const add = (path, write) => {
+    if (path) entries.push({ path, directory, write });
+  };
+  const flush = (separator) => {
     const { name, args } = commandName(words);
-    if (name === "tee")
-      targets.push(...args.filter((arg) => !arg.startsWith("-")));
-    else if (name === "cp" || name === "mv") targets.push(...copyTargets(args));
+    const values = args.map((arg) => arg.word);
+    if (name === "cd" || name === "pushd" || name === "popd") {
+      const operand = name === "popd" ? null : directoryOperand(name, args);
+      if (separator !== "|" && separator !== "|&" && separator !== "&") {
+        if (operand === null) directory = null;
+        else if (operand.startsWith("/")) directory = [operand];
+        else if (directory !== null) directory = [...directory, operand];
+      }
+    } else if (SHELLS.has(name)) {
+      const flag = values.findIndex((value) => /^-[a-z]*c[a-z]*$/.test(value));
+      const script = flag >= 0 ? values[flag + 1] : void 0;
+      if (script === void 0 && shellReadsStdin(values, heredoc))
+        unknown = true;
+      if (script !== void 0) {
+        if (depth >= MAX_SHELL_DEPTH) unknown = true;
+        else {
+          const inner = walk(script, depth + 1);
+          unknown ||= inner.unknown;
+          for (const entry of inner.entries)
+            entries.push({
+              ...entry,
+              directory: directory === null || entry.directory === null ? null : entry.directory[0]?.startsWith("/") ? entry.directory : [...directory, ...entry.directory]
+            });
+        }
+      }
+    } else {
+      const paths = commandPaths(name, values);
+      if (paths === null) unknown = true;
+      else {
+        for (const path of paths.write) add(path, true);
+        for (const path of paths.change) add(path, false);
+      }
+      if (name !== "" && args.some((arg) => !arg.quoted && ARGUMENT_COMMANDS.has(arg.word)))
+        unknown = true;
+      if (args.some(
+        (arg, k) => !arg.quoted && (arg.word === "sed" || arg.word === "perl") && args.slice(k + 1).some((next) => /^-[a-zA-Z]*i/.test(next.word))
+      ))
+        unknown = true;
+    }
     words = [];
+    heredoc = false;
   };
   for (let k = 0; k < tokens.length; k++) {
     const token = tokens[k];
@@ -941,30 +1330,177 @@ function shellWriteTargets(command) {
         const next = tokens[k + 1];
         if (next && "word" in next) {
           if (!(token.op === ">&" && /^\d+$|^-$/.test(next.word)))
-            targets.push(next.word);
+            add(next.word, true);
           k++;
         }
       } else if (token.op === "<" || token.op === "<<<") {
         if (tokens[k + 1] && "word" in tokens[k + 1]) k++;
-      } else if (SEPARATORS.has(token.op)) flush();
+      } else if (token.op === "<<") heredoc = true;
+      else if (token.op === "(") {
+        flush(token.op);
+        groups.push(directory);
+      } else if (token.op === ")") {
+        flush(token.op);
+        if (groups.length > 0) directory = groups.pop() ?? null;
+      } else if (SEPARATORS.has(token.op)) flush(token.op);
       continue;
     }
-    words.push(token.word);
+    words.push(token);
   }
-  flush();
-  return targets.filter(Boolean).slice(0, MAX_TARGETS);
+  flush(void 0);
+  return { entries, unknown };
+}
+function shellChanges(command) {
+  if (command.length > MAX_SHELL_COMMAND)
+    return { changes: [], unknown: false };
+  const { entries, unknown } = walk(command, 0);
+  return {
+    changes: entries.slice(0, MAX_TARGETS).map(({ path, directory, write }) => ({
+      path,
+      directory,
+      written: write
+    })),
+    // More paths than inspected: the rest is not known to be scratch.
+    unknown: unknown || entries.length > MAX_TARGETS
+  };
+}
+
+// src/capture/hooks/write-scope.ts
+import { posix } from "node:path";
+var DEFAULT_TEMP_DIRS = ["/tmp", "/var/folders"];
+function usableTempRoots(candidates, home, projectDir) {
+  const guarded = [home, projectDir].map(absolute).filter((path) => path !== void 0);
+  return candidates.map(absolute).filter(
+    (root) => root !== void 0 && root !== "/" && !guarded.some((path) => within(path, root))
+  );
+}
+var NON_FILE = /^(?:\/dev\/(?:null|stdout|stderr|tty|fd\/\d+)|&?[0-2]|-)$/u;
+var LOG_FILE = /\.log$/u;
+var SCRATCHPAD_SHAPE = /^\/tmp\/claude-\d+\/[^/]+\/[^/]+\/scratchpad(?:\/|$)/u;
+function absolute(path) {
+  return typeof path === "string" && path.startsWith("/") && !path.includes("\0") ? posix.normalize(path) : void 0;
+}
+function canonical(path) {
+  const normalized = posix.normalize(path);
+  return /^\/private\/(?:tmp|var|etc)(?:\/|$)/u.test(normalized) ? normalized.slice("/private".length) : normalized;
+}
+function within(path, root) {
+  const a = canonical(path);
+  const b = canonical(root);
+  return a === b || a.startsWith(b === "/" ? "/" : `${b}/`);
+}
+function opaque(path) {
+  if (/[`{}]/u.test(path)) return true;
+  if (path.includes("$")) return true;
+  return path.split("/").some((segment) => /[*?[]/u.test(segment) && /^[.[]/u.test(segment));
+}
+function inScratchpad(path, scope) {
+  const pad = absolute(scope.scratchpadDir);
+  return pad !== void 0 && pad !== "/" && within(path, pad) || SCRATCHPAD_SHAPE.test(canonical(path));
+}
+function trustedCwd(scope) {
+  const cwd = absolute(scope.cwd);
+  if (!cwd || cwd === "/") return void 0;
+  const home = absolute(scope.home);
+  if (home && canonical(cwd) === canonical(home)) return void 0;
+  return cwd;
+}
+function resolveWrite(path, directory, scope) {
+  if (directory === null || !path) return void 0;
+  const home = absolute(scope.home);
+  const expand = (value) => {
+    const homeForm = /^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/u.exec(value);
+    if (homeForm)
+      return home ? home + value.slice(homeForm[0].length) : void 0;
+    return opaque(value) ? void 0 : value;
+  };
+  let base;
+  let fromCwd = true;
+  for (const step of directory) {
+    const expanded = expand(step);
+    if (expanded === void 0) return void 0;
+    if (expanded.startsWith("/")) {
+      base = expanded;
+      fromCwd = false;
+    } else {
+      const start2 = base ?? trustedCwd(scope);
+      if (!start2) return void 0;
+      base = posix.join(start2, expanded);
+    }
+  }
+  const target = expand(path);
+  if (target === void 0) return void 0;
+  if (target.startsWith("/"))
+    return { path: posix.normalize(target), fromCwd: false };
+  const start = base ?? trustedCwd(scope);
+  if (!start) return void 0;
+  return {
+    path: posix.join(start, target),
+    fromCwd: base === void 0 ? true : fromCwd
+  };
+}
+function scratchWrite(path, directory, scope, options = {}) {
+  if (NON_FILE.test(path)) return true;
+  if (options.written === true && LOG_FILE.test(path)) return true;
+  const temp = /^(?:\$TMPDIR|\$\{TMPDIR\})\//u.exec(path);
+  if (temp) {
+    const rest = path.slice(temp[0].length);
+    return !rest.split("/").includes("..") && !opaque(rest);
+  }
+  const resolved = resolveWrite(path, directory, scope);
+  if (!resolved) return false;
+  if (inScratchpad(resolved.path, scope)) return true;
+  if (resolved.fromCwd) return false;
+  if (scope.ownMemory?.(resolved.path)) return true;
+  const project = absolute(scope.projectDir) ?? trustedCwd(scope);
+  if (project && within(resolved.path, project)) return false;
+  return scope.tempDirs.some((root) => {
+    const dir = absolute(root);
+    return dir !== void 0 && dir !== "/" && within(resolved.path, dir);
+  });
+}
+var MAX_PATCH_FILES = 256;
+function patchedFiles(patch) {
+  const files = [];
+  for (const match of patch.matchAll(
+    /^\*\*\* (Add File|Update File|Delete File|Move to): (.+)$/gmu
+  )) {
+    const path = match[2]?.trim();
+    if (path) files.push({ path, deleted: match[1] === "Delete File" });
+    if (files.length >= MAX_PATCH_FILES) break;
+  }
+  return files;
+}
+function patchText(value) {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value))
+    return value.filter((part) => typeof part === "string").join("\n");
+  return void 0;
+}
+function editTargets(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input))
+    return void 0;
+  const record = input;
+  const path = record.file_path ?? record.notebook_path;
+  if (typeof path === "string" && path) return [path];
+  const patch = patchText(record.command) ?? patchText(record.input);
+  if (patch === void 0) return void 0;
+  const files = patchedFiles(patch).map((file) => file.path);
+  return files.length > 0 ? files : void 0;
+}
+function scratchEdit(input, scope) {
+  const targets = editTargets(input);
+  return targets?.every((target) => scratchWrite(target, [], scope)) ?? false;
 }
 
 // src/capture/hooks/shell-mutation.ts
-var SCRATCH_TARGET = /^(?:\/dev\/(?:null|stdout|stderr|tty)|&?[0-2]|-|(?:\/private)?\/tmp\/.*|\/var\/folders\/.*|\$\{?TMPDIR\}?\/.*|.*\.log)$/u;
+var GIT = "\\bgit\\s+(?:(?:-[Cc]\\s+\\S+|--[\\w-]+(?:=\\S*)?|-[pP])\\s+)*";
+var END = "(?![\\w.-])";
 var MUTATING = new RegExp(
   [
-    "\\bsed\\s+(?:-[a-zA-Z]*\\s+)*-[a-zA-Z]*i",
-    "\\bperl\\s+(?:-[a-zA-Z]*\\s+)*-[a-zA-Z]*i",
-    "(?:^|[\\s;&|(])(?:rm|mv|cp|mkdir|rmdir|touch|truncate|chmod|ln|patch)\\s",
-    "\\bgit\\s+(?:-C\\s+\\S+\\s+)?(?:add|commit|push|reset|checkout|switch|merge|rebase|apply|am|cherry-pick|revert|restore|rm|mv)\\b",
-    "\\bgit\\s+(?:-C\\s+\\S+\\s+)?tag\\s+(?!-l\\b|--list\\b)[^\\s;&|]",
-    "\\bgit\\s+(?:-C\\s+\\S+\\s+)?stash(?:\\s+(?:push|pop|apply|drop|clear|save)\\b|\\s*(?:$|[;&|]))",
+    `${GIT}(?:add|commit|push|reset|checkout|switch|merge|rebase|apply|am|cherry-pick|revert|restore|rm|mv)${END}`,
+    `${GIT}tag\\s+(?!-l\\b|--list\\b)[^\\s;&|]`,
+    `${GIT}stash(?:\\s+(?:push|pop|apply|drop|clear|save)${END}|\\s*(?:$|[;&|]))`,
     "\\b(?:npm|pnpm|yarn)\\s+(?:install|i|add|remove|uninstall|publish|update|upgrade)\\b",
     "\\bnpm\\s+version\\s+[^\\s;&|-]",
     "\\bpip3?\\s+(?:install|uninstall)\\b"
@@ -985,10 +1521,14 @@ function shellCommandText(input) {
     return command.filter((part) => typeof part === "string").join(" ");
   return void 0;
 }
-function mutatingShellCommand(command) {
+function mutatingShellCommand(command, scope = { tempDirs: DEFAULT_TEMP_DIRS }) {
   if (typeof command !== "string" || !command.trim()) return false;
   if (command.length > MAX_SHELL_COMMAND) return false;
-  if (shellWriteTargets(command).some((target) => !SCRATCH_TARGET.test(target)))
+  const { changes, unknown } = shellChanges(command);
+  if (unknown) return true;
+  if (changes.some(
+    ({ path, directory, written }) => !scratchWrite(path, directory, scope, { written })
+  ))
     return true;
   if (MUTATING.test(unquoted(command))) return true;
   return INLINE_SCRIPT.test(command) && WRITE_API.test(command);
@@ -1072,6 +1612,51 @@ function onRetrieveStarted(event, sessionId) {
     }
   exit("");
 }
+function optionalAbsolute(value) {
+  return typeof value === "string" && isAbsolute4(value) ? value : void 0;
+}
+function tempDirs(projectDir) {
+  const configured = [];
+  for (const value of [
+    tmpdir(),
+    process.env.TMPDIR,
+    process.env.CLAUDE_CODE_TMPDIR
+  ]) {
+    const root = optionalAbsolute(value);
+    if (!root) continue;
+    configured.push(root);
+    try {
+      configured.push(realpathSync(root));
+    } catch {
+    }
+  }
+  return [
+    .../* @__PURE__ */ new Set([
+      ...DEFAULT_TEMP_DIRS,
+      ...usableTempRoots(configured, homedir4(), projectDir)
+    ])
+  ];
+}
+function writeScope(event) {
+  const cwd = optionalAbsolute(event.cwd);
+  const projectDir = (agent === "claude" ? optionalAbsolute(process.env.CLAUDE_PROJECT_DIR) : void 0) ?? cwd;
+  return {
+    cwd,
+    projectDir,
+    scratchpadDir: optionalAbsolute(event.scratchpad_dir),
+    tempDirs: tempDirs(projectDir),
+    home: homedir4(),
+    ownMemory: (path) => agent === "codex" ? codexHomeMemoryWrite(path) : claudeConfiguredMemoryWrite(path, cwd)
+  };
+}
+function projectChange(tool, event) {
+  if (tool === "Bash")
+    return mutatingShellCommand(
+      shellCommandText(event.tool_input),
+      writeScope(event)
+    );
+  return EDIT_TOOLS[agent].has(tool) && !scratchEdit(event.tool_input, writeScope(event));
+}
 function onToolUse(event, sessionId) {
   const tool = event.tool_name;
   if (typeof tool !== "string") return exit("");
@@ -1079,8 +1664,7 @@ function onToolUse(event, sessionId) {
   if (gateMode === "off") return exit("");
   if (validAgentId(event.agent_id) && typeof event.agent_type === "string" && READ_ONLY_AGENTS.has(event.agent_type))
     return exit("");
-  const shell = tool === "Bash" && mutatingShellCommand(shellCommandText(event.tool_input));
-  if (!shell && !EDIT_TOOLS[agent].has(tool)) return exit("");
+  if (!projectChange(tool, event)) return exit("");
   const subagent = validAgentId(event.agent_id);
   const key = recallKey(sessionId, event.agent_id);
   const counts = readRecallState(agent, key);

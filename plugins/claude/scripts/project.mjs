@@ -1720,7 +1720,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.12.3"} project`;
+  return `npx -y memroot@${"0.12.4"} project`;
 }
 function legacySessionRecordsDir() {
   return join6(stateDir(), "project-sessions");
@@ -2880,7 +2880,7 @@ async function projectCommand(args, _bundledAgent) {
     throw new Error("INVALID_ARGUMENT: This project command takes no name.");
   const config = await readConfig();
   const base = resolveApiBase(apiBase ? { apiBase } : {}, config);
-  const userAgent = `memroot-cli/${"0.12.3"}`;
+  const userAgent = `memroot-cli/${"0.12.4"}`;
   const client = new McpClient(base, new TokenBroker(base), userAgent);
   const listProjects = async (via = client) => {
     let projects2;
