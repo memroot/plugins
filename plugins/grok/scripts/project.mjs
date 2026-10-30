@@ -91,6 +91,14 @@ import { existsSync as existsSync3, lstatSync as lstatSync4, rmSync as rmSync5 }
 import { join as join10 } from "node:path";
 import { parseArgs } from "node:util";
 
+// ../../packages/contracts/src/invisible-text-v1.ts
+var INVISIBLE_FORMATTING_CLASS = "\\u061c\\u200b\\u200e\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff";
+var SUBDIVISION_FLAG = "\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}";
+var HIDDEN_TEXT = new RegExp(
+  `(${SUBDIVISION_FLAG})|[${INVISIBLE_FORMATTING_CLASS}\\u0001-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u206a-\\u206f\\u{E0000}-\\u{E007F}]`,
+  "gu"
+);
+
 // ../../packages/contracts/src/console-rules-v1.ts
 var CONSOLE_PROJECT_NAME_MAX = 64;
 var FORBIDDEN_NAME_CHARACTERS = /[\p{Cc}\p{Zl}\p{Zp}\p{Cs}\u061C\u200E\u200F\u202A-\u202E\u2066-\u206F\uFEFF\u{E0000}-\u{E007F}]/u;
@@ -98,6 +106,14 @@ var VISIBLE_NAME_CHARACTER = /[^\p{Cf}\p{Z}\p{M}\p{Co}\p{Cn}\u115F\u1160\u3164\u
 function isConsoleProjectName(value) {
   return typeof value === "string" && value.length >= 1 && value.length <= CONSOLE_PROJECT_NAME_MAX && value === value.normalize("NFC") && value === value.trim() && !FORBIDDEN_NAME_CHARACTERS.test(value) && VISIBLE_NAME_CHARACTER.test(value);
 }
+var INVISIBLE_NAME_FORMATTING = new RegExp(
+  `[${INVISIBLE_FORMATTING_CLASS}]`,
+  "gu"
+);
+var HAS_INVISIBLE_NAME_FORMATTING = new RegExp(
+  `[${INVISIBLE_FORMATTING_CLASS}]`,
+  "u"
+);
 
 // src/auth.ts
 import { spawn } from "node:child_process";
@@ -1720,7 +1736,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.12.4"} project`;
+  return `npx -y memroot@${"0.13.0"} project`;
 }
 function legacySessionRecordsDir() {
   return join6(stateDir(), "project-sessions");
@@ -2880,7 +2896,7 @@ async function projectCommand(args, _bundledAgent) {
     throw new Error("INVALID_ARGUMENT: This project command takes no name.");
   const config = await readConfig();
   const base = resolveApiBase(apiBase ? { apiBase } : {}, config);
-  const userAgent = `memroot-cli/${"0.12.4"}`;
+  const userAgent = `memroot-cli/${"0.13.0"}`;
   const client = new McpClient(base, new TokenBroker(base), userAgent);
   const listProjects = async (via = client) => {
     let projects2;

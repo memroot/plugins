@@ -407,7 +407,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.12.4"} project`;
+  return `npx -y memroot@${"0.13.0"} project`;
 }
 function projectStatusLine() {
   const command = projectCommandPrefix();

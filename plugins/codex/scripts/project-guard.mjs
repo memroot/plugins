@@ -1,5 +1,24 @@
 #!/usr/bin/env node
 
+// ../../packages/contracts/src/mcp-tool-names-v1.ts
+var MCP_PROJECT_TOOL_NAMES_V1 = [
+  "memory_retrieve",
+  "memory_create",
+  "memory_feedback",
+  "memory_archive",
+  "memory_restore"
+];
+var MCP_READ_ONLY_TOOL_NAMES_V1 = [
+  "projects_list",
+  "connection_status",
+  "memory_request_schema"
+];
+var MCP_TOOL_NAMES_V1 = [
+  ...MCP_PROJECT_TOOL_NAMES_V1,
+  "projects_create",
+  ...MCP_READ_ONLY_TOOL_NAMES_V1
+];
+
 // src/capture/hooks/envelope.ts
 var MAX_ENVELOPE_BYTES = 64 * 1024;
 var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
@@ -425,25 +444,20 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.12.4"} project`;
+  return `npx -y memroot@${"0.13.0"} project`;
 }
 
 // src/plugin/project-guard.ts
 var memroot = false;
 var MCP_PREFIX = "^(?:mcp__(?:plugin_[A-Za-z0-9_-]+_)?)?memroot__";
-var READ_ONLY_TOOL = new RegExp(
-  `${MCP_PREFIX}(?:connection_status|projects_list|memory_request_schema)$`,
-  "u"
-);
+var named = (names) => new RegExp(`${MCP_PREFIX}(?:${names.join("|")})$`, "u");
+var READ_ONLY_TOOL = named(MCP_READ_ONLY_TOOL_NAMES_V1);
 var ANY_MEMROOT_TOOL = new RegExp(`${MCP_PREFIX}[a-z_]+$`, "u");
 var IMPORT_TOOL = new RegExp(
   `${MCP_PREFIX}(?:memory_create|memory_request_schema)$`,
   "u"
 );
-var MEMORY_TOOL = new RegExp(
-  `${MCP_PREFIX}memory_(?:retrieve|create|archive|restore)$`,
-  "u"
-);
+var MEMORY_TOOL = named(MCP_PROJECT_TOOL_NAMES_V1);
 var record = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 function decide(decision, reason, input) {
   process.stdout.write(
@@ -495,11 +509,11 @@ async function main() {
     );
     return;
   }
-  if (READ_ONLY_TOOL.test(name)) {
+  if (READ_ONLY_TOOL.test(tool)) {
     decide("allow", "Read-only Memroot tool; it takes no project.");
     return;
   }
-  if (!MEMORY_TOOL.test(name)) return;
+  if (!MEMORY_TOOL.test(tool)) return;
   memroot = true;
   const selected = currentSelection();
   const command = projectCommandPrefix();

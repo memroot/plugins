@@ -12,7 +12,7 @@ Answer from live checks rather than assumptions, because an installed plugin doe
    node "<plugin root>/scripts/status.mjs"
    ```
    The plugin root is two directories above this SKILL.md, so the script is `../../scripts/status.mjs` relative to this file.
-2. Call the memroot MCP server's `connection_status` tool for the account, authorized project, and retrieval mode. In Grok the memroot tools are `memroot__projects_list`, `memroot__memory_retrieve`, `memroot__memory_create`, `memroot__memory_archive`, `memroot__memory_restore` and `memroot__connection_status`, called through `use_tool` (the name as `tool_name`, the arguments as `tool_input`); if they are not listed, find them with `search_tool`.
+2. Call the memroot MCP server's `connection_status` tool for the account, authorized project, and retrieval mode. In Grok the memroot tools are `memroot__projects_list`, `memroot__memory_retrieve`, `memroot__memory_create`, `memroot__memory_feedback`, `memroot__memory_archive`, `memroot__memory_restore` and `memroot__connection_status`, called through `use_tool` (the name as `tool_name`, the arguments as `tool_input`); if they are not listed, find them with `search_tool`.
 3. Run the bundled project script's `status` command (`scripts/project.mjs status`, beside the status script) for the project selected on this computer; it applies to every session until changed. A connection with authorized projects does not itself select a project.
 4. Report briefly: plugin version, connected or not, project id, retrieval mode, and whether session capture is on.
 

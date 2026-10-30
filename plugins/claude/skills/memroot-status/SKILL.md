@@ -11,7 +11,7 @@ Answer from live checks rather than assumptions, because an installed plugin doe
    ```sh
    node "${CLAUDE_PLUGIN_ROOT}/scripts/status.mjs"
    ```
-2. Call the memroot MCP server's `connection_status` tool for the account, authorized project, and retrieval mode. In Claude Code the memroot tools are `mcp__memroot__projects_list`, `mcp__memroot__memory_retrieve`, `mcp__memroot__memory_create`, `mcp__memroot__memory_archive`, `mcp__memroot__memory_restore` and `mcp__memroot__connection_status`; if they are deferred, load them with tool search first.
+2. Call the memroot MCP server's `connection_status` tool for the account, authorized project, and retrieval mode. In Claude Code the memroot tools are `mcp__memroot__projects_list`, `mcp__memroot__memory_retrieve`, `mcp__memroot__memory_create`, `mcp__memroot__memory_feedback`, `mcp__memroot__memory_archive`, `mcp__memroot__memory_restore` and `mcp__memroot__connection_status`; if they are deferred, load them with tool search first.
 3. Run the bundled project script's `status` command (`scripts/project.mjs status`, beside the status script) for the project selected on this computer; it applies to every session until changed. A connection with authorized projects does not itself select a project.
 4. Report briefly: plugin version, connected or not, project id, retrieval mode, and whether session capture is on.
 

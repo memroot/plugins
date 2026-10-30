@@ -15037,6 +15037,20 @@ function date4(params) {
 // ../../node_modules/.pnpm/zod@4.4.3/node_modules/zod/v4/classic/external.js
 config(en_default());
 
+// ../../packages/contracts/src/invisible-text-v1.ts
+var INVISIBLE_FORMATTING_CLASS = "\\u061c\\u200b\\u200e\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff";
+var SUBDIVISION_FLAG = "\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}";
+var HIDDEN_TEXT = new RegExp(
+  `(${SUBDIVISION_FLAG})|[${INVISIBLE_FORMATTING_CLASS}\\u0001-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u206a-\\u206f\\u{E0000}-\\u{E007F}]`,
+  "gu"
+);
+function stripHiddenText(value) {
+  return value.replace(
+    HIDDEN_TEXT,
+    (_, flag) => flag ?? ""
+  );
+}
+
 // ../../packages/contracts/src/memory-limits-v1.ts
 var CREATE_MEMORY_MAX_ASSERTIONS = 8;
 
@@ -15181,6 +15195,7 @@ var scalar = (min, max) => external_exports.string().refine(storableText, "well-
   (s) => [...s].length >= min && [...s].length <= max,
   "Unicode scalar length"
 );
+var stored = (min, max) => external_exports.string().transform(stripHiddenText).pipe(scalar(min, max));
 var time3 = external_exports.object({ from: external_exports.string().datetime(), to: external_exports.string().datetime().nullable() }).strict().refine((value) => value.to === null || value.to > value.from);
 var MemoryKindV1Schema = external_exports.enum([
   "architecture_decision",
@@ -15270,7 +15285,7 @@ var EntityInputSchema = external_exports.object({
   ref,
   family: external_exports.enum(["code", "engineering"]),
   subtype: external_exports.enum([...families.code, ...families.engineering]),
-  name: scalar(1, 512),
+  name: stored(1, 512),
   identity: IdentitySchema
 }).strict().superRefine((x, ctx) => {
   if (!families[x.family].includes(x.subtype))
@@ -15370,7 +15385,11 @@ var literal2 = external_exports.object({
       "semver",
       "duration_ms"
     ]),
-    value: external_exports.union([external_exports.boolean(), external_exports.number().finite(), external_exports.string()])
+    value: external_exports.union([
+      external_exports.boolean(),
+      external_exports.number().finite(),
+      external_exports.string().transform(stripHiddenText)
+    ])
   }).strict(),
   qualifier: external_exports.string().regex(/^[a-z][a-z0-9_]{0,63}$/)
 }).strict().superRefine((x, ctx) => {
@@ -15427,7 +15446,7 @@ var AssertionInputSchema = external_exports.object({
     "location"
   ]),
   predicate: predicates,
-  statement: scalar(1, 1e3),
+  statement: stored(1, 1e3),
   subject: entityRef,
   object: external_exports.union([entityRef, literal2]),
   confidence: external_exports.number().finite().min(0).max(1),
@@ -15452,7 +15471,7 @@ var EvidenceInputSchema = external_exports.discriminatedUnion("kind", [
     kind: external_exports.literal("user_attestation"),
     locator_version: external_exports.literal(1),
     locator: external_exports.object({}).strict(),
-    summary: scalar(1, 1e3)
+    summary: stored(1, 1e3)
   }).strict(),
   // schema_version 2: a save the coding agent decided on by itself (owner
   // decision 2026-10-15), labelled as such and never as user-attested.
@@ -15461,14 +15480,14 @@ var EvidenceInputSchema = external_exports.discriminatedUnion("kind", [
     kind: external_exports.literal("agent_initiated"),
     locator_version: external_exports.literal(1),
     locator: external_exports.object({}).strict(),
-    summary: scalar(1, 1e3)
+    summary: stored(1, 1e3)
   }).strict(),
   external_exports.object({
     ref,
     kind: external_exports.literal("session_reference"),
     locator_version: external_exports.literal(1),
     locator: SessionReferenceLocatorV1Schema,
-    summary: scalar(1, 1e3)
+    summary: stored(1, 1e3)
   }).strict()
 ]);
 var ProvenanceOriginV1Schema = external_exports.enum([
@@ -15629,8 +15648,8 @@ var CreateMemoryRequestV1Schema = external_exports.object({
   schema_version: external_exports.literal(CREATE_MEMORY_SCHEMA_VERSIONS),
   memory: external_exports.object({
     kind: MemoryKindV1Schema,
-    title: scalar(1, 160),
-    summary: scalar(1, 2e3),
+    title: stored(1, 160),
+    summary: stored(1, 2e3),
     // Optional from schema_version 2 (server time when absent).
     valid_time: time3.optional(),
     provenance_refs: external_exports.array(ref).max(64).default([])
@@ -15763,11 +15782,11 @@ var MemoryPackResponseV1Schema = external_exports.object({
       /**
        * The terms the ranking formula read for this item, by name; together
        * with the item's lifecycle multiplier and the version's scorer
-       * (`scoreR4v` or `scoreR5v`) they reproduce `score`. Which names there
+       * (`scoreR4v` or `scoreR10v`) they reproduce `score`. Which names there
        * are depends on
-       * `ranking_version`, which is `r5v` for every answer of the deployed
-       * route. `semantic` is the similarity term as the formula reads it:
-       * under `r4v`/`r5v` that is the cosine similarity above the version's
+       * `ranking_version`, which is `r10v` for every unjudged answer of the
+       * deployed route. `semantic` is the similarity term as the formula reads it:
+       * under `r4v`/`r10v` that is the cosine similarity above the version's
        * origin, rescaled to 0..1, not the cosine itself. Both versions therefore
        * also report `similarity`, the cosine similarity between the query
        * and the item's best assertion as the index gave it, clamped to
@@ -19598,8 +19617,8 @@ function relocateTranscript(job) {
       } catch {
         continue;
       }
-      const stored = readJob(job.jobId);
-      if (stored) writeJob({ ...stored, transcriptPath: candidate });
+      const stored2 = readJob(job.jobId);
+      if (stored2) writeJob({ ...stored2, transcriptPath: candidate });
       count2("transcript_relocated");
       return { ...job, transcriptPath: candidate };
     }
@@ -20028,7 +20047,7 @@ async function extract(job, context, target2, cursorRef) {
     finishJob(job, "no_candidates");
     return "done";
   }
-  const stored = {
+  const stored2 = {
     schemaVersion: 1,
     jobId: job.jobId,
     projectId,
@@ -20043,7 +20062,7 @@ async function extract(job, context, target2, cursorRef) {
   if (!readJob(job.jobId)) return "done";
   writePrivateFileAtomic(
     candidatesPath(job.jobId),
-    `${JSON.stringify(stored)}
+    `${JSON.stringify(stored2)}
 `
   );
   const current = readJob(job.jobId);
@@ -20056,22 +20075,22 @@ async function extract(job, context, target2, cursorRef) {
   return "stored";
 }
 async function upload(job, context, fallbackTarget, fallbackCursorRef) {
-  const stored = readCandidates(job.jobId);
-  if (!stored) {
+  const stored2 = readCandidates(job.jobId);
+  if (!stored2) {
     finishJob(job, "candidates_missing");
     return;
   }
-  const project = stored.target ?? fallbackTarget;
-  const cursorRef = stored.cursorRef ?? fallbackCursorRef;
+  const project = stored2.target ?? fallbackTarget;
+  const cursorRef = stored2.cursorRef ?? fallbackCursorRef;
   const persist2 = () => writePrivateFileAtomic(
     candidatesPath(job.jobId),
-    `${JSON.stringify(stored)}
+    `${JSON.stringify(stored2)}
 `
   );
   const stop = await uploadItems(
     context.client,
-    stored.projectId,
-    stored.items,
+    stored2.projectId,
+    stored2.items,
     persist2,
     (item) => {
       context.ledger.uploads.push({
@@ -20132,16 +20151,16 @@ async function upload(job, context, fallbackTarget, fallbackCursorRef) {
     } else backoff(current, "extracted", stop.code);
     return;
   }
-  for (const item of stored.items)
+  for (const item of stored2.items)
     if (item.status === "dropped")
       count2(`dropped_${item.dropReason ?? "server"}`);
   setCursor(
     context,
     cursorRef,
-    stored.cursorTurns,
-    stored.cursorSource === "grok_updates" || stored.cursorSource === "grok_chat_history" ? stored.cursorSource : void 0
+    stored2.cursorTurns,
+    stored2.cursorSource === "grok_updates" || stored2.cursorSource === "grok_chat_history" ? stored2.cursorSource : void 0
   );
-  finishJob({ ...job, endedAt: stored.endedAt }, "uploaded_all");
+  finishJob({ ...job, endedAt: stored2.endedAt }, "uploaded_all");
 }
 async function processJob(job, context) {
   const started = Date.now();
@@ -20164,8 +20183,8 @@ async function processJob(job, context) {
     assertMayContinue(context, job.agent);
     job = relocateTranscript(job);
     const cursorRef = sessionRefFor(context.salt, job.agent, job.sessionId);
-    const stored = readCandidates(job.jobId);
-    let target2 = stored?.target ?? jobTarget(job);
+    const stored2 = readCandidates(job.jobId);
+    let target2 = stored2?.target ?? jobTarget(job);
     if (!target2) {
       const path2 = transcriptFile(job);
       try {
@@ -20194,7 +20213,7 @@ async function processJob(job, context) {
       writeJob({ ...current, target: target2 });
       count2("project_assigned");
     }
-    const hasCandidates = stored !== void 0;
+    const hasCandidates = stored2 !== void 0;
     if (!hasCandidates) {
       const result = await extract(job, context, target2, cursorRef);
       if (result !== "stored") return;
@@ -20305,7 +20324,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.12.4"}`
+        `memroot-capture/${"0.13.0"}`
       ),
       salt,
       redactor: createRedactor(salt),
