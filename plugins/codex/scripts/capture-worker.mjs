@@ -15353,27 +15353,108 @@ function predicateTypeMismatchRule(predicate, assertionType) {
     return "predicate/type mismatch";
   return `predicate/type mismatch: ${predicate} requires assertion_type ${ASSERTION_TYPE_BY_PREDICATE_V1[predicate]}; ${assertionType} allows predicates ${predicatesForAssertionTypeV1(assertionType).join(", ")}`;
 }
-var ROLE_HINTS = {
-  has_property: "object must be a literal",
-  uses: "subject and object must be code or engineering entities",
-  depends_on: "subject must be a code or engineering entity; object code or engineering",
-  implements: "subject must be a code entity; object an engineering entity",
-  applies_to: "subject must be an engineering entity or context_entity; object a code entity or context_entity",
-  part_of: "subject and object must be the same family",
-  requires: "subject must be a code entity or context_entity; object code or engineering",
-  forbids: "subject must be a code entity or context_entity; object code or engineering",
-  recommends: "subject must be a code entity or context_entity; object code or engineering",
-  causes: "subject must be code or engineering; object an incident, error or behavior entity",
-  fixes: "subject must be code or engineering; object an incident, error or behavior entity",
-  avoids: "subject must be code or engineering; object an incident, error or behavior entity",
-  fails_because: "subject must be code or engineering; object code or engineering",
-  prefers: "subject must be a context_entity (tenant, project or caller); object code or engineering",
-  disfavors: "subject must be a context_entity (tenant, project or caller); object code or engineering",
-  owns: "subject must be a context_entity (tenant, project or caller), not an entity_ref; object a code or engineering entity",
-  maintains: "subject must be a context_entity (tenant, project or caller), not an entity_ref; object a code or engineering entity",
-  located_in: "subject must be a code entity (not a context_entity); object a repository, module, directory, file, service, database or worker entity",
-  defined_in: "subject must be a code entity (not a context_entity); object a repository, module, directory, file, commit or release entity"
+var CE = ["code", "engineering"];
+var PREDICATE_ROLES_V1 = {
+  has_property: { subject: "any", object: "literal" },
+  uses: { subject: CE, object: CE },
+  depends_on: { subject: CE, object: CE },
+  implements: { subject: ["code"], object: ["engineering"] },
+  applies_to: {
+    subject: ["engineering", "principal_scope"],
+    object: ["code", "principal_scope"]
+  },
+  part_of: {
+    subject: ["code", "engineering", "principal_scope"],
+    object: ["code", "engineering", "principal_scope"],
+    sameFamily: true
+  },
+  requires: { subject: ["code", "principal_scope"], object: CE },
+  forbids: { subject: ["code", "principal_scope"], object: CE },
+  recommends: { subject: ["code", "principal_scope"], object: CE },
+  causes: {
+    subject: CE,
+    object: ["engineering"],
+    objectSubtypes: ["error", "incident", "behavior"]
+  },
+  fixes: {
+    subject: CE,
+    object: ["engineering"],
+    objectSubtypes: ["error", "incident", "behavior"]
+  },
+  avoids: {
+    subject: CE,
+    object: ["engineering"],
+    objectSubtypes: ["error", "incident", "behavior"]
+  },
+  fails_because: { subject: CE, object: CE },
+  prefers: { subject: ["principal_scope"], object: CE },
+  disfavors: { subject: ["principal_scope"], object: CE },
+  owns: { subject: ["principal_scope"], object: CE },
+  maintains: { subject: ["principal_scope"], object: CE },
+  located_in: {
+    subject: ["code"],
+    object: ["code"],
+    objectSubtypes: [
+      "module",
+      "file",
+      "directory",
+      "repository",
+      "service",
+      "database",
+      "worker"
+    ]
+  },
+  defined_in: {
+    subject: ["code"],
+    object: ["code"],
+    objectSubtypes: [
+      "module",
+      "file",
+      "directory",
+      "repository",
+      "commit",
+      "release"
+    ]
+  }
 };
+var orList = (items) => items.length < 2 ? items[0] ?? "" : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
+var CONTEXT_ENTITY_TEXT = "a context_entity";
+function familiesText(families2) {
+  const entities = families2.filter((family) => family !== "principal_scope");
+  const parts = [
+    ...entities.length > 0 ? [
+      `${entities[0] === "engineering" ? "an" : "a"} ${orList(entities)} entity`
+    ] : [],
+    ...families2.includes("principal_scope") ? [CONTEXT_ENTITY_TEXT] : []
+  ];
+  return parts.join(" or ");
+}
+function roleHint(predicate) {
+  const role = PREDICATE_ROLES_V1[predicate];
+  if (role.object === "literal") return "object must be a literal";
+  const subject = role.subject === "any" ? "any subject" : familiesText(role.subject);
+  const object2 = role.sameFamily ? "of the same family" : `${familiesText(role.object)}${role.objectSubtypes === void 0 ? "" : ` of subtype ${orList(role.objectSubtypes)}`}`;
+  return `subject must be ${subject}; object ${object2}`;
+}
+var ROLE_HINTS = Object.fromEntries(
+  predicates.options.map((predicate) => [predicate, roleHint(predicate)])
+);
+var LITERAL_OBJECT_EXAMPLE = '{"literal":{"type":"string","value":"\u2026"},"qualifier":"snake_case_name"}';
+function entityExample(predicate) {
+  const role = PREDICATE_ROLES_V1[predicate];
+  const families2 = role.object === "literal" ? [] : role.object;
+  const family = families2.includes("engineering") ? "engineering" : "code";
+  const subtype = role.objectSubtypes?.[0] ?? (family === "engineering" ? "concept" : "module");
+  const context = families2.includes("principal_scope") || role.subject !== "any" && role.subject.includes("principal_scope");
+  return `declare it in entities, e.g. {"ref":"x1","family":"${family}","subtype":"${subtype}","name":"\u2026","identity":{"normalized_name":"\u2026"}}, and use {"entity_ref":"x1"}${context ? '; a context_entity is {"context_entity":"project"} (or tenant, caller)' : ""}`;
+}
+function assertionShapeRule(predicate, problem) {
+  if (!isPredicateV1(predicate)) return "object mismatch";
+  if (problem === "entity_object" || predicate === "has_property")
+    return `has_property takes a literal object, e.g. ${LITERAL_OBJECT_EXAMPLE}`;
+  const roles = `${predicate}: ${ROLE_HINTS[predicate]}; ${entityExample(predicate)}`;
+  return problem === "literal_object" ? `${roles}. Only has_property takes a literal object` : roles;
+}
 var utf8 = (s) => new TextEncoder().encode(s).length;
 var literal2 = external_exports.object({
   literal: external_exports.object({
@@ -15460,17 +15541,28 @@ var AssertionInputSchema = external_exports.object({
   if (ASSERTION_TYPE_BY_PREDICATE_V1[x.predicate] !== x.assertion_type)
     ctx.addIssue({
       code: "custom",
-      message: predicateTypeMismatchRule(x.predicate, x.assertion_type)
+      message: predicateTypeMismatchRule(x.predicate, x.assertion_type),
+      params: { rule: "predicate_type" }
     });
   if (x.predicate === "has_property" !== "literal" in x.object)
-    ctx.addIssue({ code: "custom", message: "object mismatch" });
+    ctx.addIssue({
+      code: "custom",
+      message: assertionShapeRule(
+        x.predicate,
+        "literal" in x.object ? "literal_object" : "entity_object"
+      ),
+      params: { rule: "object_kind" }
+    });
 });
+var emptyLocator = external_exports.object({}).strict().describe(
+  "locator takes no keys: send {} and name files in the summary or statement."
+);
 var EvidenceInputSchema = external_exports.discriminatedUnion("kind", [
   external_exports.object({
     ref,
     kind: external_exports.literal("user_attestation"),
     locator_version: external_exports.literal(1),
-    locator: external_exports.object({}).strict(),
+    locator: emptyLocator,
     summary: stored(1, 1e3)
   }).strict(),
   // schema_version 2: a save the coding agent decided on by itself (owner
@@ -15479,7 +15571,7 @@ var EvidenceInputSchema = external_exports.discriminatedUnion("kind", [
     ref,
     kind: external_exports.literal("agent_initiated"),
     locator_version: external_exports.literal(1),
-    locator: external_exports.object({}).strict(),
+    locator: emptyLocator,
     summary: stored(1, 1e3)
   }).strict(),
   external_exports.object({
@@ -15496,22 +15588,49 @@ var ProvenanceOriginV1Schema = external_exports.enum([
   "import",
   "system_reconciliation"
 ]);
+var PROVENANCE_ADAPTERS_V1 = [
+  "codex",
+  "claude_code",
+  "cursor",
+  "opencode"
+];
 var ProvenanceInputSchema = external_exports.object({
   ref,
   origin: ProvenanceOriginV1Schema,
-  adapter: external_exports.enum(["codex", "claude_code", "cursor", "opencode"]).optional(),
+  adapter: external_exports.enum(PROVENANCE_ADAPTERS_V1).optional(),
   source_id: opaque,
   // Only session-extraction provenance may carry these (policy-enforced).
   prompt_version: SessionCaptureVersionV1Schema.optional(),
   model_version: SessionCaptureVersionV1Schema.optional()
 }).strict();
 var validateCrossReferences = (value, ctx) => {
-  const unique = (items) => new Set(items.map((item) => item.ref)).size === items.length;
   const uniqueRefs = (refs) => new Set(refs).size === refs.length;
-  if (![value.entities, value.assertions, value.evidence, value.provenance].every(
-    unique
-  ))
-    ctx.addIssue({ code: "custom", message: "duplicate refs" });
+  const dangling = (path2, rule) => ctx.addIssue({
+    code: "custom",
+    path: path2,
+    message: rule,
+    params: { rule: "dangling_ref" }
+  });
+  for (const [list, items] of [
+    ["entities", value.entities],
+    ["assertions", value.assertions],
+    ["evidence", value.evidence],
+    ["provenance", value.provenance]
+  ]) {
+    const seen = /* @__PURE__ */ new Set();
+    const index = items.findIndex((item) => {
+      const repeated = seen.has(item.ref);
+      seen.add(item.ref);
+      return repeated;
+    });
+    if (index >= 0)
+      ctx.addIssue({
+        code: "custom",
+        path: [list, index, "ref"],
+        message: `duplicate ref: each ${list}[].ref must be unique`,
+        params: { rule: "duplicate_ref" }
+      });
+  }
   const entityByRef = new Map(
     value.entities.map((entity) => [entity.ref, entity])
   );
@@ -15563,51 +15682,69 @@ var validateCrossReferences = (value, ctx) => {
   const isEntityRef = (item) => "entity_ref" in item;
   const isKnownRef = (item) => !isEntityRef(item) || entityByRef.has(item.entity_ref);
   const allows = (actual, expected) => actual === void 0 || expected.includes(actual);
+  const refsRule = (path2, refs, declared, list) => {
+    if (!refs.every((x) => declared.has(x)))
+      dangling(path2, `must name ${list}[].ref values of this request`);
+    else if (!uniqueRefs(refs)) dangling(path2, "must not repeat a ref");
+  };
   for (const [index, assertion] of value.assertions.entries()) {
-    if (!assertion.evidence_refs.every((x) => evidence.has(x)) || !assertion.provenance_refs.every((x) => provenance.has(x)) || !uniqueRefs(assertion.evidence_refs) || !uniqueRefs(assertion.provenance_refs))
-      ctx.addIssue({ code: "custom", message: "dangling assertion reference" });
+    refsRule(
+      ["assertions", index, "evidence_refs"],
+      assertion.evidence_refs,
+      evidence,
+      "evidence"
+    );
+    refsRule(
+      ["assertions", index, "provenance_refs"],
+      assertion.provenance_refs,
+      provenance,
+      "provenance"
+    );
     const subject = familyOf(assertion.subject);
     const object2 = "literal" in assertion.object ? void 0 : familyOf(assertion.object);
     const objectSubtype = "literal" in assertion.object ? void 0 : subtypeOf(assertion.object);
-    const ce = allows(subject, ["code", "engineering"]);
-    const cp = allows(subject, ["code", "principal_scope"]);
-    const po = allows(subject, ["principal_scope"]);
-    const okay = assertion.predicate === "has_property" && "literal" in assertion.object || assertion.predicate === "uses" && !("literal" in assertion.object) && allows(subject, ["code", "engineering"]) && allows(object2, ["code", "engineering"]) || assertion.predicate === "depends_on" && ce && allows(object2, ["code", "engineering"]) || assertion.predicate === "implements" && allows(subject, ["code"]) && allows(object2, ["engineering"]) || assertion.predicate === "applies_to" && allows(subject, ["engineering", "principal_scope"]) && allows(object2, ["code", "principal_scope"]) || assertion.predicate === "part_of" && allows(subject, ["code", "engineering", "principal_scope"]) && (subject === void 0 || object2 === void 0 || object2 === subject) || ["requires", "forbids", "recommends"].includes(assertion.predicate) && cp && allows(object2, ["code", "engineering"]) || ["causes", "fixes", "avoids"].includes(assertion.predicate) && ce && allows(object2, ["engineering"]) && (objectSubtype === void 0 || ["incident", "error", "behavior"].includes(objectSubtype)) || assertion.predicate === "fails_because" && ce && allows(object2, ["code", "engineering"]) || ["prefers", "disfavors", "owns", "maintains"].includes(
-      assertion.predicate
-    ) && po && allows(object2, ["code", "engineering"]) || assertion.predicate === "located_in" && allows(subject, ["code"]) && allows(object2, ["code"]) && (objectSubtype === void 0 || [
-      "repository",
-      "module",
-      "directory",
-      "file",
-      "service",
-      "database",
-      "worker"
-    ].includes(objectSubtype)) || assertion.predicate === "defined_in" && allows(subject, ["code"]) && allows(object2, ["code"]) && (objectSubtype === void 0 || [
-      "repository",
-      "module",
-      "directory",
-      "file",
-      "commit",
-      "release"
-    ].includes(objectSubtype));
-    if (!okay || !isKnownRef(assertion.subject) || !("literal" in assertion.object) && !isKnownRef(assertion.object))
+    const role = PREDICATE_ROLES_V1[assertion.predicate];
+    const okay = role.object === "literal" ? "literal" in assertion.object : (role.subject === "any" || allows(subject, role.subject)) && (role.sameFamily ? subject === void 0 || object2 === void 0 || object2 === subject : allows(object2, role.object)) && (role.objectSubtypes === void 0 || objectSubtype === void 0 || role.objectSubtypes.includes(objectSubtype));
+    const objectKindWrong = assertion.predicate === "has_property" !== "literal" in assertion.object;
+    if (!objectKindWrong && (!okay || !isKnownRef(assertion.subject) || !("literal" in assertion.object) && !isKnownRef(assertion.object)))
       ctx.addIssue({
         code: "custom",
         path: ["assertions", index],
-        message: `${assertion.predicate}: ${ROLE_HINTS[assertion.predicate] ?? "invalid roles"}; entity_ref values must name entities declared in entities`
+        message: assertionShapeRule(assertion.predicate, "roles"),
+        params: { rule: "roles" }
       });
   }
-  for (const relation of value.assertion_relations)
-    if (!assertions.has(relation.source.assertion_ref) || !relation.evidence_refs.every((x) => evidence.has(x)) || !uniqueRefs(relation.evidence_refs) || "assertion_ref" in relation.target && !assertions.has(relation.target.assertion_ref))
-      ctx.addIssue({ code: "custom", message: "dangling relation reference" });
-  if (!value.memory.provenance_refs.every((x) => provenance.has(x)) || !uniqueRefs(value.memory.provenance_refs))
-    ctx.addIssue({ code: "custom", message: "dangling memory provenance" });
-  for (const relation of value.memory_relations)
-    if (!relation.evidence_refs.every((x) => evidence.has(x)) || !uniqueRefs(relation.evidence_refs))
-      ctx.addIssue({
-        code: "custom",
-        message: "dangling memory relation evidence"
-      });
+  for (const [index, relation] of value.assertion_relations.entries()) {
+    if (!assertions.has(relation.source.assertion_ref))
+      dangling(
+        ["assertion_relations", index, "source", "assertion_ref"],
+        "must name an assertions[].ref of this request"
+      );
+    if ("assertion_ref" in relation.target && !assertions.has(relation.target.assertion_ref))
+      dangling(
+        ["assertion_relations", index, "target", "assertion_ref"],
+        "must name an assertions[].ref of this request"
+      );
+    refsRule(
+      ["assertion_relations", index, "evidence_refs"],
+      relation.evidence_refs,
+      evidence,
+      "evidence"
+    );
+  }
+  refsRule(
+    ["memory", "provenance_refs"],
+    value.memory.provenance_refs,
+    provenance,
+    "provenance"
+  );
+  for (const [index, relation] of value.memory_relations.entries())
+    refsRule(
+      ["memory_relations", index, "evidence_refs"],
+      relation.evidence_refs,
+      evidence,
+      "evidence"
+    );
   for (const issue2 of sessionCapturePolicyIssues(value))
     ctx.addIssue({
       code: "custom",
@@ -20324,7 +20461,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.13.0"}`
+        `memroot-capture/${"0.13.1"}`
       ),
       salt,
       redactor: createRedactor(salt),

@@ -1,6 +1,6 @@
 {
   "name": "memroot",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Connect Memroot so Codex retrieves and saves engineering knowledge on its own, with session capture on by default after setup shows its disclosure.",
   "author": {
     "name": "Memroot"
