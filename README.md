@@ -4,11 +4,9 @@
 
 Persistent engineering memory for Claude Code, Codex and Grok. Keep project decisions, conventions, root causes and lessons available across coding sessions and agents.
 
-This is Memroot's official **plugin distribution repository**. It contains the built plugins from the published `memroot` npm package, three native marketplace catalogs, and the tooling that verifies and publishes them. The application source is maintained separately. Memroot is currently in alpha.
+This is Memroot's official **plugin distribution repository**. It contains the built plugins from the published `memroot` npm package, three native marketplace catalogs, and the tooling that verifies and publishes them. The application source is maintained separately.
 
 ## Quick start
-
-Remote-marketplace setup requires **Memroot 0.1.0-alpha.8 or later**. Earlier releases install a local plugin copy. If npm still serves an earlier release, use the native installation commands below until the new release is available.
 
 Install Node.js 22 or later, Git, and your preferred agent CLI on macOS or Linux, then run:
 
@@ -38,9 +36,9 @@ An existing disabled plugin or explicit update opt-out stays disabled. A conflic
 ## What the plugin adds
 
 - **Recall:** guidance to retrieve relevant project memory before substantive work.
-- **Saves you control:** guidance to save a lesson when you request it or accept the agent's offer.
+- **Automatic saves:** the agent saves durable lessons to Memroot and tells you in one line (shown as "Agent save"). Memories are archived, not hard-deleted.
 - **Status:** a skill for inspecting the connection and capture state.
-- **Optional session capture:** hooks for session ends and compaction, with a bundled local worker.
+- **Session capture:** on by default after a disclosure at setup or update; hooks for session ends and compaction, with a bundled local worker.
 
 The plugin and the MCP connection serve different purposes: installing a plugin alone does not authorize access to your memories. After connecting, ask your agent to check Memroot `connection_status`, save a small test memory, and retrieve it in a fresh session.
 
@@ -89,11 +87,11 @@ codex plugin marketplace upgrade memroot --json
 grok plugin update memroot
 ```
 
-The agent application's own update setting and its plugin update settings are separate. Updates do not enable capture, override a disabled plugin, or grant MCP authorization. Restart the agent when its plugin manager asks you to.
+The agent application's own update setting and its plugin update settings are separate. Updates do not override a disabled plugin or grant MCP authorization. Restart the agent when its plugin manager asks you to.
 
-## Session capture is opt-in
+## Session capture
 
-Installing or updating a plugin is not consent to capture. To read the disclosure and enable it:
+Setup and update show a disclosure and turn capture on by default. To opt out, or to inspect or re-enable it:
 
 ```sh
 npx memroot@latest capture on
@@ -101,7 +99,7 @@ npx memroot@latest capture status
 npx memroot@latest capture off
 ```
 
-Capture runs after session ends and, with the compaction agreement, after a session is compacted. A local worker redacts the transcript, runs your agent CLI without tools to extract typed memories, and uploads those memories with limited evidence. Raw transcripts are not uploaded. Extraction uses your agent quota and sends the redacted excerpt to that agent's model provider. See the [npm README](https://www.npmjs.com/package/memroot) for the full disclosure, limits and current verification status, and the [privacy notice](https://memroot.dev/privacy).
+Capture runs after session ends and after a session is compacted. A local worker redacts the transcript, runs your agent CLI without tools to extract typed memories, and uploads those memories with limited evidence. Raw transcripts are not uploaded. Extraction uses your agent quota and sends the redacted excerpt to that agent's model provider. See the [npm README](https://www.npmjs.com/package/memroot) for the full disclosure, limits and verification status, and the [privacy notice](https://memroot.dev/privacy).
 
 ## Release integrity and repository layout
 
