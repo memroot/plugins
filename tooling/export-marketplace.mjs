@@ -19,6 +19,7 @@ import { parseArgs } from "node:util";
 const MAX_ARCHIVE = 10 * 1024 * 1024;
 const MAX_CONTENT = 25 * 1024 * 1024;
 const agents = ["claude", "codex", "grok"];
+const optionalAgents = ["agy"];
 const json = (value) => `${JSON.stringify(value, null, 2)}\n`;
 const digest = (bytes) =>
   `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
@@ -124,12 +125,18 @@ const pluginFiles = (agent, version) => {
   // gate): Claude Code and Codex from 0.9.0; Grok never ships it.
   const recallCheck =
     agent !== "grok" && (major > 0n || (major === 0n && minor >= 9n));
+  const manifestPath =
+    agent === "codex"
+      ? ".codex-plugin/plugin.json"
+      : agent === "agy"
+        ? "plugin.json"
+        : ".claude-plugin/plugin.json";
   return [
-    `${agent === "codex" ? ".codex-plugin" : ".claude-plugin"}/plugin.json`,
+    manifestPath,
     "README.md",
     "LICENSE",
     "THIRD-PARTY-NOTICES.txt",
-    "hooks/hooks.json",
+    agent === "agy" ? "hooks.json" : "hooks/hooks.json",
     "skills/memroot-memory/SKILL.md",
     "skills/memroot-memory/references/save.md",
     "skills/memroot-status/SKILL.md",
@@ -218,8 +225,14 @@ export async function exportTarball({
     )
       throw new Error("Unsafe archive path");
   }
+  const activeAgents = [
+    ...agents,
+    ...optionalAgents.filter((agent) =>
+      names.some((path) => path.startsWith(`package/dist/plugins/${agent}/`)),
+    ),
+  ];
   const expected = new Map(
-    agents.flatMap((agent) =>
+    activeAgents.flatMap((agent) =>
       pluginFiles(agent, version).map((path) => [
         `package/dist/plugins/${agent}/${path}`,
         `plugins/${agent}/${path}`,
@@ -263,7 +276,7 @@ export async function exportTarball({
   const files = new Map([["LICENSE", extract("package/LICENSE")]]);
   for (const [source, destination] of expected)
     files.set(destination, extract(source));
-  for (const agent of agents) {
+  for (const agent of activeAgents) {
     const prefix = `plugins/${agent}/`;
     const manifest = JSON.parse(
       files.get(`${prefix}${pluginFiles(agent, version)[0]}`),
@@ -281,8 +294,13 @@ export async function exportTarball({
       .toString("utf8");
     if (!notices.includes("MIT") || !notices.includes("Copyright"))
       throw new Error("Missing third-party license notices");
-    const hooks = JSON.parse(files.get(`${prefix}hooks/hooks.json`));
-    if (!hooks.hooks?.SessionEnd || !hooks.hooks?.PostCompact)
+    const hooksPath = `${prefix}${agent === "agy" ? "hooks.json" : "hooks/hooks.json"}`;
+    const hooks = JSON.parse(files.get(hooksPath));
+    if (
+      agent === "agy"
+        ? !hooks.memroot?.Stop && !hooks.hooks?.SessionEnd
+        : !hooks.hooks?.SessionEnd || !hooks.hooks?.PostCompact
+    )
       throw new Error("Missing capture hook events");
     for (const [path, bytes] of files)
       if (

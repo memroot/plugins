@@ -73,6 +73,14 @@ grok plugin install memroot@memroot/plugins --trust
 
 `--trust` authorizes the plugin to run its hooks. Review the plugin before installing it.
 
+### Google Antigravity (`agy`)
+
+```sh
+node tooling/agy/setup-agy.mjs
+```
+
+Installs the Memroot stdio MCP bridge (`~/.gemini/config/mcp_config.json`), lifecycle hook adapter (`~/.gemini/config/hooks.json`), global rule (`~/.gemini/config/GEMINI.md`), and skills (`~/.gemini/config/skills/`). Restart `agy` after running setup.
+
 ## Updates
 
 All three agents now fetch from this Git repository instead of a version-specific local npm directory. Running `npx memroot@latest setup` migrates older local installations. Use the native update commands below to refresh an existing remote installation immediately.
@@ -113,6 +121,7 @@ Capture runs after session ends and, with the compaction agreement, after a sess
 | `plugins/` | Built plugin scripts, skills, manifests, licenses and notices |
 | `release.json` | Published npm version, package SHA-512 integrity, and exported file hashes |
 | `tooling/export-marketplace.mjs` | Bounded npm verification and export tooling |
+| `tooling/agy/` | Google Antigravity (`agy`) MCP bridge, lifecycle hook adapter, and setup script |
 
 Maintainers first publish a reviewed npm release, then dispatch **Sync verified npm plugins** with that exact version and its SHA-512 integrity. The workflow verifies the public package before updating all three catalogs in one commit. It rejects mismatched versions, changed integrity, downgrades, links and unexpected plugin files. It never builds or checks out the application source, and it never executes package scripts. Repeating the same release is safe.
 
