@@ -444,7 +444,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.14.0"} project`;
+  return `npx -y memroot@${"0.14.1"} project`;
 }
 
 // src/plugin/project-guard.ts
