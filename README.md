@@ -112,7 +112,7 @@ Capture runs after session ends and after a session is compacted. A local worker
 | `release.json` | Published npm version, package SHA-512 integrity, and exported file hashes |
 | `tooling/export-marketplace.mjs` | Bounded npm verification and export tooling |
 
-Maintainers first publish a reviewed npm release, then dispatch **Sync verified npm plugins** with that exact version and its SHA-512 integrity. The workflow verifies the public package before updating all three catalogs in one commit. It rejects mismatched versions, changed integrity, downgrades, links and unexpected plugin files. It never builds or checks out the application source, and it never executes package scripts. Repeating the same release is safe.
+Each reviewed npm release reaches this repository automatically: **Sync verified npm plugins** runs every 10 minutes, reads the npm `latest` version and its SHA-512 integrity, and publishes it when it is new. Maintainers can also run it by hand with an exact version and integrity. The workflow verifies the public package before updating all three catalogs in one commit. It rejects mismatched versions, changed integrity, downgrades, links and unexpected plugin files. It never builds or checks out the application source, and it never executes package scripts. Repeating the same release is safe.
 
 Do not edit generated plugin files here; fixes must be published in the npm package first. Documentation and distribution-tooling changes are reviewed separately. Publishing a package does not itself confirm that every agent integration works end to end.
 

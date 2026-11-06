@@ -1,4 +1,8 @@
 # Reviewed template, copied into the PUBLIC distribution repository only.
+# A schedule pulls the npm `latest` release (version and SHA-512 integrity read from the registry);
+# a dispatch syncs the exact version and integrity it names. Both run the same exporter checks.
+# GitHub disables scheduled workflows in a public repository after 60 days without repository
+# activity; the private release workflow fails with the fix when sync.yml is not active.
 name: Sync verified npm plugins
 on:
   workflow_dispatch:
@@ -11,16 +15,101 @@ on:
         description: "SHA-512 integrity from the successful npm release"
         required: true
         type: string
-permissions:
-  contents: write
+  schedule:
+    # Every 10 minutes, off the top of the hour, when GitHub delays scheduled runs most.
+    - cron: "7,17,27,37,47,57 * * * *"
+permissions: {}
 concurrency:
   group: memroot-marketplace
   cancel-in-progress: false
 jobs:
+  check:
+    # A schedule event has no repository payload, so visibility is also read at run time below.
+    if: >-
+      github.repository == 'memroot/plugins' && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'schedule' || github.event.repository.private == false)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    outputs:
+      sync: ${{ steps.decide.outputs.sync }}
+      version: ${{ steps.decide.outputs.version }}
+      integrity: ${{ steps.decide.outputs.integrity }}
+    steps:
+      - name: Check out current public distribution
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Use pinned Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Decide whether a release must be published
+        id: decide
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_INTEGRITY: ${{ inputs.integrity }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync, readFileSync } from 'node:fs';
+          import { validateRelease } from './tooling/export-marketplace.mjs';
+          const read = async (url, headers) => {
+            const response = await fetch(url, { headers, cache: 'no-store', signal: AbortSignal.timeout(15000) });
+            if (!response.ok) throw new Error(`HTTP ${response.status} from ${new URL(url).host}`);
+            return response.json();
+          };
+          const scheduled = process.env.EVENT_NAME === 'schedule';
+          // A scheduled run that cannot proceed ends without change and warns; the next run retries.
+          const skip = (reason) => {
+            console.log(`::warning::${reason}; nothing published.`);
+            appendFileSync(process.env.GITHUB_OUTPUT, 'sync=false\n');
+            process.exit(0);
+          };
+          let repository;
+          try {
+            repository = await read(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}`, { accept: 'application/vnd.github+json', authorization: `Bearer ${process.env.GH_TOKEN}`, 'x-github-api-version': '2022-11-28' });
+          } catch (error) {
+            if (scheduled) skip(`repository read failed (${error?.message ?? 'error'})`);
+            throw error;
+          }
+          if (repository.private !== false) throw new Error('Refusing to publish from a repository that is not public');
+          let version = process.env.INPUT_VERSION;
+          let integrity = process.env.INPUT_INTEGRITY;
+          if (scheduled) {
+            try {
+              const pack = await read('https://registry.npmjs.org/memroot', { accept: 'application/vnd.npm.install-v1+json' });
+              version = pack['dist-tags']?.latest;
+              integrity = pack.versions?.[version]?.dist?.integrity;
+            } catch (error) {
+              skip(`npm registry read failed (${error?.message ?? 'error'})`);
+            }
+          }
+          const current = JSON.parse(readFileSync('release.json', 'utf8'));
+          // Same version rule, integrity format, downgrade and changed-integrity refusals as the export.
+          // Only a schedule tolerates an npm latest older than this release; a dispatch still refuses it.
+          try {
+            validateRelease(version, integrity, current);
+          } catch (error) {
+            if (scheduled && error?.message === 'Refusing marketplace downgrade') skip(`npm latest ${version} is older than the published ${current.version}`);
+            throw error;
+          }
+          const sync = !(current.version === version && current.integrity === integrity);
+          console.log(sync ? `Publishing memroot@${version}.` : `memroot@${version} is already published here; nothing to do.`);
+          appendFileSync(process.env.GITHUB_OUTPUT, `sync=${sync}\nversion=${version}\nintegrity=${integrity}\n`);
+          JS
+
   sync:
-    if: github.repository == 'memroot/plugins' && github.event.repository.private == false && github.ref == 'refs/heads/main'
+    needs: check
+    if: needs.check.outputs.sync == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: write
     steps:
       - name: Check out current public distribution
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -35,13 +124,13 @@ jobs:
         run: npm install --global --ignore-scripts --no-audit --no-fund npm@12.2.0
       - name: Verify exact public bytes and stage all three catalogs
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
-          RELEASE_INTEGRITY: ${{ inputs.integrity }}
+          RELEASE_VERSION: ${{ needs.check.outputs.version }}
+          RELEASE_INTEGRITY: ${{ needs.check.outputs.integrity }}
         run: |
           node tooling/export-marketplace.mjs --version "$RELEASE_VERSION" --integrity "$RELEASE_INTEGRITY" --current release.json --output "$RUNNER_TEMP/marketplace-next"
       - name: Publish one atomic Git update
         env:
-          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_VERSION: ${{ needs.check.outputs.version }}
         run: |
           git rm -r --ignore-unmatch -- plugins .claude-plugin .agents .grok-plugin
           cp -R "$RUNNER_TEMP/marketplace-next/." .
