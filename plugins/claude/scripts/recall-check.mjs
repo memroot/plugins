@@ -1,26 +1,9 @@
 #!/usr/bin/env node
 
 // src/capture/hooks/recall-check.ts
-import { realpathSync as realpathSync2 } from "node:fs";
+import { realpathSync as realpathSync3 } from "node:fs";
 import { homedir as homedir5, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute5 } from "node:path";
-
-// src/project-selection.ts
-import { randomBytes as randomBytes2, randomUUID } from "node:crypto";
-import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
-  writeSync
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+import { isAbsolute as isAbsolute6 } from "node:path";
 
 // src/api-base.ts
 function isLoopbackHostname(hostname) {
@@ -36,6 +19,19 @@ function isAllowedApiBase(value) {
     return false;
   }
 }
+
+// src/project-folders.ts
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+import {
+  basename,
+  dirname as dirname3,
+  isAbsolute as isAbsolute2,
+  join as join4,
+  normalize as normalize2,
+  relative,
+  resolve,
+  sep
+} from "node:path";
 
 // src/capture/paths.ts
 import { randomBytes } from "node:crypto";
@@ -164,36 +160,32 @@ function listFiles(path) {
   }
 }
 
-// src/project-selection.ts
-var PROJECT_SELECTION_FILE = "project-selection.json";
-var MAX_FILE_BYTES = 256 * 1024;
-var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
-var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectSelectionPath() {
-  return join2(memrootConfigDir(), PROJECT_SELECTION_FILE);
-}
-function normalizeApiBase(apiBase) {
-  try {
-    const url = new URL(apiBase);
-    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return apiBase.replace(/\/+$/, "");
-  }
-}
-function selectionKey(apiBase, principalId) {
-  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
-}
+// src/config-store.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join2 } from "node:path";
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function withLock(update) {
+function withConfigLock(fileName2, update) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const lock = `${projectSelectionPath()}.lock`;
+  const lock = `${join2(directory, fileName2)}.lock`;
   const nonce = randomBytes2(8).toString("hex");
   const owner = join2(lock, "owner");
   let held = false;
@@ -223,14 +215,14 @@ function withLock(update) {
       }
   }
 }
-function persist(store) {
+function persistConfigJson(fileName2, value) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const path = projectSelectionPath();
+  const path = join2(directory, fileName2);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
-      if (name.startsWith(`${PROJECT_SELECTION_FILE}.`) && name.endsWith(".tmp"))
+      if (name.startsWith(`${fileName2}.`) && name.endsWith(".tmp"))
         try {
           if (now - lstatSync2(join2(directory, name)).mtimeMs > TMP_STALE_MS)
             rmSync2(join2(directory, name), { force: true });
@@ -243,11 +235,8 @@ function persist(store) {
     const fd = openSync2(temporary, "wx", 384);
     try {
       fchmodSync(fd, 384);
-      writeSync(
-        fd,
-        `${JSON.stringify({ schemaVersion: 1, selections: store }, null, 2)}
-`
-      );
+      writeSync(fd, `${JSON.stringify(value, null, 2)}
+`);
       fsyncSync(fd);
     } finally {
       closeSync2(fd);
@@ -264,6 +253,39 @@ function persist(store) {
   } finally {
     rmSync2(temporary, { force: true });
   }
+}
+
+// src/project-selection.ts
+import { randomUUID } from "node:crypto";
+import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
+import { join as join3 } from "node:path";
+var PROJECT_SELECTION_FILE = "project-selection.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 64;
+var PRODUCTION_API_BASE = "https://api.memroot.dev";
+var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectSelectionPath() {
+  return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
+}
+function normalizeApiBase(apiBase) {
+  try {
+    const url = new URL(apiBase);
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return apiBase.replace(/\/+$/, "");
+  }
+}
+function selectionKey(apiBase, principalId) {
+  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
+}
+function withLock(update) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update);
+}
+function persist(store) {
+  persistConfigJson(PROJECT_SELECTION_FILE, {
+    schemaVersion: 1,
+    selections: store
+  });
 }
 function valid(value) {
   const v = value;
@@ -297,9 +319,9 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join2(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join3(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
-    lstatSync2(legacy);
+    lstatSync3(legacy);
   } catch {
     return false;
   }
@@ -343,7 +365,7 @@ function migrateLegacyDefaults() {
       } catch {
       }
       if (adopted > 0) persist(store);
-      renameSync2(legacy, `${legacy}.migrated`);
+      renameSync3(legacy, `${legacy}.migrated`);
       return true;
     });
   } catch {
@@ -380,7 +402,7 @@ function offlineIdentity() {
   let userId;
   try {
     const raw = readPrivateFileIfExists(
-      join2(memrootConfigDir(), "config.json"),
+      join3(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw !== void 0) {
@@ -397,11 +419,166 @@ function offlineIdentity() {
   apiBase = normalizeApiBase(process.env.MEMROOT_API_BASE ?? apiBase);
   return userId ? { apiBase, userId } : { apiBase };
 }
-function currentSelection(apiBase) {
+
+// src/project-folders.ts
+var PROJECT_FOLDERS_FILE = "project-folders.json";
+var MAX_BINDINGS = 256;
+var MAX_FILE_BYTES2 = 512 * 1024;
+var MAX_PATH = 4096;
+var MAX_WALK = 128;
+var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectFoldersPath() {
+  return join4(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+}
+var FOLD_CASE = process.platform === "win32";
+function folderContains(folder, path, options) {
+  const a = options.foldCase ? folder.toLowerCase() : folder;
+  const b = options.foldCase ? path.toLowerCase() : path;
+  if (a === b) return true;
+  const prefix = a.endsWith(options.separator) ? a : `${a}${options.separator}`;
+  return b.startsWith(prefix);
+}
+function deepestBinding(bindings, candidates, options) {
+  let best;
+  for (const binding of bindings)
+    if (candidates.some(
+      (path) => folderContains(binding.folder, path, options)
+    ) && (!best || binding.folder.length > best.folder.length))
+      best = binding;
+  return best;
+}
+var match = { foldCase: FOLD_CASE, separator: sep };
+function usableFolder(value) {
+  return typeof value === "string" && isAbsolute2(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+}
+function canonicalFolder(path) {
+  const absolute2 = normalize2(resolve(path));
+  let head = absolute2;
+  for (let i = 0; i < MAX_WALK; i++) {
+    try {
+      const real = realpathSync.native(head);
+      const rest = relative(head, absolute2);
+      return rest ? join4(real, rest) : real;
+    } catch {
+      const parent = dirname3(head);
+      if (parent === head) break;
+      head = parent;
+    }
+  }
+  return absolute2;
+}
+function smallFile(path) {
+  try {
+    const info = lstatSync4(path);
+    if (!info.isFile() || info.size > 4096) return void 0;
+    return readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function mainCheckoutPath(path) {
+  let dir = path;
+  for (let i = 0; i < MAX_WALK; i++) {
+    const dotGit = join4(dir, ".git");
+    let info;
+    try {
+      info = lstatSync4(dotGit);
+    } catch {
+      info = void 0;
+    }
+    if (info) {
+      if (!info.isFile()) return void 0;
+      const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(
+        smallFile(dotGit) ?? ""
+      );
+      if (!pointer?.[1]) return void 0;
+      const gitdir = resolve(dir, pointer[1]);
+      if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
+      const back = smallFile(join4(gitdir, "gitdir"))?.trim();
+      if (!back) return void 0;
+      try {
+        if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+          return void 0;
+      } catch {
+        return void 0;
+      }
+      const common = smallFile(join4(gitdir, "commondir"))?.trim();
+      if (!common) return void 0;
+      let commonDir;
+      try {
+        commonDir = realpathSync.native(resolve(gitdir, common));
+      } catch {
+        return void 0;
+      }
+      if (basename(commonDir) !== ".git") return void 0;
+      const rest = relative(dir, path);
+      return rest ? join4(dirname3(commonDir), rest) : dirname3(commonDir);
+    }
+    const parent = dirname3(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+  return void 0;
+}
+function validBinding(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+}
+function validKey(key) {
+  const at = key.lastIndexOf("|");
+  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
+}
+function readStore2() {
+  try {
+    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
+      return {};
+    const out = {};
+    for (const [key, list] of Object.entries(
+      value.bindings
+    ))
+      if (validKey(key) && Array.isArray(list))
+        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    return out;
+  } catch {
+    return {};
+  }
+}
+function readBindings(apiBase, principalId) {
+  if (!principalId) return [];
+  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+}
+function bindingFor(apiBase, principalId, cwd) {
+  const bindings = readBindings(apiBase, principalId);
+  if (bindings.length === 0) return void 0;
+  const real = canonicalFolder(cwd);
+  const main2 = mainCheckoutPath(real);
+  return deepestBinding(bindings, main2 ? [real, main2] : [real], match);
+}
+
+// src/project-scope.ts
+function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
-  if (!isAllowedApiBase(base)) return void 0;
-  return readSelection(base, identity.userId);
+  if (!isAllowedApiBase(base) || !identity.userId) return void 0;
+  const folder = usableFolder(cwd);
+  const binding = folder ? bindingFor(base, identity.userId, folder) : void 0;
+  if (binding)
+    return {
+      scope: "folder",
+      apiBase: normalizeApiBase(base),
+      principalId: identity.userId.toLowerCase(),
+      tenantId: binding.tenantId,
+      projectId: binding.projectId,
+      name: binding.name,
+      selectionId: binding.bindingId,
+      folder: binding.folder,
+      ...binding.stale ? { stale: true } : {}
+    };
+  const selection = readSelection(base, identity.userId);
+  return selection ? { scope: "computer", ...selection } : void 0;
 }
 
 // src/capture/hooks/claude-memory-dirs.ts
@@ -410,18 +587,18 @@ import {
   constants as constants2,
   fstatSync as fstatSync2,
   openSync as openSync3,
-  readFileSync as readFileSync3
+  readFileSync as readFileSync4
 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute2, join as join3, relative, resolve } from "node:path";
+import { isAbsolute as isAbsolute3, join as join5, relative as relative2, resolve as resolve2 } from "node:path";
 var MAX_SETTINGS_BYTES = 256 * 1024;
 function claudeConfigDir() {
   const value = process.env.CLAUDE_CONFIG_DIR;
-  return value && isAbsolute2(value) ? resolve(value) : join3(homedir2(), ".claude");
+  return value && isAbsolute3(value) ? resolve2(value) : join5(homedir2(), ".claude");
 }
 function insideDirectory(path, directory) {
-  const inside = relative(directory, path);
-  return !inside.startsWith("..") && !isAbsolute2(inside);
+  const inside = relative2(directory, path);
+  return !inside.startsWith("..") && !isAbsolute3(inside);
 }
 function readSettings(path) {
   let fd;
@@ -429,7 +606,7 @@ function readSettings(path) {
     fd = openSync3(path, constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0));
     const info = fstatSync2(fd);
     if (!info.isFile() || info.size > MAX_SETTINGS_BYTES) return void 0;
-    return readFileSync3(fd, "utf8");
+    return readFileSync4(fd, "utf8");
   } catch {
     return void 0;
   } finally {
@@ -447,8 +624,8 @@ function autoMemoryDirectory(path) {
   }
   if (typeof value !== "string" || !value || value.includes("\0"))
     return void 0;
-  if (value.startsWith("~/")) return resolve(homedir2(), value.slice(2));
-  return isAbsolute2(value) ? resolve(value) : void 0;
+  if (value.startsWith("~/")) return resolve2(homedir2(), value.slice(2));
+  return isAbsolute3(value) ? resolve2(value) : void 0;
 }
 function policySettings() {
   if (process.platform === "darwin")
@@ -460,20 +637,20 @@ function policySettings() {
 var cached;
 function configuredMemoryDirectories(cwd) {
   if (cached && cached.cwd === cwd) return cached.directories;
-  const files = [join3(claudeConfigDir(), "settings.json"), ...policySettings()];
-  if (cwd && isAbsolute2(cwd))
+  const files = [join5(claudeConfigDir(), "settings.json"), ...policySettings()];
+  if (cwd && isAbsolute3(cwd))
     files.push(
-      join3(cwd, ".claude", "settings.json"),
-      join3(cwd, ".claude", "settings.local.json")
+      join5(cwd, ".claude", "settings.json"),
+      join5(cwd, ".claude", "settings.local.json")
     );
   const directories = files.map(autoMemoryDirectory).filter((value) => value !== void 0);
   cached = { cwd, directories };
   return directories;
 }
 function claudeConfiguredMemoryWrite(path, cwd) {
-  const projects = join3(claudeConfigDir(), "projects");
+  const projects = join5(claudeConfigDir(), "projects");
   if (insideDirectory(path, projects)) {
-    const parts = relative(projects, path).toLowerCase().split(/[\\/]+/);
+    const parts = relative2(projects, path).toLowerCase().split(/[\\/]+/);
     for (let j = 1; j + 1 < parts.length; j++)
       if (parts[j] === "memory") return true;
   }
@@ -484,16 +661,16 @@ function claudeConfiguredMemoryWrite(path, cwd) {
 
 // src/capture/hooks/codex-memory-dirs.ts
 import { homedir as homedir3 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join4, relative as relative2, resolve as resolve2 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join6, relative as relative3, resolve as resolve3 } from "node:path";
 function codexHome() {
   const value = process.env.CODEX_HOME;
-  return resolve2(
-    value && isAbsolute3(value) ? value : join4(homedir3(), ".codex")
+  return resolve3(
+    value && isAbsolute4(value) ? value : join6(homedir3(), ".codex")
   );
 }
 function codexHomeMemoryWrite(path) {
-  const inside = relative2(codexHome(), path);
-  if (!inside || inside.startsWith("..") || isAbsolute3(inside)) return false;
+  const inside = relative3(codexHome(), path);
+  if (!inside || inside.startsWith("..") || isAbsolute4(inside)) return false;
   const parts = inside.toLowerCase().split(/[\\/]+/).filter(Boolean);
   if (parts.length === 1 && (parts[0] === "agents.md" || parts[0] === "agents.override.md"))
     return true;
@@ -506,7 +683,7 @@ var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
 var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
 var STDIN_DEADLINE_MS = 500;
 function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve3) => {
+  return new Promise((resolve4) => {
     let bytes = 0;
     let chunks = [];
     let settled = false;
@@ -519,7 +696,7 @@ function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
       if (bytes > maxBytes) process.stdin.on("data", () => {
       });
       else process.stdin.destroy();
-      resolve3(value);
+      resolve4(value);
     };
     const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
     process.stdin.on("error", () => finish(void 0));
@@ -549,9 +726,9 @@ function hookSessionId(record2) {
 }
 
 // src/capture/hooks/guards.ts
-import { realpathSync } from "node:fs";
+import { realpathSync as realpathSync2 } from "node:fs";
 import { homedir as homedir4 } from "node:os";
-import { isAbsolute as isAbsolute4, join as join5, normalize as normalize2 } from "node:path";
+import { isAbsolute as isAbsolute5, join as join7, normalize as normalize3 } from "node:path";
 function inertProcess() {
   if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
   if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
@@ -565,32 +742,32 @@ function hostAgent(bundled) {
 }
 function absoluteEnv2(name) {
   const value = process.env[name];
-  return value && isAbsolute4(value) ? normalize2(value) : void 0;
+  return value && isAbsolute5(value) ? normalize3(value) : void 0;
 }
 function transcriptRoots(agent2) {
   if (agent2 === "claude")
     return [
-      join5(
-        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join5(homedir4(), ".claude"),
+      join7(
+        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join7(homedir4(), ".claude"),
         "projects"
       )
     ];
   if (agent2 === "codex") {
-    const home = absoluteEnv2("CODEX_HOME") ?? join5(homedir4(), ".codex");
-    return [join5(home, "sessions"), join5(home, "archived_sessions")];
+    const home = absoluteEnv2("CODEX_HOME") ?? join7(homedir4(), ".codex");
+    return [join7(home, "sessions"), join7(home, "archived_sessions")];
   }
   return [
-    join5(absoluteEnv2("GROK_HOME") ?? join5(homedir4(), ".grok"), "sessions")
+    join7(absoluteEnv2("GROK_HOME") ?? join7(homedir4(), ".grok"), "sessions")
   ];
 }
 function transcriptPathAllowed(agent2, path) {
-  if (!isAbsolute4(path) || path.length > 4096 || path.includes("\0") || path.split("/").includes("..") || normalize2(path) !== path)
+  if (!isAbsolute5(path) || path.length > 4096 || path.includes("\0") || path.split("/").includes("..") || normalize3(path) !== path)
     return false;
   if (agent2 !== "grok" && !path.endsWith(".jsonl")) return false;
   return transcriptRoots(agent2).some((root) => {
     if (path.startsWith(`${root}/`)) return true;
     try {
-      return path.startsWith(`${realpathSync(root)}/`);
+      return path.startsWith(`${realpathSync2(root)}/`);
     } catch {
       return false;
     }
@@ -598,18 +775,18 @@ function transcriptPathAllowed(agent2, path) {
 }
 
 // src/capture/hooks/markers.ts
-import { lstatSync as lstatSync3 } from "node:fs";
-import { join as join7 } from "node:path";
+import { lstatSync as lstatSync5 } from "node:fs";
+import { join as join9 } from "node:path";
 
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join6 } from "node:path";
+import { join as join8 } from "node:path";
 var HEX64 = /^[a-f0-9]{64}$/;
 function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path = join6(stateSubdir(), "salt");
+  const path = join8(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -633,8 +810,8 @@ function cleanup(directory, keep, pattern) {
   for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
     if (name === keep || !pattern.test(name)) continue;
     try {
-      const path = join7(directory, name);
-      const info = lstatSync3(path);
+      const path = join9(directory, name);
+      const info = lstatSync5(path);
       if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
     } catch {
     }
@@ -646,7 +823,7 @@ function markerName(agent2, sessionId) {
 function claimSessionMarker(subdir, agent2, sessionId) {
   const directory = stateSubdir(subdir);
   const name = markerName(agent2, sessionId);
-  if (!createPrivateFileExclusive(join7(directory, name), "")) return false;
+  if (!createPrivateFileExclusive(join9(directory, name), "")) return false;
   try {
     cleanup(directory, name, new RegExp(`^${agent2}-[a-f0-9]{32}$`));
   } catch {
@@ -655,7 +832,7 @@ function claimSessionMarker(subdir, agent2, sessionId) {
 }
 function releaseSessionMarker(subdir, agent2, sessionId) {
   try {
-    removeFile(join7(stateSubdir(subdir), markerName(agent2, sessionId)));
+    removeFile(join9(stateSubdir(subdir), markerName(agent2, sessionId)));
   } catch {
   }
 }
@@ -817,8 +994,8 @@ function recallGateMode(override) {
 }
 
 // src/capture/hooks/recall-state.ts
-import { lstatSync as lstatSync4 } from "node:fs";
-import { join as join8 } from "node:path";
+import { lstatSync as lstatSync6 } from "node:fs";
+import { join as join10 } from "node:path";
 var DIRECTORY = "recall-state";
 var STATE_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
 var MAX_CLEANUP2 = 512;
@@ -854,7 +1031,7 @@ function readRecallState(agent2, key) {
   try {
     return parse(
       readPrivateFileIfExists(
-        join8(stateSubdir(DIRECTORY), fileName(agent2, key)),
+        join10(stateSubdir(DIRECTORY), fileName(agent2, key)),
         1024
       )
     );
@@ -868,8 +1045,8 @@ function cleanup2(directory, keep) {
     if (name === keep || !/^(claude|codex|grok)-[a-f0-9]{32}\.json$/u.test(name))
       continue;
     try {
-      const path = join8(directory, name);
-      if (lstatSync4(path).mtimeMs < cutoff) removeFile(path);
+      const path = join10(directory, name);
+      if (lstatSync6(path).mtimeMs < cutoff) removeFile(path);
     } catch {
     }
   }
@@ -877,7 +1054,7 @@ function cleanup2(directory, keep) {
 function updateRecallState(agent2, key, change) {
   const directory = stateSubdir(DIRECTORY);
   const name = fileName(agent2, key);
-  const path = join8(directory, name);
+  const path = join10(directory, name);
   const prior = parse(readPrivateFileIfExists(path, 1024));
   const next = change(
     prior ?? {
@@ -1034,11 +1211,11 @@ function subagentContext(project, options = {}) {
 }
 
 // src/capture/hooks/registration.ts
-import { join as join9 } from "node:path";
+import { join as join11 } from "node:path";
 function mcpRegistered(agent2) {
   try {
     const raw = readPrivateFileIfExists(
-      join9(memrootConfigDir(), "config.json"),
+      join11(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw === void 0) return false;
@@ -1660,11 +1837,11 @@ function scratchWrite(path, directory, scope, options = {}) {
 var MAX_PATCH_FILES = 256;
 function patchedFiles(patch) {
   const files = [];
-  for (const match of patch.matchAll(
+  for (const match2 of patch.matchAll(
     /^\*\*\* (Add File|Update File|Delete File|Move to): (.+)$/gmu
   )) {
-    const path = match[2]?.trim();
-    if (path) files.push({ path, deleted: match[1] === "Delete File" });
+    const path = match2[2]?.trim();
+    if (path) files.push({ path, deleted: match2[1] === "Delete File" });
     if (files.length >= MAX_PATCH_FILES) break;
   }
   return files;
@@ -1753,16 +1930,17 @@ function reply(hookSpecificOutput) {
   exit(`${JSON.stringify({ hookSpecificOutput })}
 `);
 }
-function selectedProject() {
+function selectedProject(cwd) {
   try {
-    const selected = currentSelection();
+    const selected = effectiveProject(cwd);
+    if (selected?.stale) return void 0;
     return selected ? { name: selected.name, projectId: selected.projectId } : null;
   } catch {
     return void 0;
   }
 }
 function onSubagentStart(event, sessionId) {
-  const project = selectedProject();
+  const project = selectedProject(event.cwd);
   const optOut = optedOutThisPrompt(readRecallState(agent, sessionId));
   if (validAgentId(event.agent_id))
     try {
@@ -1811,7 +1989,7 @@ function onRetrieveStarted(event, sessionId) {
   exit("");
 }
 function optionalAbsolute(value) {
-  return typeof value === "string" && isAbsolute5(value) ? value : void 0;
+  return typeof value === "string" && isAbsolute6(value) ? value : void 0;
 }
 function tempDirs(projectDir) {
   const configured = [];
@@ -1824,7 +2002,7 @@ function tempDirs(projectDir) {
     if (!root) continue;
     configured.push(root);
     try {
-      configured.push(realpathSync2(root));
+      configured.push(realpathSync3(root));
     } catch {
     }
   }
@@ -1867,7 +2045,7 @@ function onToolUse(event, sessionId) {
   const key = recallKey(sessionId, event.agent_id);
   const counts = readRecallState(agent, key);
   if (!gateWouldAct(gateMode, counts) || !counts) return exit("");
-  const project = selectedProject();
+  const project = selectedProject(event.cwd);
   if (!project) return exit("");
   const marker = `${key}\0prompt\0${counts.prompts}`;
   let first = false;

@@ -1,25 +1,8 @@
 #!/usr/bin/env node
 
 // src/capture/hooks/prompt-nudge.ts
-import { lstatSync as lstatSync5, rmSync as rmSync3 } from "node:fs";
-import { join as join7 } from "node:path";
-
-// src/project-selection.ts
-import { randomBytes as randomBytes2, randomUUID } from "node:crypto";
-import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
-  writeSync
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+import { lstatSync as lstatSync7, rmSync as rmSync3 } from "node:fs";
+import { join as join9 } from "node:path";
 
 // src/api-base.ts
 function isLoopbackHostname(hostname) {
@@ -35,6 +18,19 @@ function isAllowedApiBase(value) {
     return false;
   }
 }
+
+// src/project-folders.ts
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+import {
+  basename,
+  dirname as dirname3,
+  isAbsolute as isAbsolute2,
+  join as join4,
+  normalize as normalize2,
+  relative,
+  resolve,
+  sep
+} from "node:path";
 
 // src/capture/paths.ts
 import { randomBytes } from "node:crypto";
@@ -166,36 +162,32 @@ function listFiles(path) {
   }
 }
 
-// src/project-selection.ts
-var PROJECT_SELECTION_FILE = "project-selection.json";
-var MAX_FILE_BYTES = 256 * 1024;
-var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
-var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectSelectionPath() {
-  return join2(memrootConfigDir(), PROJECT_SELECTION_FILE);
-}
-function normalizeApiBase(apiBase) {
-  try {
-    const url = new URL(apiBase);
-    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return apiBase.replace(/\/+$/, "");
-  }
-}
-function selectionKey(apiBase, principalId) {
-  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
-}
+// src/config-store.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join2 } from "node:path";
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function withLock(update) {
+function withConfigLock(fileName2, update) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const lock = `${projectSelectionPath()}.lock`;
+  const lock = `${join2(directory, fileName2)}.lock`;
   const nonce = randomBytes2(8).toString("hex");
   const owner = join2(lock, "owner");
   let held = false;
@@ -225,14 +217,14 @@ function withLock(update) {
       }
   }
 }
-function persist(store) {
+function persistConfigJson(fileName2, value) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const path = projectSelectionPath();
+  const path = join2(directory, fileName2);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
-      if (name.startsWith(`${PROJECT_SELECTION_FILE}.`) && name.endsWith(".tmp"))
+      if (name.startsWith(`${fileName2}.`) && name.endsWith(".tmp"))
         try {
           if (now - lstatSync2(join2(directory, name)).mtimeMs > TMP_STALE_MS)
             rmSync2(join2(directory, name), { force: true });
@@ -245,11 +237,8 @@ function persist(store) {
     const fd = openSync2(temporary, "wx", 384);
     try {
       fchmodSync(fd, 384);
-      writeSync(
-        fd,
-        `${JSON.stringify({ schemaVersion: 1, selections: store }, null, 2)}
-`
-      );
+      writeSync(fd, `${JSON.stringify(value, null, 2)}
+`);
       fsyncSync(fd);
     } finally {
       closeSync2(fd);
@@ -266,6 +255,39 @@ function persist(store) {
   } finally {
     rmSync2(temporary, { force: true });
   }
+}
+
+// src/project-selection.ts
+import { randomUUID } from "node:crypto";
+import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
+import { join as join3 } from "node:path";
+var PROJECT_SELECTION_FILE = "project-selection.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 64;
+var PRODUCTION_API_BASE = "https://api.memroot.dev";
+var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectSelectionPath() {
+  return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
+}
+function normalizeApiBase(apiBase) {
+  try {
+    const url = new URL(apiBase);
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return apiBase.replace(/\/+$/, "");
+  }
+}
+function selectionKey(apiBase, principalId) {
+  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
+}
+function withLock(update) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update);
+}
+function persist(store) {
+  persistConfigJson(PROJECT_SELECTION_FILE, {
+    schemaVersion: 1,
+    selections: store
+  });
 }
 function valid(value) {
   const v = value;
@@ -299,9 +321,9 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join2(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join3(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
-    lstatSync2(legacy);
+    lstatSync3(legacy);
   } catch {
     return false;
   }
@@ -345,7 +367,7 @@ function migrateLegacyDefaults() {
       } catch {
       }
       if (adopted > 0) persist(store);
-      renameSync2(legacy, `${legacy}.migrated`);
+      renameSync3(legacy, `${legacy}.migrated`);
       return true;
     });
   } catch {
@@ -382,7 +404,7 @@ function offlineIdentity() {
   let userId;
   try {
     const raw = readPrivateFileIfExists(
-      join2(memrootConfigDir(), "config.json"),
+      join3(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw !== void 0) {
@@ -399,11 +421,166 @@ function offlineIdentity() {
   apiBase = normalizeApiBase(process.env.MEMROOT_API_BASE ?? apiBase);
   return userId ? { apiBase, userId } : { apiBase };
 }
-function currentSelection(apiBase) {
+
+// src/project-folders.ts
+var PROJECT_FOLDERS_FILE = "project-folders.json";
+var MAX_BINDINGS = 256;
+var MAX_FILE_BYTES2 = 512 * 1024;
+var MAX_PATH = 4096;
+var MAX_WALK = 128;
+var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectFoldersPath() {
+  return join4(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+}
+var FOLD_CASE = process.platform === "win32";
+function folderContains(folder, path, options) {
+  const a = options.foldCase ? folder.toLowerCase() : folder;
+  const b = options.foldCase ? path.toLowerCase() : path;
+  if (a === b) return true;
+  const prefix = a.endsWith(options.separator) ? a : `${a}${options.separator}`;
+  return b.startsWith(prefix);
+}
+function deepestBinding(bindings, candidates, options) {
+  let best;
+  for (const binding of bindings)
+    if (candidates.some(
+      (path) => folderContains(binding.folder, path, options)
+    ) && (!best || binding.folder.length > best.folder.length))
+      best = binding;
+  return best;
+}
+var match = { foldCase: FOLD_CASE, separator: sep };
+function usableFolder(value) {
+  return typeof value === "string" && isAbsolute2(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+}
+function canonicalFolder(path) {
+  const absolute = normalize2(resolve(path));
+  let head = absolute;
+  for (let i = 0; i < MAX_WALK; i++) {
+    try {
+      const real = realpathSync.native(head);
+      const rest = relative(head, absolute);
+      return rest ? join4(real, rest) : real;
+    } catch {
+      const parent = dirname3(head);
+      if (parent === head) break;
+      head = parent;
+    }
+  }
+  return absolute;
+}
+function smallFile(path) {
+  try {
+    const info = lstatSync4(path);
+    if (!info.isFile() || info.size > 4096) return void 0;
+    return readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function mainCheckoutPath(path) {
+  let dir = path;
+  for (let i = 0; i < MAX_WALK; i++) {
+    const dotGit = join4(dir, ".git");
+    let info;
+    try {
+      info = lstatSync4(dotGit);
+    } catch {
+      info = void 0;
+    }
+    if (info) {
+      if (!info.isFile()) return void 0;
+      const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(
+        smallFile(dotGit) ?? ""
+      );
+      if (!pointer?.[1]) return void 0;
+      const gitdir = resolve(dir, pointer[1]);
+      if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
+      const back = smallFile(join4(gitdir, "gitdir"))?.trim();
+      if (!back) return void 0;
+      try {
+        if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+          return void 0;
+      } catch {
+        return void 0;
+      }
+      const common = smallFile(join4(gitdir, "commondir"))?.trim();
+      if (!common) return void 0;
+      let commonDir;
+      try {
+        commonDir = realpathSync.native(resolve(gitdir, common));
+      } catch {
+        return void 0;
+      }
+      if (basename(commonDir) !== ".git") return void 0;
+      const rest = relative(dir, path);
+      return rest ? join4(dirname3(commonDir), rest) : dirname3(commonDir);
+    }
+    const parent = dirname3(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+  return void 0;
+}
+function validBinding(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+}
+function validKey(key) {
+  const at = key.lastIndexOf("|");
+  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
+}
+function readStore2() {
+  try {
+    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
+      return {};
+    const out = {};
+    for (const [key, list] of Object.entries(
+      value.bindings
+    ))
+      if (validKey(key) && Array.isArray(list))
+        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    return out;
+  } catch {
+    return {};
+  }
+}
+function readBindings(apiBase, principalId) {
+  if (!principalId) return [];
+  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+}
+function bindingFor(apiBase, principalId, cwd) {
+  const bindings = readBindings(apiBase, principalId);
+  if (bindings.length === 0) return void 0;
+  const real = canonicalFolder(cwd);
+  const main2 = mainCheckoutPath(real);
+  return deepestBinding(bindings, main2 ? [real, main2] : [real], match);
+}
+
+// src/project-scope.ts
+function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
-  if (!isAllowedApiBase(base)) return void 0;
-  return readSelection(base, identity.userId);
+  if (!isAllowedApiBase(base) || !identity.userId) return void 0;
+  const folder = usableFolder(cwd);
+  const binding = folder ? bindingFor(base, identity.userId, folder) : void 0;
+  if (binding)
+    return {
+      scope: "folder",
+      apiBase: normalizeApiBase(base),
+      principalId: identity.userId.toLowerCase(),
+      tenantId: binding.tenantId,
+      projectId: binding.projectId,
+      name: binding.name,
+      selectionId: binding.bindingId,
+      folder: binding.folder,
+      ...binding.stale ? { stale: true } : {}
+    };
+  const selection = readSelection(base, identity.userId);
+  return selection ? { scope: "computer", ...selection } : void 0;
 }
 
 // src/capture/hooks/envelope.ts
@@ -412,7 +589,7 @@ var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
 var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
 var STDIN_DEADLINE_MS = 500;
 function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve) => {
+  return new Promise((resolve2) => {
     let bytes = 0;
     let chunks = [];
     let settled = false;
@@ -425,7 +602,7 @@ function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
       if (bytes > maxBytes) process.stdin.on("data", () => {
       });
       else process.stdin.destroy();
-      resolve(value);
+      resolve2(value);
     };
     const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
     process.stdin.on("error", () => finish(void 0));
@@ -471,18 +648,18 @@ function hostAgent(bundled) {
 }
 
 // src/capture/hooks/markers.ts
-import { lstatSync as lstatSync3 } from "node:fs";
-import { join as join4 } from "node:path";
+import { lstatSync as lstatSync5 } from "node:fs";
+import { join as join6 } from "node:path";
 
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join3 } from "node:path";
+import { join as join5 } from "node:path";
 var HEX64 = /^[a-f0-9]{64}$/;
 function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path = join3(stateSubdir(), "salt");
+  const path = join5(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -506,8 +683,8 @@ function cleanup(directory, keep, pattern) {
   for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
     if (name === keep || !pattern.test(name)) continue;
     try {
-      const path = join4(directory, name);
-      const info = lstatSync3(path);
+      const path = join6(directory, name);
+      const info = lstatSync5(path);
       if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
     } catch {
     }
@@ -519,7 +696,7 @@ function markerName(agent2, sessionId) {
 function claimSessionMarker(subdir, agent2, sessionId) {
   const directory = stateSubdir(subdir);
   const name = markerName(agent2, sessionId);
-  if (!createPrivateFileExclusive(join4(directory, name), "")) return false;
+  if (!createPrivateFileExclusive(join6(directory, name), "")) return false;
   try {
     cleanup(directory, name, new RegExp(`^${agent2}-[a-f0-9]{32}$`));
   } catch {
@@ -692,16 +869,16 @@ var MAX_TAIL_WORDS = 4;
 function plainProjectCommand(text) {
   if (text.length > MAX_PROJECT_COMMAND || CODE_WORDS.test(text)) return false;
   return PLAIN_PROJECT_COMMANDS.some((pattern) => {
-    const match = pattern.exec(text);
-    if (!match) return false;
-    const tail = text.slice(match.index + match[0].length);
+    const match2 = pattern.exec(text);
+    if (!match2) return false;
+    const tail = text.slice(match2.index + match2[0].length);
     if (TECHNICAL_NOUN.test(tail)) return false;
     const rest = tail.replace(COMMAND_TAIL_EXTRAS, " ");
     if (FOLLOW_ON.test(rest)) return false;
     return rest.replace(/[^\p{L}\p{N}'\s-]/gu, " ").split(/\s+/).filter(Boolean).length <= MAX_TAIL_WORDS;
   });
 }
-function normalize2(prompt) {
+function normalize3(prompt) {
   let text = prompt.normalize("NFKC").toLowerCase().replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim();
   for (; ; ) {
     const next = text.replace(
@@ -718,7 +895,7 @@ function trivial(text) {
 }
 function skipsMemrootRecall(prompt) {
   if (typeof prompt !== "string") return false;
-  const text = normalize2(prompt);
+  const text = normalize3(prompt);
   if (!text) return false;
   if (DONT_CHECK_MEMROOT.some((pattern) => pattern.test(text))) return true;
   if (text.length > MAX_SHORT_PROMPT) return false;
@@ -730,7 +907,7 @@ function skipsMemrootRecall(prompt) {
 }
 function optsOutOfMemroot(prompt) {
   if (typeof prompt !== "string") return false;
-  const text = normalize2(prompt);
+  const text = normalize3(prompt);
   if (!text) return false;
   if (DONT_CHECK_MEMROOT.some((pattern) => pattern.test(text))) return true;
   if (text.length > MAX_SHORT_PROMPT) return false;
@@ -745,8 +922,8 @@ function recallGateMode(override) {
 }
 
 // src/capture/hooks/recall-state.ts
-import { lstatSync as lstatSync4 } from "node:fs";
-import { join as join5 } from "node:path";
+import { lstatSync as lstatSync6 } from "node:fs";
+import { join as join7 } from "node:path";
 var DIRECTORY = "recall-state";
 var STATE_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
 var MAX_CLEANUP2 = 512;
@@ -777,8 +954,8 @@ function cleanup2(directory, keep) {
     if (name === keep || !/^(claude|codex|grok)-[a-f0-9]{32}\.json$/u.test(name))
       continue;
     try {
-      const path = join5(directory, name);
-      if (lstatSync4(path).mtimeMs < cutoff) removeFile(path);
+      const path = join7(directory, name);
+      if (lstatSync6(path).mtimeMs < cutoff) removeFile(path);
     } catch {
     }
   }
@@ -786,7 +963,7 @@ function cleanup2(directory, keep) {
 function updateRecallState(agent2, key, change) {
   const directory = stateSubdir(DIRECTORY);
   const name = fileName(agent2, key);
-  const path = join5(directory, name);
+  const path = join7(directory, name);
   const prior = parse(readPrivateFileIfExists(path, 1024));
   const next = change(
     prior ?? {
@@ -820,11 +997,11 @@ function notePrompt(agent2, key, exempt, optOut = false) {
 }
 
 // src/capture/hooks/registration.ts
-import { join as join6 } from "node:path";
+import { join as join8 } from "node:path";
 function mcpRegistered(agent2) {
   try {
     const raw = readPrivateFileIfExists(
-      join6(memrootConfigDir(), "config.json"),
+      join8(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw === void 0) return false;
@@ -848,9 +1025,10 @@ function countPrompt(sessionId, exempt, optOut = false) {
     return void 0;
   }
 }
-function selectedProject() {
+function selectedProject(cwd) {
   try {
-    const selected = currentSelection();
+    const selected = effectiveProject(cwd);
+    if (selected?.stale) return void 0;
     return selected ? { name: selected.name, projectId: selected.projectId } : null;
   } catch {
     return void 0;
@@ -858,8 +1036,8 @@ function selectedProject() {
 }
 function removeLegacyMarkers() {
   try {
-    const directory = join7(stateDir(), "prompt-nudge");
-    if (lstatSync5(directory, { throwIfNoEntry: false })?.isDirectory())
+    const directory = join9(stateDir(), "prompt-nudge");
+    if (lstatSync7(directory, { throwIfNoEntry: false })?.isDirectory())
       rmSync3(directory, { recursive: true, force: true });
   } catch {
   }
@@ -900,7 +1078,7 @@ async function main() {
           mode,
           mode === "short-after-first" && firstPrompt(sessionId),
           counts,
-          nudgeNeedsState(mode) ? selectedProject() : void 0
+          nudgeNeedsState(mode) ? selectedProject(event.cwd) : void 0
         )
       }
     })}

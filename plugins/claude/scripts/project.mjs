@@ -86,9 +86,9 @@ var require_src = __commonJS({
 });
 
 // src/project-command.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { existsSync as existsSync3, lstatSync as lstatSync4, rmSync as rmSync5 } from "node:fs";
-import { join as join10 } from "node:path";
+import { randomUUID as randomUUID4 } from "node:crypto";
+import { existsSync as existsSync3, lstatSync as lstatSync6, rmSync as rmSync5, statSync } from "node:fs";
+import { join as join12, normalize as normalize3, resolve as resolve2 } from "node:path";
 import { parseArgs } from "node:util";
 
 // ../../packages/contracts/src/invisible-text-v1.ts
@@ -122,7 +122,7 @@ import { mkdtempSync, rmSync as rmSync4, writeFileSync as writeFileSync4 } from 
 import { createServer, request as httpRequest2 } from "node:http";
 import { request as httpsRequest2 } from "node:https";
 import { tmpdir } from "node:os";
-import { join as join8 } from "node:path";
+import { join as join10 } from "node:path";
 
 // ../../node_modules/.pnpm/@clack+core@1.5.1/node_modules/@clack/core/dist/index.mjs
 import { stdout, stdin } from "node:process";
@@ -1382,8 +1382,22 @@ async function deleteSecret(account) {
   );
 }
 
-// src/project-selection.ts
-import { randomBytes as randomBytes2, randomUUID as randomUUID2 } from "node:crypto";
+// src/project-folders.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+import {
+  basename,
+  dirname as dirname4,
+  isAbsolute as isAbsolute3,
+  join as join7,
+  normalize as normalize2,
+  relative,
+  resolve,
+  sep
+} from "node:path";
+
+// src/config-store.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
 import {
   closeSync as closeSync2,
   fchmodSync,
@@ -1398,34 +1412,16 @@ import {
   writeSync
 } from "node:fs";
 import { dirname as dirname3, join as join5 } from "node:path";
-var PROJECT_SELECTION_FILE = "project-selection.json";
-var MAX_FILE_BYTES = 256 * 1024;
-var MAX_RECORDS = 64;
-var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectSelectionPath() {
-  return join5(memrootConfigDir(), PROJECT_SELECTION_FILE);
-}
-function normalizeApiBase(apiBase) {
-  try {
-    const url = new URL(apiBase);
-    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return apiBase.replace(/\/+$/, "");
-  }
-}
-function selectionKey(apiBase, principalId) {
-  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
-}
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function withLock(update) {
+function withConfigLock(fileName, update2) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname3(directory), false);
-  const lock = `${projectSelectionPath()}.lock`;
+  const lock = `${join5(directory, fileName)}.lock`;
   const nonce = randomBytes2(8).toString("hex");
   const owner = join5(lock, "owner");
   let held2 = false;
@@ -1445,7 +1441,7 @@ function withLock(update) {
     }
   }
   try {
-    return update();
+    return update2();
   } finally {
     if (held2)
       try {
@@ -1455,14 +1451,14 @@ function withLock(update) {
       }
   }
 }
-function persist(store) {
+function persistConfigJson(fileName, value) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname3(directory), false);
-  const path = projectSelectionPath();
+  const path = join5(directory, fileName);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
-      if (name.startsWith(`${PROJECT_SELECTION_FILE}.`) && name.endsWith(".tmp"))
+      if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
         try {
           if (now - lstatSync2(join5(directory, name)).mtimeMs > TMP_STALE_MS)
             rmSync2(join5(directory, name), { force: true });
@@ -1475,11 +1471,8 @@ function persist(store) {
     const fd = openSync2(temporary, "wx", 384);
     try {
       fchmodSync(fd, 384);
-      writeSync(
-        fd,
-        `${JSON.stringify({ schemaVersion: 1, selections: store }, null, 2)}
-`
-      );
+      writeSync(fd, `${JSON.stringify(value, null, 2)}
+`);
       fsyncSync(fd);
     } finally {
       closeSync2(fd);
@@ -1496,6 +1489,38 @@ function persist(store) {
   } finally {
     rmSync2(temporary, { force: true });
   }
+}
+
+// src/project-selection.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
+import { join as join6 } from "node:path";
+var PROJECT_SELECTION_FILE = "project-selection.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 64;
+var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectSelectionPath() {
+  return join6(memrootConfigDir(), PROJECT_SELECTION_FILE);
+}
+function normalizeApiBase(apiBase) {
+  try {
+    const url = new URL(apiBase);
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return apiBase.replace(/\/+$/, "");
+  }
+}
+function selectionKey(apiBase, principalId) {
+  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
+}
+function withLock(update2) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update2);
+}
+function persist(store) {
+  persistConfigJson(PROJECT_SELECTION_FILE, {
+    schemaVersion: 1,
+    selections: store
+  });
 }
 function valid(value) {
   const v = value;
@@ -1529,9 +1554,9 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join5(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join6(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
-    lstatSync2(legacy);
+    lstatSync3(legacy);
   } catch {
     return false;
   }
@@ -1575,7 +1600,7 @@ function migrateLegacyDefaults() {
       } catch {
       }
       if (adopted > 0) persist(store);
-      renameSync2(legacy, `${legacy}.migrated`);
+      renameSync3(legacy, `${legacy}.migrated`);
       return true;
     });
   } catch {
@@ -1626,6 +1651,224 @@ function clearSelection(apiBase, principalId, onlyProjectId) {
     delete store[key];
     persist(store);
   });
+}
+
+// src/project-folders.ts
+var PROJECT_FOLDERS_FILE = "project-folders.json";
+var MAX_BINDINGS = 256;
+var MAX_FILE_BYTES2 = 512 * 1024;
+var MAX_ACCOUNTS = 64;
+var MAX_PATH = 4096;
+var MAX_WALK = 128;
+var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectFoldersPath() {
+  return join7(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+}
+var FOLD_CASE = process.platform === "win32";
+function folderContains(folder, path, options) {
+  const a2 = options.foldCase ? folder.toLowerCase() : folder;
+  const b = options.foldCase ? path.toLowerCase() : path;
+  if (a2 === b) return true;
+  const prefix = a2.endsWith(options.separator) ? a2 : `${a2}${options.separator}`;
+  return b.startsWith(prefix);
+}
+function deepestBinding(bindings, candidates, options) {
+  let best;
+  for (const binding of bindings)
+    if (candidates.some(
+      (path) => folderContains(binding.folder, path, options)
+    ) && (!best || binding.folder.length > best.folder.length))
+      best = binding;
+  return best;
+}
+var match = { foldCase: FOLD_CASE, separator: sep };
+function canonicalFolder(path) {
+  const absolute = normalize2(resolve(path));
+  let head = absolute;
+  for (let i2 = 0; i2 < MAX_WALK; i2++) {
+    try {
+      const real = realpathSync.native(head);
+      const rest = relative(head, absolute);
+      return rest ? join7(real, rest) : real;
+    } catch {
+      const parent = dirname4(head);
+      if (parent === head) break;
+      head = parent;
+    }
+  }
+  return absolute;
+}
+function smallFile(path) {
+  try {
+    const info = lstatSync4(path);
+    if (!info.isFile() || info.size > 4096) return void 0;
+    return readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function mainCheckoutPath(path) {
+  let dir = path;
+  for (let i2 = 0; i2 < MAX_WALK; i2++) {
+    const dotGit = join7(dir, ".git");
+    let info;
+    try {
+      info = lstatSync4(dotGit);
+    } catch {
+      info = void 0;
+    }
+    if (info) {
+      if (!info.isFile()) return void 0;
+      const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(
+        smallFile(dotGit) ?? ""
+      );
+      if (!pointer?.[1]) return void 0;
+      const gitdir = resolve(dir, pointer[1]);
+      if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
+      const back = smallFile(join7(gitdir, "gitdir"))?.trim();
+      if (!back) return void 0;
+      try {
+        if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+          return void 0;
+      } catch {
+        return void 0;
+      }
+      const common = smallFile(join7(gitdir, "commondir"))?.trim();
+      if (!common) return void 0;
+      let commonDir;
+      try {
+        commonDir = realpathSync.native(resolve(gitdir, common));
+      } catch {
+        return void 0;
+      }
+      if (basename(commonDir) !== ".git") return void 0;
+      const rest = relative(dir, path);
+      return rest ? join7(dirname4(commonDir), rest) : dirname4(commonDir);
+    }
+    const parent = dirname4(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+  return void 0;
+}
+function bindingFolder(path) {
+  const real = canonicalFolder(path);
+  const main = mainCheckoutPath(real);
+  return main ? { folder: main, mapped: true } : { folder: real, mapped: false };
+}
+function validBinding(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute3(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+}
+function validKey(key) {
+  const at = key.lastIndexOf("|");
+  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
+}
+function readStore2() {
+  try {
+    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
+      return {};
+    const out = {};
+    for (const [key, list] of Object.entries(
+      value.bindings
+    ))
+      if (validKey(key) && Array.isArray(list))
+        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    return out;
+  } catch {
+    return {};
+  }
+}
+function update(change) {
+  return withConfigLock(PROJECT_FOLDERS_FILE, () => {
+    const store = readStore2();
+    const result = change(store);
+    for (const key of Object.keys(store))
+      if (store[key]?.length === 0) delete store[key];
+    const keys = Object.keys(store);
+    for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ACCOUNTS)))
+      delete store[key];
+    persistConfigJson(PROJECT_FOLDERS_FILE, {
+      schemaVersion: 1,
+      bindings: store
+    });
+    return result;
+  });
+}
+var sameFolder = (a2, b) => FOLD_CASE ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
+function readBindings(apiBase, principalId) {
+  if (!principalId) return [];
+  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+}
+function bindingFor(apiBase, principalId, cwd) {
+  const bindings = readBindings(apiBase, principalId);
+  if (bindings.length === 0) return void 0;
+  const real = canonicalFolder(cwd);
+  const main = mainCheckoutPath(real);
+  return deepestBinding(bindings, main ? [real, main] : [real], match);
+}
+function bindFolder(input) {
+  return update((store) => {
+    const key = selectionKey(input.apiBase, input.principalId);
+    const list = store[key] ?? [];
+    const prior = list.find((b) => sameFolder(b.folder, input.folder));
+    const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
+    const binding = {
+      folder: input.folder,
+      tenantId: input.tenantId,
+      projectId: input.projectId,
+      name: input.name,
+      bindingId: same && prior ? prior.bindingId : randomUUID3(),
+      boundAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (!validBinding(binding))
+      throw new Error("PROJECT_FOLDER_INVALID: Refusing an invalid binding.");
+    const rest = list.filter((b) => b !== prior);
+    if (rest.length >= MAX_BINDINGS)
+      throw new Error(
+        `PROJECT_FOLDER_LIMIT: At most ${MAX_BINDINGS} folders can be bound; remove one with unbind --folder.`
+      );
+    store[key] = [...rest, binding];
+    return binding;
+  });
+}
+function unbindFolder(apiBase, principalId, folder) {
+  return update((store) => {
+    const key = selectionKey(apiBase, principalId);
+    const list = store[key] ?? [];
+    const found = list.find((b) => sameFolder(b.folder, folder));
+    if (found) store[key] = list.filter((b) => b !== found);
+    return found;
+  });
+}
+function refreshBindings(apiBase, principalId, tenantId, projects) {
+  const key = selectionKey(apiBase, principalId);
+  const changes = (list) => list.map((b) => {
+    const live = projects.find((p) => p.project_id === b.projectId);
+    if (!live) return b.stale ? b : { ...b, stale: true };
+    const name = live.name ?? b.name;
+    if (!b.stale && name === b.name && b.tenantId === tenantId) return b;
+    const { stale: _stale, ...rest } = b;
+    return { ...rest, name, tenantId };
+  });
+  const before = readStore2()[key] ?? [];
+  if (changes(before).every(
+    (b, i2) => b.stale === before[i2]?.stale && b.name === before[i2]?.name && b.tenantId === before[i2]?.tenantId
+  ))
+    return;
+  update((store) => {
+    if (store[key]) store[key] = changes(store[key]);
+  });
+}
+function folderMissing(folder) {
+  try {
+    return !lstatSync4(folder).isDirectory();
+  } catch {
+    return true;
+  }
 }
 
 // src/capture/consent.ts
@@ -1722,24 +1965,27 @@ var MAX_STDERR_BYTES = 8 * 1024;
 
 // src/project-context.ts
 import { existsSync } from "node:fs";
-import { dirname as dirname4, join as join6 } from "node:path";
+import { dirname as dirname5, join as join8 } from "node:path";
 import { fileURLToPath } from "node:url";
-var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function validUuid(value) {
-  return typeof value === "string" && UUID2.test(value);
+  return typeof value === "string" && UUID3.test(value);
 }
 function projectCommandPrefix() {
   try {
-    const here = dirname4(fileURLToPath(import.meta.url));
-    const script = join6(here, "project.mjs");
+    const here = dirname5(fileURLToPath(import.meta.url));
+    const script = join8(here, "project.mjs");
     if (existsSync(script) && !/["\\$`\n]/.test(script))
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.14.2"} project`;
+  return `npx -y memroot@${"0.15.0"} project`;
+}
+function folderOption(folder) {
+  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
 }
 function legacySessionRecordsDir() {
-  return join6(stateDir(), "project-sessions");
+  return join8(stateDir(), "project-sessions");
 }
 
 // src/capture/queue/job.ts
@@ -1768,7 +2014,7 @@ var TransportError = class extends Error {
 };
 function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
   const transport = target.protocol === "https:" ? httpsRequest : httpRequest;
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve3, reject) => {
     const req = transport(
       target,
       {
@@ -1790,7 +2036,7 @@ function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
         });
         response.on(
           "end",
-          () => resolve({
+          () => resolve3({
             status: response.statusCode ?? 0,
             headers: response.headers,
             body: Buffer.concat(chunks).toString("utf8")
@@ -1813,15 +2059,15 @@ function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
 // src/capture/queue/lock.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
 import {
-  lstatSync as lstatSync3,
+  lstatSync as lstatSync5,
   mkdirSync as mkdirSync3,
-  renameSync as renameSync3,
+  renameSync as renameSync4,
   rmSync as rmSync3,
   writeFileSync as writeFileSync3
 } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join9 } from "node:path";
 function lockPath(name) {
-  return join7(stateSubdir("locks"), name);
+  return join9(stateSubdir("locks"), name);
 }
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -1833,7 +2079,7 @@ function processAlive(pid) {
   }
 }
 function readOwnerFile(path) {
-  return readPrivateFile(join7(path, "owner.json"), 64 * 1024);
+  return readPrivateFile(join9(path, "owner.json"), 64 * 1024);
 }
 function readOwner(path) {
   try {
@@ -1854,7 +2100,7 @@ function readOwner(path) {
 function isStale(path, staleMs) {
   let info;
   try {
-    info = lstatSync3(path);
+    info = lstatSync5(path);
   } catch {
     return false;
   }
@@ -1873,12 +2119,12 @@ function tryMkdir(path) {
     throw error;
   }
   const token = randomBytes3(8).toString("hex");
-  held.set(path, { ino: lstatSync3(path).ino, token });
+  held.set(path, { ino: lstatSync5(path).ino, token });
   writeOwner(path, (/* @__PURE__ */ new Date()).toISOString(), token);
   return true;
 }
 function writeOwner(path, createdAt, token) {
-  const temporary = join7(path, `owner.${process.pid}.${token}.tmp`);
+  const temporary = join9(path, `owner.${process.pid}.${token}.tmp`);
   writeFileSync3(
     temporary,
     JSON.stringify({
@@ -1889,7 +2135,7 @@ function writeOwner(path, createdAt, token) {
     }),
     { mode: 384 }
   );
-  renameSync3(temporary, join7(path, "owner.json"));
+  renameSync4(temporary, join9(path, "owner.json"));
 }
 function readToken(path) {
   try {
@@ -1903,7 +2149,7 @@ function stillOurs(path) {
   const mine = held.get(path);
   if (!mine) return false;
   try {
-    return lstatSync3(path).ino === mine.ino && readToken(path) === mine.token;
+    return lstatSync5(path).ino === mine.ino && readToken(path) === mine.token;
   } catch {
     return false;
   }
@@ -1911,13 +2157,13 @@ function stillOurs(path) {
 function clearStale(path, staleMs) {
   const tombstone = `${path}.stale-${process.pid}-${randomBytes3(4).toString("hex")}`;
   try {
-    renameSync3(path, tombstone);
+    renameSync4(path, tombstone);
   } catch {
     return;
   }
   if (!isStale(tombstone, staleMs)) {
     try {
-      renameSync3(tombstone, path);
+      renameSync4(tombstone, path);
       return;
     } catch {
     }
@@ -1944,7 +2190,7 @@ async function acquireLock(name, options) {
       continue;
     }
     if (Date.now() >= deadline) return void 0;
-    await new Promise((resolve) => setTimeout(resolve, options.pollMs ?? 100));
+    await new Promise((resolve3) => setTimeout(resolve3, options.pollMs ?? 100));
   }
 }
 
@@ -2215,7 +2461,7 @@ function request(target, method, contentType, payload) {
   if (contentType) headers["content-type"] = contentType;
   if (payload !== void 0)
     headers["content-length"] = Buffer.byteLength(payload);
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve3, reject) => {
     const request2 = transport(
       target,
       {
@@ -2232,7 +2478,7 @@ function request(target, method, contentType, payload) {
         });
         response.on(
           "end",
-          () => resolve({ status: response.statusCode ?? 0, body })
+          () => resolve3({ status: response.statusCode ?? 0, body })
         );
       }
     );
@@ -2458,21 +2704,21 @@ function startCallbackServer(expectedState, apiBase) {
     ),
     LOGIN_TIMEOUT_MS
   );
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve3, reject) => {
     server.once("error", (error) => {
       fail(error);
       reject(error);
     });
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
-      resolve({
+      resolve3({
         port: address.port,
         next: () => {
           if (failure) return Promise.reject(failure);
           const queued = pending.shift();
           if (queued) return Promise.resolve(queued);
           const result = new Promise(
-            (resolve2, rejectPromise) => waiters.push({ resolve: resolve2, reject: rejectPromise })
+            (resolve4, rejectPromise) => waiters.push({ resolve: resolve4, reject: rejectPromise })
           );
           result.catch(() => {
           });
@@ -2523,11 +2769,11 @@ function openBrowser(url) {
     process.off("SIGTERM", onSignal);
   };
   try {
-    directory = mkdtempSync(join8(tmpdir(), "memroot-login-"));
+    directory = mkdtempSync(join10(tmpdir(), "memroot-login-"));
     process.on("exit", cleanup);
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
-    const file = join8(directory, "sign-in.html");
+    const file = join10(directory, "sign-in.html");
     const target = htmlAttribute(url);
     writeFileSync4(
       file,
@@ -2709,13 +2955,13 @@ async function loginMcp(apiBase, options, settle) {
 // src/capture/hooks/spawn.ts
 import { spawn as spawn2 } from "node:child_process";
 import { existsSync as existsSync2 } from "node:fs";
-import { dirname as dirname5, join as join9 } from "node:path";
+import { dirname as dirname6, join as join11 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 function spawnWorker() {
   try {
-    const here = dirname5(fileURLToPath2(import.meta.url));
-    const sibling = join9(here, "capture-worker.mjs");
-    const worker = existsSync2(sibling) ? sibling : join9(here, "plugins", "claude", "scripts", "capture-worker.mjs");
+    const here = dirname6(fileURLToPath2(import.meta.url));
+    const sibling = join11(here, "capture-worker.mjs");
+    const worker = existsSync2(sibling) ? sibling : join11(here, "plugins", "claude", "scripts", "capture-worker.mjs");
     if (!existsSync2(worker)) return;
     const child = spawn2(process.execPath, [worker], {
       detached: true,
@@ -2742,7 +2988,7 @@ function parseProjectList(value) {
 }
 var PENDING_FILE = "project-create-pending.json";
 function pendingPath() {
-  return join10(memrootConfigDir(), PENDING_FILE);
+  return join12(memrootConfigDir(), PENDING_FILE);
 }
 function readPending() {
   try {
@@ -2757,15 +3003,15 @@ function readPending() {
 function removeLegacySessionRecords() {
   try {
     const dir = legacySessionRecordsDir();
-    const info = lstatSync4(dir);
+    const info = lstatSync6(dir);
     if (!info.isDirectory() || info.isSymbolicLink()) return;
     const records = listFiles(dir).filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).map((name) => {
-      const path = join10(dir, name);
+      const path = join12(dir, name);
       try {
         const value = JSON.parse(
           readPrivateFileIfExists(path, 16 * 1024) ?? "null"
         );
-        return { at: lstatSync4(path).mtimeMs, selection: value?.selection };
+        return { at: lstatSync6(path).mtimeMs, selection: value?.selection };
       } catch {
         return { at: 0, selection: void 0 };
       }
@@ -2795,8 +3041,8 @@ function removeLegacySessionRecords() {
     const cutoff = Date.now() - LEGACY_RECORD_TTL_MS;
     for (const name of listFiles(dir))
       try {
-        if (lstatSync4(join10(dir, name)).mtimeMs < cutoff)
-          rmSync5(join10(dir, name), { force: true });
+        if (lstatSync6(join12(dir, name)).mtimeMs < cutoff)
+          rmSync5(join12(dir, name), { force: true });
       } catch {
       }
     if (listFiles(dir).length === 0)
@@ -2833,6 +3079,15 @@ function choose(base, projects, project, source) {
   }
 }
 function resolveSelection(base, projects) {
+  try {
+    refreshBindings(
+      base,
+      projects.principal_id,
+      projects.tenant_id,
+      projects.projects
+    );
+  } catch {
+  }
   const recorded = readSelection(base, projects.principal_id);
   const live = recorded && recorded.tenantId === projects.tenant_id && projects.projects.find((p) => p.project_id === recorded.projectId);
   if (recorded && !live)
@@ -2864,9 +3119,40 @@ function choiceRequired(projects, stale) {
     `${stale ? `PROJECT_SELECTION_INVALID: The selected project "${stale.name}" is no longer available to this account. ` : "PROJECT_CHOICE_REQUIRED: No project is selected on this computer. "}Choose one: ${command} use "<name>"; your projects: ${names}.${projects.projects.length === 0 ? ` Create one with ${command} create "<name>".` : ""}`
   );
 }
+var sameFolder2 = (a2, b) => FOLD_CASE ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
+function bindingOutput(binding) {
+  return {
+    folder: binding.folder,
+    project_id: binding.projectId,
+    name: binding.name,
+    ...binding.stale ? { stale: true } : {}
+  };
+}
+function existingFolder(path) {
+  let directory = false;
+  try {
+    directory = statSync(path).isDirectory();
+  } catch {
+    directory = false;
+  }
+  if (!directory)
+    throw new Error("INVALID_ARGUMENT: The folder does not exist.");
+  return path;
+}
+function bindingToRemove(base, principalId, folder) {
+  if (folder === void 0) return bindingFor(base, principalId, process.cwd());
+  const forms = [
+    bindingFolder(folder).folder,
+    canonicalFolder(folder),
+    normalize3(resolve2(folder))
+  ];
+  return readBindings(base, principalId).find(
+    (b) => forms.some((form) => sameFolder2(b.folder, form))
+  ) ?? bindingFor(base, principalId, folder);
+}
 async function projectCommand(args, _bundledAgent) {
   const requested = args.shift() ?? "status";
-  const actions = ["list", "use", "create", "status", "login"];
+  const actions = ["list", "use", "create", "status", "unbind", "login"];
   const action = actions.includes(requested) ? requested : "use";
   if (action === "use" && requested !== "use") args.unshift(requested);
   const parsed = parseArgs({
@@ -2880,7 +3166,9 @@ async function projectCommand(args, _bundledAgent) {
       session: { type: "string" },
       "api-base": { type: "string" },
       "no-browser": { type: "boolean" },
-      "switch-account": { type: "boolean" }
+      "switch-account": { type: "boolean" },
+      here: { type: "boolean" },
+      folder: { type: "string" }
     }
   });
   if (parsed.positionals.length > 1)
@@ -2894,9 +3182,44 @@ async function projectCommand(args, _bundledAgent) {
   const switchAccount = parsed.values["switch-account"] ?? false;
   if (target !== void 0 && action !== "use" && action !== "create")
     throw new Error("INVALID_ARGUMENT: This project command takes no name.");
+  const folderValue = action === "status" && parsed.values.folder?.trim() === "" ? void 0 : parsed.values.folder;
+  if (parsed.values.here && folderValue !== void 0)
+    throw new Error("INVALID_ARGUMENT: Pass --here or --folder, not both.");
+  if (folderValue !== void 0 && !folderValue.trim())
+    throw new Error("INVALID_ARGUMENT: --folder needs a folder path.");
+  const folder = folderValue !== void 0 ? resolve2(folderValue) : parsed.values.here ? process.cwd() : void 0;
+  if (folder !== void 0 && (action === "list" || action === "login"))
+    throw new Error(
+      "INVALID_ARGUMENT: --here and --folder apply to use, create, status and unbind."
+    );
   const config = await readConfig();
   const base = resolveApiBase(apiBase ? { apiBase } : {}, config);
-  const userAgent = `memroot-cli/${"0.14.2"}`;
+  const command = projectCommandPrefix();
+  if (action === "unbind") {
+    if (noBrowser || switchAccount)
+      throw new Error(
+        "INVALID_ARGUMENT: unbind takes only --here or --folder."
+      );
+    const principalId = config.userId;
+    const binding = principalId ? bindingToRemove(base, principalId, folder) : void 0;
+    if (principalId && binding)
+      try {
+        unbindFolder(base, principalId, binding.folder);
+      } catch {
+        throw new Error(
+          "PROJECT_FOLDER_BINDING_FAILED: The folder binding could not be removed in ~/.memroot; check that directory and retry."
+        );
+      }
+    releaseParkedCapture();
+    console.log(
+      JSON.stringify({
+        unbound: binding ? bindingOutput(binding) : null,
+        ...binding ? {} : { note: "No Memroot folder binding applies to this folder." }
+      })
+    );
+    return;
+  }
+  const userAgent = `memroot-cli/${"0.15.0"}`;
   const client = new McpClient(base, new TokenBroker(base), userAgent);
   const listProjects = async (via = client) => {
     let projects2;
@@ -2922,7 +3245,7 @@ async function projectCommand(args, _bundledAgent) {
     if (!projects2) throw new Error("PROJECT_LOGIN_FAILED");
     const { selection } = resolveSelection(base, projects2);
     console.log(
-      selection ? `Project for this computer: ${JSON.stringify(selection.name)} (${selection.projectId}).` : `No project is selected on this computer yet. Choose one: ${projectCommandPrefix()} use "<name>".`
+      selection ? `Project for this computer: ${JSON.stringify(selection.name)} (${selection.projectId}).` : `No project is selected on this computer yet. Choose one: ${command} use "<name>".`
     );
     return;
   }
@@ -2930,20 +3253,54 @@ async function projectCommand(args, _bundledAgent) {
     throw new Error(
       "INVALID_ARGUMENT: --no-browser applies only to project login."
     );
+  if (folder !== void 0 && action !== "status") existingFolder(folder);
   const projects = await listProjects();
   removeLegacySessionRecords();
   if (action === "list") {
     const selected2 = readSelection(base, projects.principal_id);
+    try {
+      refreshBindings(
+        base,
+        projects.principal_id,
+        projects.tenant_id,
+        projects.projects
+      );
+    } catch {
+    }
     console.log(
       JSON.stringify({
         ...projects,
-        selected_project_id: selected2 && selected2.tenantId === projects.tenant_id ? selected2.projectId : null
+        selected_project_id: selected2 && selected2.tenantId === projects.tenant_id ? selected2.projectId : null,
+        bindings: readBindings(base, projects.principal_id).map((b) => ({
+          ...bindingOutput(b),
+          ...folderMissing(b.folder) ? { missing: true } : {}
+        }))
       })
     );
     return;
   }
   if (action === "status") {
     const { selection, stale } = resolveSelection(base, projects);
+    const binding = bindingFor(
+      base,
+      projects.principal_id,
+      folder ?? process.cwd()
+    );
+    if (binding) {
+      console.log(
+        JSON.stringify({
+          selected: binding.stale ? null : { project_id: binding.projectId, name: binding.name },
+          scope: "folder",
+          folder: binding.folder,
+          ...binding.stale ? {
+            stale: { project_id: binding.projectId, name: binding.name },
+            next: `${command} use "<name>" ${folderOption(binding.folder)}`
+          } : {}
+        })
+      );
+      if (!binding.stale) releaseParkedCapture();
+      return;
+    }
     console.log(
       JSON.stringify({
         selected: selection ? {
@@ -2953,12 +3310,61 @@ async function projectCommand(args, _bundledAgent) {
         } : null,
         scope: "computer",
         ...stale ? { stale: { project_id: stale.projectId, name: stale.name } } : {},
-        ...selection ? {} : { next: `${projectCommandPrefix()} use "<name>"` }
+        ...selection ? {} : { next: `${command} use "<name>"` }
       })
     );
     if (selection) releaseParkedCapture();
     return;
   }
+  const named = () => {
+    if (!target?.trim()) return void 0;
+    const matches = projects.projects.filter(
+      (p) => p.project_id === target || p.name === target.normalize("NFC").trim()
+    );
+    const match2 = matches[0];
+    if (matches.length !== 1 || !match2)
+      throw new Error(
+        matches.length ? "PROJECT_NAME_AMBIGUOUS: Use the project ID from project list." : `PROJECT_NOT_FOUND: Use ${command} list to choose an authorized project.`
+      );
+    return match2;
+  };
+  const bind = (project) => {
+    const place = bindingFolder(folder);
+    let binding;
+    try {
+      binding = bindFolder({
+        apiBase: base,
+        principalId: projects.principal_id,
+        tenantId: projects.tenant_id,
+        projectId: project.project_id,
+        name: label(project),
+        folder: place.folder
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("PROJECT_FOLDER_LIMIT"))
+        throw error;
+      throw new Error(
+        "PROJECT_FOLDER_BINDING_FAILED: The folder binding could not be saved in ~/.memroot; check that directory and retry."
+      );
+    }
+    releaseParkedCapture();
+    const consent = readConsent();
+    const capturing = consent.kind === "ok" && consent.consent.enabled && consent.consent.apiBase === base;
+    console.log(
+      JSON.stringify({
+        project_id: binding.projectId,
+        name: binding.name,
+        scope: "folder",
+        folder: binding.folder,
+        ...capturing ? {
+          capture: "Session captures in this folder go to this Memroot project."
+        } : {},
+        ...place.mapped ? {
+          note: "This folder is in a linked git worktree; the binding is stored for the main checkout, so every worktree of the repository uses it."
+        } : {}
+      })
+    );
+  };
   let selected;
   if (action === "create") {
     const name = (target ?? "").normalize("NFC").trim();
@@ -2971,7 +3377,7 @@ async function projectCommand(args, _bundledAgent) {
       name,
       apiBase: base,
       principalId: projects.principal_id,
-      idempotencyKey: randomUUID3()
+      idempotencyKey: randomUUID4()
     };
     writePrivateFileAtomic(pendingPath(), `${JSON.stringify(pending)}
 `);
@@ -2983,43 +3389,62 @@ async function projectCommand(args, _bundledAgent) {
       throw new Error(
         "PROJECT_RESPONSE_INVALID: The server did not confirm this account's new project."
       );
+    const createdId = created.project_id;
     try {
-      selected = choose(
-        base,
-        projects,
-        { project_id: created.project_id, name },
-        "explicit"
-      );
+      if (folder !== void 0) {
+        bind({ project_id: createdId, name });
+      } else
+        selected = choose(
+          base,
+          projects,
+          { project_id: createdId, name },
+          "explicit"
+        );
     } catch {
       throw new Error(
-        `PROJECT_CREATED_SELECTION_FAILED: Project ${created.project_id} was created. Do not repeat create; select it with ${projectCommandPrefix()} use ${created.project_id}.`
+        `PROJECT_CREATED_SELECTION_FAILED: Project ${createdId} was created. Do not repeat create; select it with ${command} use ${createdId}${folder !== void 0 ? ` ${folderOption(folder)}` : ""}.`
       );
     }
     try {
       removeFile(pendingPath());
     } catch {
     }
-  } else if (!target?.trim()) {
-    const { selection, stale } = resolveSelection(base, projects);
-    if (!selection) throw choiceRequired(projects, stale);
-    selected = selection;
+    if (folder !== void 0) return;
+  } else if (folder !== void 0) {
+    let project = named();
+    if (!project) {
+      const current = bindingFor(base, projects.principal_id, folder);
+      if (current && !current.stale)
+        project = { project_id: current.projectId, name: current.name };
+      else {
+        const { selection, stale } = resolveSelection(base, projects);
+        if (!selection) throw choiceRequired(projects, stale);
+        project = { project_id: selection.projectId, name: selection.name };
+      }
+    }
+    bind(project);
+    return;
   } else {
-    const matches = projects.projects.filter(
-      (p) => p.project_id === target || p.name === target.normalize("NFC").trim()
-    );
-    const match = matches[0];
-    if (matches.length !== 1 || !match)
-      throw new Error(
-        matches.length ? "PROJECT_NAME_AMBIGUOUS: Use the project ID from project list." : `PROJECT_NOT_FOUND: Use ${projectCommandPrefix()} list to choose an authorized project.`
-      );
-    selected = choose(base, projects, match, "explicit");
+    const match2 = named();
+    if (match2) selected = choose(base, projects, match2, "explicit");
+    else {
+      const { selection, stale } = resolveSelection(base, projects);
+      if (!selection) throw choiceRequired(projects, stale);
+      selected = selection;
+    }
   }
+  if (!selected) throw new Error("PROJECT_SELECTION_FAILED");
   releaseParkedCapture();
+  const here = bindingFor(base, projects.principal_id, process.cwd());
+  const keeps = here && (here.stale || here.projectId !== selected.projectId) ? {
+    note: `This folder stays bound to Memroot project ${JSON.stringify(here.name)} (${here.folder}). To switch it too: ${command} use "<name>" ${folderOption(here.folder)}.`
+  } : {};
   console.log(
     JSON.stringify({
       project_id: selected.projectId,
       name: selected.name,
-      scope: "computer"
+      scope: "computer",
+      ...keeps
     })
   );
 }

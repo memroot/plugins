@@ -3,11 +3,11 @@
 // src/capture/hooks/memory-mirror.ts
 import { createHash as createHash2 } from "node:crypto";
 import { homedir as homedir4 } from "node:os";
-import { isAbsolute as isAbsolute4, resolve as resolve3 } from "node:path";
+import { isAbsolute as isAbsolute5, resolve as resolve4 } from "node:path";
 
 // src/project-context.ts
 import { existsSync } from "node:fs";
-import { dirname as dirname3, join as join3 } from "node:path";
+import { dirname as dirname4, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/capture/paths.ts
@@ -127,22 +127,18 @@ function listFiles(path) {
   }
 }
 
-// src/project-selection.ts
-import { randomBytes, randomUUID } from "node:crypto";
+// src/project-folders.ts
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
-  writeSync
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+  basename,
+  dirname as dirname3,
+  isAbsolute as isAbsolute2,
+  join as join4,
+  normalize as normalize2,
+  relative,
+  resolve,
+  sep
+} from "node:path";
 
 // src/api-base.ts
 function isLoopbackHostname(hostname) {
@@ -159,36 +155,32 @@ function isAllowedApiBase(value) {
   }
 }
 
-// src/project-selection.ts
-var PROJECT_SELECTION_FILE = "project-selection.json";
-var MAX_FILE_BYTES = 256 * 1024;
-var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
-var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectSelectionPath() {
-  return join2(memrootConfigDir(), PROJECT_SELECTION_FILE);
-}
-function normalizeApiBase(apiBase) {
-  try {
-    const url = new URL(apiBase);
-    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return apiBase.replace(/\/+$/, "");
-  }
-}
-function selectionKey(apiBase, principalId) {
-  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
-}
+// src/config-store.ts
+import { randomBytes } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join2 } from "node:path";
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function withLock(update) {
+function withConfigLock(fileName, update) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const lock = `${projectSelectionPath()}.lock`;
+  const lock = `${join2(directory, fileName)}.lock`;
   const nonce = randomBytes(8).toString("hex");
   const owner = join2(lock, "owner");
   let held = false;
@@ -218,14 +210,14 @@ function withLock(update) {
       }
   }
 }
-function persist(store) {
+function persistConfigJson(fileName, value) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const path = projectSelectionPath();
+  const path = join2(directory, fileName);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
-      if (name.startsWith(`${PROJECT_SELECTION_FILE}.`) && name.endsWith(".tmp"))
+      if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
         try {
           if (now - lstatSync2(join2(directory, name)).mtimeMs > TMP_STALE_MS)
             rmSync2(join2(directory, name), { force: true });
@@ -238,11 +230,8 @@ function persist(store) {
     const fd = openSync2(temporary, "wx", 384);
     try {
       fchmodSync(fd, 384);
-      writeSync(
-        fd,
-        `${JSON.stringify({ schemaVersion: 1, selections: store }, null, 2)}
-`
-      );
+      writeSync(fd, `${JSON.stringify(value, null, 2)}
+`);
       fsyncSync(fd);
     } finally {
       closeSync2(fd);
@@ -259,6 +248,39 @@ function persist(store) {
   } finally {
     rmSync2(temporary, { force: true });
   }
+}
+
+// src/project-selection.ts
+import { randomUUID } from "node:crypto";
+import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
+import { join as join3 } from "node:path";
+var PROJECT_SELECTION_FILE = "project-selection.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 64;
+var PRODUCTION_API_BASE = "https://api.memroot.dev";
+var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectSelectionPath() {
+  return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
+}
+function normalizeApiBase(apiBase) {
+  try {
+    const url = new URL(apiBase);
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return apiBase.replace(/\/+$/, "");
+  }
+}
+function selectionKey(apiBase, principalId) {
+  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
+}
+function withLock(update) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update);
+}
+function persist(store) {
+  persistConfigJson(PROJECT_SELECTION_FILE, {
+    schemaVersion: 1,
+    selections: store
+  });
 }
 function valid(value) {
   const v = value;
@@ -292,9 +314,9 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join2(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join3(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
-    lstatSync2(legacy);
+    lstatSync3(legacy);
   } catch {
     return false;
   }
@@ -338,7 +360,7 @@ function migrateLegacyDefaults() {
       } catch {
       }
       if (adopted > 0) persist(store);
-      renameSync2(legacy, `${legacy}.migrated`);
+      renameSync3(legacy, `${legacy}.migrated`);
       return true;
     });
   } catch {
@@ -375,7 +397,7 @@ function offlineIdentity() {
   let userId;
   try {
     const raw = readPrivateFileIfExists(
-      join2(memrootConfigDir(), "config.json"),
+      join3(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw !== void 0) {
@@ -392,11 +414,171 @@ function offlineIdentity() {
   apiBase = normalizeApiBase(process.env.MEMROOT_API_BASE ?? apiBase);
   return userId ? { apiBase, userId } : { apiBase };
 }
-function currentSelection(apiBase) {
+
+// src/project-folders.ts
+var PROJECT_FOLDERS_FILE = "project-folders.json";
+var MAX_BINDINGS = 256;
+var MAX_FILE_BYTES2 = 512 * 1024;
+var MAX_PATH = 4096;
+var MAX_WALK = 128;
+var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectFoldersPath() {
+  return join4(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+}
+var FOLD_CASE = process.platform === "win32";
+function folderContains(folder, path, options) {
+  const a = options.foldCase ? folder.toLowerCase() : folder;
+  const b = options.foldCase ? path.toLowerCase() : path;
+  if (a === b) return true;
+  const prefix = a.endsWith(options.separator) ? a : `${a}${options.separator}`;
+  return b.startsWith(prefix);
+}
+function deepestBinding(bindings, candidates, options) {
+  let best;
+  for (const binding of bindings)
+    if (candidates.some(
+      (path) => folderContains(binding.folder, path, options)
+    ) && (!best || binding.folder.length > best.folder.length))
+      best = binding;
+  return best;
+}
+var match = { foldCase: FOLD_CASE, separator: sep };
+function usableFolder(value) {
+  return typeof value === "string" && isAbsolute2(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+}
+function canonicalFolder(path) {
+  const absolute = normalize2(resolve(path));
+  let head = absolute;
+  for (let i = 0; i < MAX_WALK; i++) {
+    try {
+      const real = realpathSync.native(head);
+      const rest = relative(head, absolute);
+      return rest ? join4(real, rest) : real;
+    } catch {
+      const parent = dirname3(head);
+      if (parent === head) break;
+      head = parent;
+    }
+  }
+  return absolute;
+}
+function smallFile(path) {
+  try {
+    const info = lstatSync4(path);
+    if (!info.isFile() || info.size > 4096) return void 0;
+    return readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function mainCheckoutPath(path) {
+  let dir = path;
+  for (let i = 0; i < MAX_WALK; i++) {
+    const dotGit = join4(dir, ".git");
+    let info;
+    try {
+      info = lstatSync4(dotGit);
+    } catch {
+      info = void 0;
+    }
+    if (info) {
+      if (!info.isFile()) return void 0;
+      const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(
+        smallFile(dotGit) ?? ""
+      );
+      if (!pointer?.[1]) return void 0;
+      const gitdir = resolve(dir, pointer[1]);
+      if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
+      const back = smallFile(join4(gitdir, "gitdir"))?.trim();
+      if (!back) return void 0;
+      try {
+        if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+          return void 0;
+      } catch {
+        return void 0;
+      }
+      const common = smallFile(join4(gitdir, "commondir"))?.trim();
+      if (!common) return void 0;
+      let commonDir;
+      try {
+        commonDir = realpathSync.native(resolve(gitdir, common));
+      } catch {
+        return void 0;
+      }
+      if (basename(commonDir) !== ".git") return void 0;
+      const rest = relative(dir, path);
+      return rest ? join4(dirname3(commonDir), rest) : dirname3(commonDir);
+    }
+    const parent = dirname3(dir);
+    if (parent === dir) return void 0;
+    dir = parent;
+  }
+  return void 0;
+}
+function validBinding(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+}
+function validKey(key) {
+  const at = key.lastIndexOf("|");
+  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
+}
+function readStore2() {
+  try {
+    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
+      return {};
+    const out = {};
+    for (const [key, list] of Object.entries(
+      value.bindings
+    ))
+      if (validKey(key) && Array.isArray(list))
+        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    return out;
+  } catch {
+    return {};
+  }
+}
+function readBindings(apiBase, principalId) {
+  if (!principalId) return [];
+  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+}
+function bindingFor(apiBase, principalId, cwd) {
+  const bindings = readBindings(apiBase, principalId);
+  if (bindings.length === 0) return void 0;
+  const real = canonicalFolder(cwd);
+  const main2 = mainCheckoutPath(real);
+  return deepestBinding(bindings, main2 ? [real, main2] : [real], match);
+}
+
+// src/project-scope.ts
+function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
-  if (!isAllowedApiBase(base)) return void 0;
-  return readSelection(base, identity.userId);
+  if (!isAllowedApiBase(base) || !identity.userId) return void 0;
+  const folder = usableFolder(cwd);
+  const binding = folder ? bindingFor(base, identity.userId, folder) : void 0;
+  if (binding)
+    return {
+      scope: "folder",
+      apiBase: normalizeApiBase(base),
+      principalId: identity.userId.toLowerCase(),
+      tenantId: binding.tenantId,
+      projectId: binding.projectId,
+      name: binding.name,
+      selectionId: binding.bindingId,
+      folder: binding.folder,
+      ...binding.stale ? { stale: true } : {}
+    };
+  const selection = readSelection(base, identity.userId);
+  return selection ? { scope: "computer", ...selection } : void 0;
+}
+function eventFolder(event) {
+  if (!event) return void 0;
+  if (typeof event.cwd === "string") return event.cwd;
+  return typeof event.workspaceRoot === "string" ? event.workspaceRoot : void 0;
 }
 
 // src/project-context.ts
@@ -405,17 +587,31 @@ function clip(value, max) {
 }
 function projectCommandPrefix() {
   try {
-    const here = dirname3(fileURLToPath(import.meta.url));
-    const script = join3(here, "project.mjs");
+    const here = dirname4(fileURLToPath(import.meta.url));
+    const script = join5(here, "project.mjs");
     if (existsSync(script) && !/["\\$`\n]/.test(script))
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.14.2"} project`;
+  return `npx -y memroot@${"0.15.0"} project`;
 }
-function projectStatusLine() {
+function folderOption(folder) {
+  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
+}
+function staleBindingText(project) {
   const command = projectCommandPrefix();
-  const selected = currentSelection();
+  const folder = project.folder ?? "";
+  const option = folderOption(folder);
+  return `Memroot project "${clip(project.name, 80)}" bound to folder "${clip(folder, 300)}" is no longer available, so Memroot calls here are refused. Bind another: ${command} use "<name>" ${option}; or use the project selected on this computer: ${command} unbind ${option}.`;
+}
+function projectStatusLine(cwd) {
+  const command = projectCommandPrefix();
+  const selected = effectiveProject(cwd);
+  if (selected?.stale) return staleBindingText(selected);
+  if (selected?.scope === "folder") {
+    const folder = selected.folder ?? "";
+    return `Memroot project for folder "${clip(folder, 300)}": "${clip(selected.name, 80)}" (project_id ${selected.projectId}). Pass this project_id to memory_retrieve and memory_create. To switch this folder: ${command} use "<name>" ${folderOption(folder)}; other folders: ${command} use "<name>".`;
+  }
   if (selected)
     return `Memroot project for this computer: "${clip(selected.name, 80)}" (project_id ${selected.projectId}). Pass this project_id to memory_retrieve and memory_create. To switch every session on this computer: ${command} use "<name>".`;
   return `No Memroot project is selected on this computer yet. Run: ${command} use (it selects the only project automatically, or lists the projects; then run ${command} use "<name>"). The choice applies to every session and agent on this computer.`;
@@ -427,18 +623,18 @@ import {
   constants as constants2,
   fstatSync as fstatSync2,
   openSync as openSync3,
-  readFileSync as readFileSync3
+  readFileSync as readFileSync4
 } from "node:fs";
 import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute2, join as join4, relative, resolve } from "node:path";
+import { isAbsolute as isAbsolute3, join as join6, relative as relative2, resolve as resolve2 } from "node:path";
 var MAX_SETTINGS_BYTES = 256 * 1024;
 function claudeConfigDir() {
   const value = process.env.CLAUDE_CONFIG_DIR;
-  return value && isAbsolute2(value) ? resolve(value) : join4(homedir2(), ".claude");
+  return value && isAbsolute3(value) ? resolve2(value) : join6(homedir2(), ".claude");
 }
 function insideDirectory(path, directory) {
-  const inside = relative(directory, path);
-  return !inside.startsWith("..") && !isAbsolute2(inside);
+  const inside = relative2(directory, path);
+  return !inside.startsWith("..") && !isAbsolute3(inside);
 }
 function readSettings(path) {
   let fd;
@@ -446,7 +642,7 @@ function readSettings(path) {
     fd = openSync3(path, constants2.O_RDONLY | (constants2.O_NONBLOCK ?? 0));
     const info = fstatSync2(fd);
     if (!info.isFile() || info.size > MAX_SETTINGS_BYTES) return void 0;
-    return readFileSync3(fd, "utf8");
+    return readFileSync4(fd, "utf8");
   } catch {
     return void 0;
   } finally {
@@ -464,8 +660,8 @@ function autoMemoryDirectory(path) {
   }
   if (typeof value !== "string" || !value || value.includes("\0"))
     return void 0;
-  if (value.startsWith("~/")) return resolve(homedir2(), value.slice(2));
-  return isAbsolute2(value) ? resolve(value) : void 0;
+  if (value.startsWith("~/")) return resolve2(homedir2(), value.slice(2));
+  return isAbsolute3(value) ? resolve2(value) : void 0;
 }
 function policySettings() {
   if (process.platform === "darwin")
@@ -477,20 +673,20 @@ function policySettings() {
 var cached;
 function configuredMemoryDirectories(cwd) {
   if (cached && cached.cwd === cwd) return cached.directories;
-  const files = [join4(claudeConfigDir(), "settings.json"), ...policySettings()];
-  if (cwd && isAbsolute2(cwd))
+  const files = [join6(claudeConfigDir(), "settings.json"), ...policySettings()];
+  if (cwd && isAbsolute3(cwd))
     files.push(
-      join4(cwd, ".claude", "settings.json"),
-      join4(cwd, ".claude", "settings.local.json")
+      join6(cwd, ".claude", "settings.json"),
+      join6(cwd, ".claude", "settings.local.json")
     );
   const directories = files.map(autoMemoryDirectory).filter((value) => value !== void 0);
   cached = { cwd, directories };
   return directories;
 }
 function claudeConfiguredMemoryWrite(path, cwd) {
-  const projects = join4(claudeConfigDir(), "projects");
+  const projects = join6(claudeConfigDir(), "projects");
   if (insideDirectory(path, projects)) {
-    const parts = relative(projects, path).toLowerCase().split(/[\\/]+/);
+    const parts = relative2(projects, path).toLowerCase().split(/[\\/]+/);
     for (let j = 1; j + 1 < parts.length; j++)
       if (parts[j] === "memory") return true;
   }
@@ -501,16 +697,16 @@ function claudeConfiguredMemoryWrite(path, cwd) {
 
 // src/capture/hooks/codex-memory-dirs.ts
 import { homedir as homedir3 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join5, relative as relative2, resolve as resolve2 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join7, relative as relative3, resolve as resolve3 } from "node:path";
 function codexHome() {
   const value = process.env.CODEX_HOME;
-  return resolve2(
-    value && isAbsolute3(value) ? value : join5(homedir3(), ".codex")
+  return resolve3(
+    value && isAbsolute4(value) ? value : join7(homedir3(), ".codex")
   );
 }
 function codexHomeMemoryWrite(path) {
-  const inside = relative2(codexHome(), path);
-  if (!inside || inside.startsWith("..") || isAbsolute3(inside)) return false;
+  const inside = relative3(codexHome(), path);
+  if (!inside || inside.startsWith("..") || isAbsolute4(inside)) return false;
   const parts = inside.toLowerCase().split(/[\\/]+/).filter(Boolean);
   if (parts.length === 1 && (parts[0] === "agents.md" || parts[0] === "agents.override.md"))
     return true;
@@ -523,7 +719,7 @@ var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
 var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
 var STDIN_DEADLINE_MS = 500;
 function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve4) => {
+  return new Promise((resolve5) => {
     let bytes = 0;
     let chunks = [];
     let settled = false;
@@ -536,7 +732,7 @@ function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
       if (bytes > maxBytes) process.stdin.on("data", () => {
       });
       else process.stdin.destroy();
-      resolve4(value);
+      resolve5(value);
     };
     const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
     process.stdin.on("error", () => finish(void 0));
@@ -585,18 +781,18 @@ function hostAgent(bundled) {
 }
 
 // src/capture/hooks/markers.ts
-import { lstatSync as lstatSync3 } from "node:fs";
-import { join as join7 } from "node:path";
+import { lstatSync as lstatSync5 } from "node:fs";
+import { join as join9 } from "node:path";
 
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes2 } from "node:crypto";
-import { join as join6 } from "node:path";
+import { join as join8 } from "node:path";
 var HEX64 = /^[a-f0-9]{64}$/;
 function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path = join6(stateSubdir(), "salt");
+  const path = join8(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -620,8 +816,8 @@ function cleanup(directory, keep, pattern) {
   for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
     if (name === keep || !pattern.test(name)) continue;
     try {
-      const path = join7(directory, name);
-      const info = lstatSync3(path);
+      const path = join9(directory, name);
+      const info = lstatSync5(path);
       if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
     } catch {
     }
@@ -633,7 +829,7 @@ function markerName(agent2, sessionId) {
 function claimSessionMarker(subdir, agent2, sessionId) {
   const directory = stateSubdir(subdir);
   const name = markerName(agent2, sessionId);
-  if (!createPrivateFileExclusive(join7(directory, name), "")) return false;
+  if (!createPrivateFileExclusive(join9(directory, name), "")) return false;
   try {
     cleanup(directory, name, new RegExp(`^${agent2}-[a-f0-9]{32}$`));
   } catch {
@@ -642,11 +838,11 @@ function claimSessionMarker(subdir, agent2, sessionId) {
 }
 
 // src/capture/hooks/registration.ts
-import { join as join8 } from "node:path";
+import { join as join10 } from "node:path";
 function mcpRegistered(agent2) {
   try {
     const raw = readPrivateFileIfExists(
-      join8(memrootConfigDir(), "config.json"),
+      join10(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw === void 0) return false;
@@ -1217,11 +1413,11 @@ function shellWriteTargets(command) {
 var MAX_PATCH_FILES = 256;
 function patchedFiles(patch) {
   const files = [];
-  for (const match of patch.matchAll(
+  for (const match2 of patch.matchAll(
     /^\*\*\* (Add File|Update File|Delete File|Move to): (.+)$/gmu
   )) {
-    const path = match[2]?.trim();
-    if (path) files.push({ path, deleted: match[1] === "Delete File" });
+    const path = match2[2]?.trim();
+    if (path) files.push({ path, deleted: match2[1] === "Delete File" });
     if (files.length >= MAX_PATCH_FILES) break;
   }
   return files;
@@ -1287,7 +1483,7 @@ function resolveTarget(target, cwd) {
     /^(?:~|\$HOME|\$\{HOME\})(?=\/|$)/,
     () => homedir4()
   );
-  return cwd && isAbsolute4(cwd) ? resolve3(cwd, path) : resolve3(path);
+  return cwd && isAbsolute5(cwd) ? resolve4(cwd, path) : resolve4(path);
 }
 function commandText(command, separator = " ") {
   if (typeof command === "string") return command;
@@ -1324,16 +1520,17 @@ function memoryWrite(event, input) {
   const path = writtenPath(input);
   return path !== void 0 && memoryPath(resolveTarget(path, cwd), cwd);
 }
-function projectSelected() {
+function projectSelected(cwd) {
   try {
-    return currentSelection() !== void 0;
+    const project = effectiveProject(cwd);
+    return project !== void 0 && !project.stale;
   } catch {
     return true;
   }
 }
-function noProjectLine() {
+function noProjectLine(cwd) {
   try {
-    return `${MIRROR_NO_PROJECT} ${projectStatusLine()}`;
+    return `${MIRROR_NO_PROJECT} ${projectStatusLine(cwd)}`;
   } catch {
     return MIRROR_NO_PROJECT;
   }
@@ -1372,7 +1569,7 @@ async function main() {
     `${JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
-        additionalContext: projectSelected() ? MIRROR_NUDGE : noProjectLine()
+        additionalContext: projectSelected(eventFolder(event)) ? MIRROR_NUDGE : noProjectLine(eventFolder(event))
       }
     })}
 `
