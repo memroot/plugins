@@ -18403,7 +18403,7 @@ function notATranscript(error51) {
   const { code, errno } = error51;
   return typeof code === "string" && NOT_A_TRANSCRIPT.includes(code) || typeof errno === "number" && NOT_A_TRANSCRIPT_ERRNO.includes(Math.abs(errno));
 }
-function forEachJsonLine(path2, visit, end) {
+function forEachJsonLine(path2, visit, end, keep) {
   if (path2.endsWith(".zst")) throw new UnsupportedTranscriptError();
   let fd;
   try {
@@ -18434,7 +18434,7 @@ function forEachJsonLine(path2, visit, end) {
       const lines = text.split("\n");
       carry = lines.pop() ?? "";
       for (const line of lines) {
-        parseLine(line, visit, lineStart);
+        if (!keep || keep(line)) parseLine(line, visit, lineStart);
         lineStart += Buffer.byteLength(line) + 1;
       }
       if (carry.length > 32 * 1024 * 1024) {
@@ -18442,7 +18442,10 @@ function forEachJsonLine(path2, visit, end) {
         carry = "";
       }
     }
-    if (end === void 0) parseLine(carry + decoder.end(), visit, lineStart);
+    if (end === void 0) {
+      const last = carry + decoder.end();
+      if (!keep || keep(last)) parseLine(last, visit, lineStart);
+    }
   } finally {
     closeSync3(fd);
   }
@@ -20461,7 +20464,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.14.1"}`
+        `memroot-capture/${"0.14.2"}`
       ),
       salt,
       redactor: createRedactor(salt),

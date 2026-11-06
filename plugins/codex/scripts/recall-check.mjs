@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
 // src/capture/hooks/recall-check.ts
-import { realpathSync } from "node:fs";
-import { homedir as homedir4, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute4 } from "node:path";
+import { realpathSync as realpathSync2 } from "node:fs";
+import { homedir as homedir5, tmpdir } from "node:os";
+import { isAbsolute as isAbsolute5 } from "node:path";
 
 // src/project-selection.ts
 import { randomBytes as randomBytes2, randomUUID } from "node:crypto";
@@ -354,7 +354,7 @@ function upsert(store, input) {
   const key = selectionKey(input.apiBase, input.principalId);
   const prior = store[key];
   const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
-  const record = {
+  const record2 = {
     apiBase: normalizeApiBase(input.apiBase),
     principalId: input.principalId.toLowerCase(),
     tenantId: input.tenantId,
@@ -364,16 +364,16 @@ function upsert(store, input) {
     selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
     source: input.source
   };
-  if (!valid(record))
+  if (!valid(record2))
     throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
-  store[key] = record;
+  store[key] = record2;
   const keys = Object.keys(store);
   if (keys.length > MAX_RECORDS)
     for (const old of keys.sort(
       (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
     ).slice(0, keys.length - MAX_RECORDS))
       delete store[old];
-  return record;
+  return record2;
 }
 function offlineIdentity() {
   let apiBase = PRODUCTION_API_BASE;
@@ -543,12 +543,15 @@ function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
   });
 }
 var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
-function hookSessionId(record) {
-  const value = typeof record.session_id === "string" ? record.session_id : record.sessionId;
+function hookSessionId(record2) {
+  const value = typeof record2.session_id === "string" ? record2.session_id : record2.sessionId;
   return typeof value === "string" && SESSION_ID.test(value) ? value : void 0;
 }
 
 // src/capture/hooks/guards.ts
+import { realpathSync } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+import { isAbsolute as isAbsolute4, join as join5, normalize as normalize2 } from "node:path";
 function inertProcess() {
   if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
   if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
@@ -560,20 +563,53 @@ function processGuard() {
 function hostAgent(bundled) {
   return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
 }
+function absoluteEnv2(name) {
+  const value = process.env[name];
+  return value && isAbsolute4(value) ? normalize2(value) : void 0;
+}
+function transcriptRoots(agent2) {
+  if (agent2 === "claude")
+    return [
+      join5(
+        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join5(homedir4(), ".claude"),
+        "projects"
+      )
+    ];
+  if (agent2 === "codex") {
+    const home = absoluteEnv2("CODEX_HOME") ?? join5(homedir4(), ".codex");
+    return [join5(home, "sessions"), join5(home, "archived_sessions")];
+  }
+  return [
+    join5(absoluteEnv2("GROK_HOME") ?? join5(homedir4(), ".grok"), "sessions")
+  ];
+}
+function transcriptPathAllowed(agent2, path) {
+  if (!isAbsolute4(path) || path.length > 4096 || path.includes("\0") || path.split("/").includes("..") || normalize2(path) !== path)
+    return false;
+  if (agent2 !== "grok" && !path.endsWith(".jsonl")) return false;
+  return transcriptRoots(agent2).some((root) => {
+    if (path.startsWith(`${root}/`)) return true;
+    try {
+      return path.startsWith(`${realpathSync(root)}/`);
+    } catch {
+      return false;
+    }
+  });
+}
 
 // src/capture/hooks/markers.ts
 import { lstatSync as lstatSync3 } from "node:fs";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 var HEX64 = /^[a-f0-9]{64}$/;
 function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path = join5(stateSubdir(), "salt");
+  const path = join6(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -597,7 +633,7 @@ function cleanup(directory, keep, pattern) {
   for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
     if (name === keep || !pattern.test(name)) continue;
     try {
-      const path = join6(directory, name);
+      const path = join7(directory, name);
       const info = lstatSync3(path);
       if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
     } catch {
@@ -610,12 +646,167 @@ function markerName(agent2, sessionId) {
 function claimSessionMarker(subdir, agent2, sessionId) {
   const directory = stateSubdir(subdir);
   const name = markerName(agent2, sessionId);
-  if (!createPrivateFileExclusive(join6(directory, name), "")) return false;
+  if (!createPrivateFileExclusive(join7(directory, name), "")) return false;
   try {
     cleanup(directory, name, new RegExp(`^${agent2}-[a-f0-9]{32}$`));
   } catch {
   }
   return true;
+}
+function releaseSessionMarker(subdir, agent2, sessionId) {
+  try {
+    removeFile(join7(stateSubdir(subdir), markerName(agent2, sessionId)));
+  } catch {
+  }
+}
+
+// src/capture/transcript/types.ts
+import { closeSync as closeSync4, constants as constants3, fstatSync as fstatSync3, openSync as openSync4, readSync } from "node:fs";
+import { constants as osConstants } from "node:os";
+import { StringDecoder } from "node:string_decoder";
+var UnsupportedTranscriptError = class extends Error {
+  constructor() {
+    super("UNSUPPORTED_TRANSCRIPT");
+  }
+};
+var MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
+var NOT_A_TRANSCRIPT = ["ENOENT", "ELOOP", "ENXIO", "EOPNOTSUPP", "ENODEV"];
+var NOT_A_TRANSCRIPT_ERRNO = NOT_A_TRANSCRIPT.map(
+  (name) => osConstants.errno[name]
+).filter((value) => typeof value === "number");
+function notATranscript(error) {
+  const { code, errno } = error;
+  return typeof code === "string" && NOT_A_TRANSCRIPT.includes(code) || typeof errno === "number" && NOT_A_TRANSCRIPT_ERRNO.includes(Math.abs(errno));
+}
+function forEachJsonLine(path, visit, end, keep) {
+  if (path.endsWith(".zst")) throw new UnsupportedTranscriptError();
+  let fd;
+  try {
+    fd = openSync4(
+      path,
+      constants3.O_RDONLY | constants3.O_NOFOLLOW | (constants3.O_NONBLOCK ?? 0)
+    );
+  } catch (error) {
+    if (notATranscript(error)) throw new UnsupportedTranscriptError();
+    throw error;
+  }
+  try {
+    const info = fstatSync3(fd);
+    if (!info.isFile() || info.size > MAX_TRANSCRIPT_BYTES)
+      throw new UnsupportedTranscriptError();
+    const buffer = Buffer.alloc(1024 * 1024);
+    const decoder = new StringDecoder("utf8");
+    let carry = "";
+    let position = 0;
+    let lineStart = 0;
+    for (; ; ) {
+      const length = end === void 0 ? buffer.length : Math.min(buffer.length, end - position);
+      if (length <= 0) break;
+      const read = readSync(fd, buffer, 0, length, position);
+      if (read === 0) break;
+      position += read;
+      const text = carry + decoder.write(buffer.subarray(0, read));
+      const lines = text.split("\n");
+      carry = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!keep || keep(line)) parseLine(line, visit, lineStart);
+        lineStart += Buffer.byteLength(line) + 1;
+      }
+      if (carry.length > 32 * 1024 * 1024) {
+        lineStart += Buffer.byteLength(carry);
+        carry = "";
+      }
+    }
+    if (end === void 0) {
+      const last = carry + decoder.end();
+      if (!keep || keep(last)) parseLine(last, visit, lineStart);
+    }
+  } finally {
+    closeSync4(fd);
+  }
+}
+function parseLine(line, visit, byteStart) {
+  if (!line.trim()) return;
+  try {
+    const value = JSON.parse(line);
+    if (value && typeof value === "object" && !Array.isArray(value))
+      visit(value, byteStart);
+  } catch {
+  }
+}
+function record(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+
+// src/capture/hooks/mcp-availability.ts
+var SERVER = /^(?:plugin:[^:]+:)?memroot$/u;
+var MEMROOT_TOOL_PREFIX = "^mcp__(?:plugin_[A-Za-z0-9_-]+_)?memroot__";
+var TOOL = new RegExp(MEMROOT_TOOL_PREFIX, "u");
+var MARKERS = [
+  '"deferred_tools_delta"',
+  '"mcp_instructions_delta"',
+  '"api-request-shape"',
+  '"api-request"'
+];
+var names = (value) => Array.isArray(value) ? value.map((item) => typeof item === "string" ? item : record(item)?.name).filter((name) => typeof name === "string") : [];
+function claudeAvailabilityFold(tool) {
+  let announced = "unknown";
+  const shapes = /* @__PURE__ */ new Map();
+  let latest;
+  return {
+    add(entry) {
+      if (entry.type === "attachment") {
+        const attachment = record(entry.attachment);
+        if (attachment?.type === "deferred_tools_delta") {
+          const down = [
+            attachment.failedMcpServers,
+            attachment.needsAuthMcpServers,
+            attachment.pendingMcpServers
+          ].some((list) => names(list).some((name) => SERVER.test(name)));
+          if (down) announced = "unavailable";
+          else if ([attachment.addedNames, attachment.readdedNames].some(
+            (list) => names(list).some((name) => TOOL.test(name))
+          ))
+            announced = "available";
+        } else if (attachment?.type === "mcp_instructions_delta") {
+          if (names(attachment.addedNames).some((name) => SERVER.test(name)))
+            announced = "available";
+          else if (names(attachment.removedNames).some((name) => SERVER.test(name)))
+            announced = "unavailable";
+        }
+      } else if (entry.type === "api-request-shape" && typeof entry.shapeHash === "string") {
+        const tools = names(record(entry.shape)?.tools);
+        shapes.set(entry.shapeHash, {
+          gated: tools.includes(tool),
+          memroot: tools.some((name) => TOOL.test(name))
+        });
+      } else if (entry.type === "api-request" && typeof entry.shapeHash === "string") {
+        const shape = shapes.get(entry.shapeHash);
+        if (shape?.gated) latest = shape;
+      }
+    },
+    result() {
+      if (latest?.memroot) return "available";
+      if (announced !== "unknown") return announced;
+      return latest ? "unavailable" : "unknown";
+    }
+  };
+}
+function memrootAvailability(agent2, transcriptPath, tool) {
+  if (agent2 !== "claude" || typeof transcriptPath !== "string" || !transcriptPathAllowed(agent2, transcriptPath))
+    return "unknown";
+  try {
+    const fold = claudeAvailabilityFold(tool);
+    forEachJsonLine(
+      transcriptPath,
+      (value) => fold.add(value),
+      void 0,
+      (line) => MARKERS.some((marker) => line.includes(marker))
+    );
+    return fold.result();
+  } catch {
+    return "unknown";
+  }
 }
 
 // src/capture/hooks/recall-gate-mode.ts
@@ -627,7 +818,7 @@ function recallGateMode(override) {
 
 // src/capture/hooks/recall-state.ts
 import { lstatSync as lstatSync4 } from "node:fs";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 var DIRECTORY = "recall-state";
 var STATE_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
 var MAX_CLEANUP2 = 512;
@@ -663,7 +854,7 @@ function readRecallState(agent2, key) {
   try {
     return parse(
       readPrivateFileIfExists(
-        join7(stateSubdir(DIRECTORY), fileName(agent2, key)),
+        join8(stateSubdir(DIRECTORY), fileName(agent2, key)),
         1024
       )
     );
@@ -677,7 +868,7 @@ function cleanup2(directory, keep) {
     if (name === keep || !/^(claude|codex|grok)-[a-f0-9]{32}\.json$/u.test(name))
       continue;
     try {
-      const path = join7(directory, name);
+      const path = join8(directory, name);
       if (lstatSync4(path).mtimeMs < cutoff) removeFile(path);
     } catch {
     }
@@ -686,7 +877,7 @@ function cleanup2(directory, keep) {
 function updateRecallState(agent2, key, change) {
   const directory = stateSubdir(DIRECTORY);
   const name = fileName(agent2, key);
-  const path = join7(directory, name);
+  const path = join8(directory, name);
   const prior = parse(readPrivateFileIfExists(path, 1024));
   const next = change(
     prior ?? {
@@ -717,6 +908,12 @@ function notePrompt(agent2, key, exempt, optOut = false) {
       optOut: optOut ? prompts : counts.optOut
     };
   });
+}
+function noteUnavailable(agent2, key) {
+  return updateRecallState(agent2, key, (counts) => ({
+    ...counts,
+    exempt: Math.max(counts.exempt, counts.prompts)
+  }));
 }
 function noteCheck(agent2, key, options = {}) {
   return updateRecallState(agent2, key, (counts) => ({
@@ -792,6 +989,7 @@ function projectFact(project) {
   if (project === void 0) return RECALL_PROJECT;
   return project ? `Memroot project: "${safeName(project.name)}" (project_id ${project.projectId}); pass it on every Memroot call, never a placeholder or the nil UUID.` : "No Memroot project is selected on this computer yet; the Memroot project line in the session context gives the command.";
 }
+var NO_TOOLS_FACT = "A session without the Memroot tools skips the check: it sends this call again and tells the user Memroot is unavailable.";
 function gateAction(mode, counts, firstForPrompt) {
   if (mode === "off" || !counts || counts.prompts < 1) return "none";
   if (counts.stopped) return "none";
@@ -809,7 +1007,7 @@ function gateText(action, counts, project, options) {
   const head = options.subagent ? `Memroot check pending for this subagent's task ${prompt}, ${since}.` : `Memroot check pending for prompt ${prompt} of this session, ${since}.`;
   const id = project ? `project_id ${project.projectId}` : "the selected project_id";
   const practice = options.subagent ? `The user set up Memroot; a subagent that has the Memroot tools makes the first change of each task after memory_retrieve with ${id} and a short query naming the task.` : `The user set up Memroot; the first change of each task waits for memory_retrieve with ${id} and a short query naming the task.`;
-  const tail = action === "deny" ? "This call was held for that check." : "This call is the first change of the task.";
+  const tail = action === "deny" ? `This call was held for that check. ${NO_TOOLS_FACT}` : "This call is the first change of the task.";
   return [head, practice, tail].join(" ");
 }
 function subagentContext(project, options = {}) {
@@ -836,11 +1034,11 @@ function subagentContext(project, options = {}) {
 }
 
 // src/capture/hooks/registration.ts
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 function mcpRegistered(agent2) {
   try {
     const raw = readPrivateFileIfExists(
-      join8(memrootConfigDir(), "config.json"),
+      join9(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw === void 0) return false;
@@ -1480,10 +1678,10 @@ function patchText(value) {
 function editTargets(input) {
   if (!input || typeof input !== "object" || Array.isArray(input))
     return void 0;
-  const record = input;
-  const path = record.file_path ?? record.notebook_path;
+  const record2 = input;
+  const path = record2.file_path ?? record2.notebook_path;
   if (typeof path === "string" && path) return [path];
-  const patch = patchText(record.command) ?? patchText(record.input);
+  const patch = patchText(record2.command) ?? patchText(record2.input);
   if (patch === void 0) return void 0;
   const files = patchedFiles(patch).map((file) => file.path);
   return files.length > 0 ? files : void 0;
@@ -1514,8 +1712,8 @@ function unquoted(command) {
 }
 function shellCommandText(input) {
   if (!input || typeof input !== "object") return void 0;
-  const record = input;
-  const command = record.command ?? record.cmd;
+  const record2 = input;
+  const command = record2.command ?? record2.cmd;
   if (typeof command === "string") return command;
   if (Array.isArray(command))
     return command.filter((part) => typeof part === "string").join(" ");
@@ -1537,7 +1735,7 @@ function mutatingShellCommand(command, scope = { tempDirs: DEFAULT_TEMP_DIRS }) 
 // src/capture/hooks/recall-check.ts
 var agent = hostAgent("codex");
 var gateMode = recallGateMode("");
-var RETRIEVE_TOOL = /^mcp__(?:plugin_[A-Za-z0-9_-]+_)?memroot__memory_retrieve$/u;
+var RETRIEVE_TOOL = new RegExp(`${MEMROOT_TOOL_PREFIX}memory_retrieve$`, "u");
 var EDIT_TOOLS = {
   claude: /* @__PURE__ */ new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]),
   codex: /* @__PURE__ */ new Set(["apply_patch", "Edit", "Write"]),
@@ -1613,7 +1811,7 @@ function onRetrieveStarted(event, sessionId) {
   exit("");
 }
 function optionalAbsolute(value) {
-  return typeof value === "string" && isAbsolute4(value) ? value : void 0;
+  return typeof value === "string" && isAbsolute5(value) ? value : void 0;
 }
 function tempDirs(projectDir) {
   const configured = [];
@@ -1626,14 +1824,14 @@ function tempDirs(projectDir) {
     if (!root) continue;
     configured.push(root);
     try {
-      configured.push(realpathSync(root));
+      configured.push(realpathSync2(root));
     } catch {
     }
   }
   return [
     .../* @__PURE__ */ new Set([
       ...DEFAULT_TEMP_DIRS,
-      ...usableTempRoots(configured, homedir4(), projectDir)
+      ...usableTempRoots(configured, homedir5(), projectDir)
     ])
   ];
 }
@@ -1645,7 +1843,7 @@ function writeScope(event) {
     projectDir,
     scratchpadDir: optionalAbsolute(event.scratchpad_dir),
     tempDirs: tempDirs(projectDir),
-    home: homedir4(),
+    home: homedir5(),
     ownMemory: (path) => agent === "codex" ? codexHomeMemoryWrite(path) : claudeConfiguredMemoryWrite(path, cwd)
   };
 }
@@ -1671,15 +1869,22 @@ function onToolUse(event, sessionId) {
   if (!gateWouldAct(gateMode, counts) || !counts) return exit("");
   const project = selectedProject();
   if (!project) return exit("");
+  const marker = `${key}\0prompt\0${counts.prompts}`;
   let first = false;
   try {
-    first = claimSessionMarker(
-      "recall-gate-sent",
-      agent,
-      `${key}\0prompt\0${counts.prompts}`
-    );
+    first = claimSessionMarker("recall-gate-sent", agent, marker);
   } catch {
     first = false;
+  }
+  if (!first) return exit("");
+  if (memrootAvailability(agent, event.transcript_path, tool) === "unavailable") {
+    try {
+      noteUnavailable(agent, key);
+    } catch {
+    }
+    if (readRecallState(agent, key)?.exempt === counts.prompts)
+      releaseSessionMarker("recall-gate-sent", agent, marker);
+    return exit("");
   }
   const action = gateAction(subagent ? "context" : gateMode, counts, first);
   if (action === "none") return exit("");

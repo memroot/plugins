@@ -46,7 +46,7 @@ Use this template for every kind. Keep `"assertion_type": "descriptive"` with `"
 - Leave `valid_time` out.
 - `confidence` at most 0.8 and `importance` at most 4 with `agent_initiated` evidence.
 - `qualifier`: lowercase snake_case starting with a letter; the literal `value` is a short string, at most 512 bytes.
-- `evidence`: one item, empty `locator` (`{}`; name files in the summary or statement); `agent_initiated` when you save on your own, use `user_attestation` only when the user explicitly asked to save that lesson. Summarize truthfully what the lesson rests on; don't add other evidence.
+- `evidence`: one item, empty `locator` (`{}`; name files in the summary or statement); `agent_initiated` when you save on your own, use `user_attestation` only when the user explicitly asked to save that lesson. Summarize truthfully what the lesson rests on: what you saw, ran or read, or what the user said and why; not that they asked to save it. Don't add other evidence.
 - `memory_relations`: empty, or `{ "type": "supersedes", "target_memory_id": "<older memory_id>", "evidence_refs": ["e1"] }` to replace an older memory.
 - Leave `provenance` out: Memroot records it, with a source id derived from the `idempotency_key`.
 
