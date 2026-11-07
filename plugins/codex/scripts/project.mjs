@@ -12,6 +12,10 @@ var __commonJS = (cb, mod) => function __require() {
     throw mod = 0, e;
   }
 };
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -20,6 +24,7 @@ var __copyProps = (to, from, except, desc) => {
   }
   return to;
 };
+var __reExport = (target, mod, secondTarget) => (__copyProps(target, mod, "default"), secondTarget && __copyProps(secondTarget, mod, "default"));
 var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
   // If the importer is in node compatibility mode or this is not an ESM
   // file that has been converted to a CommonJS file using a Babel-
@@ -89,7 +94,58 @@ var require_src = __commonJS({
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { existsSync as existsSync3, lstatSync as lstatSync6, rmSync as rmSync5, statSync } from "node:fs";
 import { join as join12, normalize as normalize3, resolve as resolve2 } from "node:path";
-import { parseArgs } from "node:util";
+
+// src/plugin/node-util-compat.ts
+var node_util_compat_exports = {};
+__export(node_util_compat_exports, {
+  default: () => node_util_compat_default,
+  styleText: () => styleText2
+});
+__reExport(node_util_compat_exports, node_util_star);
+import * as util from "node:util";
+import * as node_util_star from "node:util";
+var CODES = {
+  reset: [0, 0],
+  bold: [1, 22],
+  dim: [2, 22],
+  italic: [3, 23],
+  underline: [4, 24],
+  inverse: [7, 27],
+  hidden: [8, 28],
+  strikethrough: [9, 29],
+  black: [30, 39],
+  red: [31, 39],
+  green: [32, 39],
+  yellow: [33, 39],
+  blue: [34, 39],
+  magenta: [35, 39],
+  cyan: [36, 39],
+  white: [37, 39],
+  gray: [90, 39],
+  grey: [90, 39],
+  bgBlack: [40, 49],
+  bgRed: [41, 49],
+  bgGreen: [42, 49],
+  bgYellow: [43, 49],
+  bgBlue: [44, 49],
+  bgMagenta: [45, 49],
+  bgCyan: [46, 49],
+  bgWhite: [47, 49]
+};
+var fallback = (format, text, options = {}) => {
+  const stream = options.stream ?? process.stdout;
+  const env = process.env;
+  const colour = options.validateStream === false || env.FORCE_COLOR !== void 0 && env.FORCE_COLOR !== "0" || stream.isTTY === true && !env.NO_COLOR && !env.NODE_DISABLE_COLORS && env.TERM !== "dumb";
+  if (!colour) return text;
+  let out = text;
+  for (const name of Array.isArray(format) ? format : [format]) {
+    const code = CODES[name];
+    if (code) out = `\x1B[${code[0]}m${out}\x1B[${code[1]}m`;
+  }
+  return out;
+};
+var styleText2 = util.styleText ?? fallback;
+var node_util_compat_default = { ...util, styleText: styleText2 };
 
 // ../../packages/contracts/src/invisible-text-v1.ts
 var INVISIBLE_FORMATTING_CLASS = "\\u061c\\u200b\\u200e\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff";
@@ -763,7 +819,6 @@ var r = class extends y {
 };
 
 // ../../node_modules/.pnpm/@clack+prompts@1.8.1/node_modules/@clack/prompts/dist/index.mjs
-import { styleText, stripVTControlCharacters } from "node:util";
 import process$1 from "node:process";
 var import_sisteransi2 = __toESM(require_src(), 1);
 function isUnicodeSupported() {
@@ -803,15 +858,15 @@ var symbol = (o) => {
   switch (o) {
     case "initial":
     case "active":
-      return styleText("cyan", S_STEP_ACTIVE);
+      return styleText2("cyan", S_STEP_ACTIVE);
     case "cancel":
-      return styleText("red", S_STEP_CANCEL);
+      return styleText2("red", S_STEP_CANCEL);
     case "error":
-      return styleText("yellow", S_STEP_ERROR);
+      return styleText2("yellow", S_STEP_ERROR);
     case "submit":
-      return styleText("green", S_STEP_SUBMIT);
+      return styleText2("green", S_STEP_SUBMIT);
     case "validating":
-      return styleText("dim", S_STEP_ACTIVE);
+      return styleText2("dim", S_STEP_ACTIVE);
   }
 };
 var confirm = (e) => {
@@ -824,29 +879,29 @@ var confirm = (e) => {
     output: e.output,
     initialValue: e.initialValue ?? true,
     render() {
-      const i2 = e.withGuide ?? settings.withGuide, u3 = `${symbol(this.state)}  `, l = i2 ? `${styleText("gray", S_BAR)}  ` : "", f = wrapTextWithPrefix(
+      const i2 = e.withGuide ?? settings.withGuide, u3 = `${symbol(this.state)}  `, l = i2 ? `${styleText2("gray", S_BAR)}  ` : "", f = wrapTextWithPrefix(
         e.output,
         e.message,
         l,
         u3
-      ), s = `${i2 ? `${styleText("gray", S_BAR)}
+      ), s = `${i2 ? `${styleText2("gray", S_BAR)}
 ` : ""}${f}
 `, c = this.value ? a2 : o;
       switch (this.state) {
         case "submit": {
-          const r2 = i2 ? `${styleText("gray", S_BAR)}  ` : "";
-          return `${s}${r2}${styleText("dim", c)}`;
+          const r2 = i2 ? `${styleText2("gray", S_BAR)}  ` : "";
+          return `${s}${r2}${styleText2("dim", c)}`;
         }
         case "cancel": {
-          const r2 = i2 ? `${styleText("gray", S_BAR)}  ` : "";
-          return `${s}${r2}${styleText(["strikethrough", "dim"], c)}${i2 ? `
-${styleText("gray", S_BAR)}` : ""}`;
+          const r2 = i2 ? `${styleText2("gray", S_BAR)}  ` : "";
+          return `${s}${r2}${styleText2(["strikethrough", "dim"], c)}${i2 ? `
+${styleText2("gray", S_BAR)}` : ""}`;
         }
         default: {
-          const r2 = i2 ? `${styleText("cyan", S_BAR)}  ` : "", g = i2 ? styleText("cyan", S_BAR_END) : "";
-          return `${s}${r2}${this.value ? `${styleText("green", S_RADIO_ACTIVE)} ${a2}` : `${styleText("dim", S_RADIO_INACTIVE)} ${styleText("dim", a2)}`}${e.vertical ? i2 ? `
-${styleText("cyan", S_BAR)}  ` : `
-` : ` ${styleText("dim", "/")} `}${this.value ? `${styleText("dim", S_RADIO_INACTIVE)} ${styleText("dim", o)}` : `${styleText("green", S_RADIO_ACTIVE)} ${o}`}
+          const r2 = i2 ? `${styleText2("cyan", S_BAR)}  ` : "", g = i2 ? styleText2("cyan", S_BAR_END) : "";
+          return `${s}${r2}${this.value ? `${styleText2("green", S_RADIO_ACTIVE)} ${a2}` : `${styleText2("dim", S_RADIO_INACTIVE)} ${styleText2("dim", a2)}`}${e.vertical ? i2 ? `
+${styleText2("cyan", S_BAR)}  ` : `
+` : ` ${styleText2("dim", "/")} `}${this.value ? `${styleText2("dim", S_RADIO_INACTIVE)} ${styleText2("dim", o)}` : `${styleText2("green", S_RADIO_ACTIVE)} ${o}`}
 ${g}
 `;
         }
@@ -855,9 +910,9 @@ ${g}
   }).prompt();
 };
 var MULTISELECT_INSTRUCTIONS = [
-  `${styleText("dim", "\u2191/\u2193")} to navigate`,
-  `${styleText("dim", "Space:")} select`,
-  `${styleText("dim", "Enter:")} confirm`
+  `${styleText2("dim", "\u2191/\u2193")} to navigate`,
+  `${styleText2("dim", "Space:")} select`,
+  `${styleText2("dim", "Enter:")} confirm`
 ];
 var u2 = {
   light: unicodeOr("\u2500", "-"),
@@ -865,10 +920,10 @@ var u2 = {
   block: unicodeOr("\u2588", "#")
 };
 var SELECT_INSTRUCTIONS = [
-  `${styleText("dim", "\u2191/\u2193")} to navigate`,
-  `${styleText("dim", "Enter:")} confirm`
+  `${styleText2("dim", "\u2191/\u2193")} to navigate`,
+  `${styleText2("dim", "Enter:")} confirm`
 ];
-var i = `${styleText("gray", S_BAR)}  `;
+var i = `${styleText2("gray", S_BAR)}  `;
 
 // src/credentials.ts
 import { spawnSync } from "node:child_process";
@@ -1382,6 +1437,11 @@ async function deleteSecret(account) {
   );
 }
 
+// src/project-context.ts
+import { existsSync } from "node:fs";
+import { dirname as dirname5, join as join8 } from "node:path";
+import { fileURLToPath } from "node:url";
+
 // src/project-folders.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
 import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
@@ -1672,14 +1732,25 @@ function folderContains(folder, path, options) {
   const prefix = a2.endsWith(options.separator) ? a2 : `${a2}${options.separator}`;
   return b.startsWith(prefix);
 }
-function deepestBinding(bindings, candidates, options) {
+function applicableBinding(bindings, scope, options) {
+  const same = (a2, b) => options.foldCase ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
+  const chains = [
+    { root: scope.top, path: scope.cwd, mapped: false },
+    ...scope.main ? [{ ...scope.main, mapped: true }] : []
+  ];
   let best;
-  for (const binding of bindings)
-    if (candidates.some(
-      (path) => folderContains(binding.folder, path, options)
-    ) && (!best || binding.folder.length > best.folder.length))
-      best = binding;
-  return best;
+  for (const chain of chains)
+    for (const binding of bindings) {
+      const root = chain.root;
+      if (root !== void 0 && !folderContains(root, binding.folder, options) || !folderContains(binding.folder, chain.path, options))
+        continue;
+      const depth = binding.folder.length - (root?.length ?? 0);
+      if (best && depth <= best.depth) continue;
+      const atRoot = root !== void 0 && same(binding.folder, root);
+      const via = chain.mapped ? atRoot ? "main_checkout" : "main_checkout_folder" : same(binding.folder, scope.cwd) ? "folder" : root === void 0 ? "parent_folder" : atRoot ? "repo_root" : "repo_folder";
+      best = { binding, via, depth };
+    }
+  return best && { binding: best.binding, via: best.via };
 }
 var match = { foldCase: FOLD_CASE, separator: sep };
 function canonicalFolder(path) {
@@ -1707,9 +1778,8 @@ function smallFile(path) {
     return void 0;
   }
 }
-function mainCheckoutPath(path) {
-  let dir = path;
-  for (let i2 = 0; i2 < MAX_WALK; i2++) {
+function folderScope(real) {
+  for (let dir = real, i2 = 0; i2 < MAX_WALK; i2++) {
     const dotGit = join7(dir, ".git");
     let info;
     try {
@@ -1718,43 +1788,54 @@ function mainCheckoutPath(path) {
       info = void 0;
     }
     if (info) {
-      if (!info.isFile()) return void 0;
-      const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(
-        smallFile(dotGit) ?? ""
-      );
-      if (!pointer?.[1]) return void 0;
-      const gitdir = resolve(dir, pointer[1]);
-      if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
-      const back = smallFile(join7(gitdir, "gitdir"))?.trim();
-      if (!back) return void 0;
-      try {
-        if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
-          return void 0;
-      } catch {
-        return void 0;
-      }
-      const common = smallFile(join7(gitdir, "commondir"))?.trim();
-      if (!common) return void 0;
-      let commonDir;
-      try {
-        commonDir = realpathSync.native(resolve(gitdir, common));
-      } catch {
-        return void 0;
-      }
-      if (basename(commonDir) !== ".git") return void 0;
-      const rest = relative(dir, path);
-      return rest ? join7(dirname4(commonDir), rest) : dirname4(commonDir);
+      const root = info.isFile() ? worktreeMain(dir, dotGit) : void 0;
+      if (!root) return { cwd: real, top: dir };
+      const rest = relative(dir, real);
+      return {
+        cwd: real,
+        top: dir,
+        main: { root, path: rest ? join7(root, rest) : root }
+      };
     }
     const parent = dirname4(dir);
-    if (parent === dir) return void 0;
+    if (parent === dir) break;
     dir = parent;
   }
-  return void 0;
+  return { cwd: real };
+}
+function worktreeMain(dir, dotGit) {
+  const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
+  if (!pointer?.[1]) return void 0;
+  const gitdir = resolve(dir, pointer[1]);
+  if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
+  const back = smallFile(join7(gitdir, "gitdir"))?.trim();
+  if (!back) return void 0;
+  try {
+    if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+      return void 0;
+  } catch {
+    return void 0;
+  }
+  const common = smallFile(join7(gitdir, "commondir"))?.trim();
+  if (!common) return void 0;
+  let commonDir;
+  try {
+    commonDir = realpathSync.native(resolve(gitdir, common));
+  } catch {
+    return void 0;
+  }
+  if (basename(commonDir) !== ".git") return void 0;
+  return dirname4(commonDir);
 }
 function bindingFolder(path) {
-  const real = canonicalFolder(path);
-  const main = mainCheckoutPath(real);
-  return main ? { folder: main, mapped: true } : { folder: real, mapped: false };
+  const scope = folderScope(canonicalFolder(path));
+  const folder = scope.main?.path ?? scope.cwd;
+  const root = scope.main?.root ?? scope.top;
+  return {
+    folder,
+    mapped: !!scope.main,
+    covers: !root ? "folder" : sameFolder(folder, root) ? "repository" : "subtree"
+  };
 }
 function validBinding(value) {
   const v = value;
@@ -1803,12 +1884,13 @@ function readBindings(apiBase, principalId) {
   if (!principalId) return [];
   return readStore2()[selectionKey(apiBase, principalId)] ?? [];
 }
-function bindingFor(apiBase, principalId, cwd) {
+function bindingMatchFor(apiBase, principalId, cwd) {
   const bindings = readBindings(apiBase, principalId);
   if (bindings.length === 0) return void 0;
-  const real = canonicalFolder(cwd);
-  const main = mainCheckoutPath(real);
-  return deepestBinding(bindings, main ? [real, main] : [real], match);
+  return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
+}
+function bindingFor(apiBase, principalId, cwd) {
+  return bindingMatchFor(apiBase, principalId, cwd)?.binding;
 }
 function bindFolder(input) {
   return update((store) => {
@@ -1869,6 +1951,28 @@ function folderMissing(folder) {
   } catch {
     return true;
   }
+}
+
+// src/project-context.ts
+var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function validUuid(value) {
+  return typeof value === "string" && UUID3.test(value);
+}
+function projectCommandPrefix() {
+  try {
+    const here = dirname5(fileURLToPath(import.meta.url));
+    const script = join8(here, "project.mjs");
+    if (existsSync(script) && !/["\\$`\n]/.test(script))
+      return `node "${script}"`;
+  } catch {
+  }
+  return `npx -y memroot@${"0.15.1"} project`;
+}
+function folderOption(folder) {
+  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
+}
+function legacySessionRecordsDir() {
+  return join8(stateDir(), "project-sessions");
 }
 
 // src/capture/consent.ts
@@ -1962,31 +2066,6 @@ function activeAgreementFor(agent) {
 // src/capture/extract/run.ts
 var MAX_OUTPUT_BYTES = 256 * 1024;
 var MAX_STDERR_BYTES = 8 * 1024;
-
-// src/project-context.ts
-import { existsSync } from "node:fs";
-import { dirname as dirname5, join as join8 } from "node:path";
-import { fileURLToPath } from "node:url";
-var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function validUuid(value) {
-  return typeof value === "string" && UUID3.test(value);
-}
-function projectCommandPrefix() {
-  try {
-    const here = dirname5(fileURLToPath(import.meta.url));
-    const script = join8(here, "project.mjs");
-    if (existsSync(script) && !/["\\$`\n]/.test(script))
-      return `node "${script}"`;
-  } catch {
-  }
-  return `npx -y memroot@${"0.15.0"} project`;
-}
-function folderOption(folder) {
-  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
-}
-function legacySessionRecordsDir() {
-  return join8(stateDir(), "project-sessions");
-}
 
 // src/capture/queue/job.ts
 var JOB_ID = /^(claude|codex|grok)-[a-f0-9]{32}$/;
@@ -3119,6 +3198,11 @@ function choiceRequired(projects, stale) {
     `${stale ? `PROJECT_SELECTION_INVALID: The selected project "${stale.name}" is no longer available to this account. ` : "PROJECT_CHOICE_REQUIRED: No project is selected on this computer. "}Choose one: ${command} use "<name>"; your projects: ${names}.${projects.projects.length === 0 ? ` Create one with ${command} create "<name>".` : ""}`
   );
 }
+var COVERS = {
+  repository: "This folder, its subfolders and every worktree of this repository.",
+  subtree: "This folder and its subfolders, in every worktree of this repository.",
+  folder: "This folder and its subfolders, up to any git repository inside it."
+};
 var sameFolder2 = (a2, b) => FOLD_CASE ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
 function bindingOutput(binding) {
   return {
@@ -3155,7 +3239,7 @@ async function projectCommand(args, _bundledAgent) {
   const actions = ["list", "use", "create", "status", "unbind", "login"];
   const action = actions.includes(requested) ? requested : "use";
   if (action === "use" && requested !== "use") args.unshift(requested);
-  const parsed = parseArgs({
+  const parsed = (0, node_util_compat_exports.parseArgs)({
     args,
     allowPositionals: true,
     strict: true,
@@ -3219,7 +3303,7 @@ async function projectCommand(args, _bundledAgent) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.15.0"}`;
+  const userAgent = `memroot-cli/${"0.15.1"}`;
   const client = new McpClient(base, new TokenBroker(base), userAgent);
   const listProjects = async (via = client) => {
     let projects2;
@@ -3281,17 +3365,19 @@ async function projectCommand(args, _bundledAgent) {
   }
   if (action === "status") {
     const { selection, stale } = resolveSelection(base, projects);
-    const binding = bindingFor(
+    const found = bindingMatchFor(
       base,
       projects.principal_id,
       folder ?? process.cwd()
     );
-    if (binding) {
+    if (found) {
+      const { binding, via } = found;
       console.log(
         JSON.stringify({
           selected: binding.stale ? null : { project_id: binding.projectId, name: binding.name },
           scope: "folder",
           folder: binding.folder,
+          ...via === "folder" ? {} : { via },
           ...binding.stale ? {
             stale: { project_id: binding.projectId, name: binding.name },
             next: `${command} use "<name>" ${folderOption(binding.folder)}`
@@ -3359,6 +3445,7 @@ async function projectCommand(args, _bundledAgent) {
         ...capturing ? {
           capture: "Session captures in this folder go to this Memroot project."
         } : {},
+        covers: COVERS[place.covers],
         ...place.mapped ? {
           note: "This folder is in a linked git worktree; the binding is stored for the main checkout, so every worktree of the repository uses it."
         } : {}

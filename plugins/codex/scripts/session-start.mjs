@@ -448,14 +448,25 @@ function folderContains(folder, path, options) {
   const prefix = a.endsWith(options.separator) ? a : `${a}${options.separator}`;
   return b.startsWith(prefix);
 }
-function deepestBinding(bindings, candidates, options) {
+function applicableBinding(bindings, scope, options) {
+  const same = (a, b) => options.foldCase ? a.toLowerCase() === b.toLowerCase() : a === b;
+  const chains = [
+    { root: scope.top, path: scope.cwd, mapped: false },
+    ...scope.main ? [{ ...scope.main, mapped: true }] : []
+  ];
   let best;
-  for (const binding of bindings)
-    if (candidates.some(
-      (path) => folderContains(binding.folder, path, options)
-    ) && (!best || binding.folder.length > best.folder.length))
-      best = binding;
-  return best;
+  for (const chain of chains)
+    for (const binding of bindings) {
+      const root = chain.root;
+      if (root !== void 0 && !folderContains(root, binding.folder, options) || !folderContains(binding.folder, chain.path, options))
+        continue;
+      const depth = binding.folder.length - (root?.length ?? 0);
+      if (best && depth <= best.depth) continue;
+      const atRoot = root !== void 0 && same(binding.folder, root);
+      const via = chain.mapped ? atRoot ? "main_checkout" : "main_checkout_folder" : same(binding.folder, scope.cwd) ? "folder" : root === void 0 ? "parent_folder" : atRoot ? "repo_root" : "repo_folder";
+      best = { binding, via, depth };
+    }
+  return best && { binding: best.binding, via: best.via };
 }
 var match = { foldCase: FOLD_CASE, separator: sep };
 function usableFolder(value) {
@@ -486,9 +497,8 @@ function smallFile(path) {
     return void 0;
   }
 }
-function mainCheckoutPath(path) {
-  let dir = path;
-  for (let i = 0; i < MAX_WALK; i++) {
+function folderScope(real) {
+  for (let dir = real, i = 0; i < MAX_WALK; i++) {
     const dotGit = join4(dir, ".git");
     let info;
     try {
@@ -497,38 +507,44 @@ function mainCheckoutPath(path) {
       info = void 0;
     }
     if (info) {
-      if (!info.isFile()) return void 0;
-      const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(
-        smallFile(dotGit) ?? ""
-      );
-      if (!pointer?.[1]) return void 0;
-      const gitdir = resolve(dir, pointer[1]);
-      if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
-      const back = smallFile(join4(gitdir, "gitdir"))?.trim();
-      if (!back) return void 0;
-      try {
-        if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
-          return void 0;
-      } catch {
-        return void 0;
-      }
-      const common = smallFile(join4(gitdir, "commondir"))?.trim();
-      if (!common) return void 0;
-      let commonDir;
-      try {
-        commonDir = realpathSync.native(resolve(gitdir, common));
-      } catch {
-        return void 0;
-      }
-      if (basename(commonDir) !== ".git") return void 0;
-      const rest = relative(dir, path);
-      return rest ? join4(dirname3(commonDir), rest) : dirname3(commonDir);
+      const root = info.isFile() ? worktreeMain(dir, dotGit) : void 0;
+      if (!root) return { cwd: real, top: dir };
+      const rest = relative(dir, real);
+      return {
+        cwd: real,
+        top: dir,
+        main: { root, path: rest ? join4(root, rest) : root }
+      };
     }
     const parent = dirname3(dir);
-    if (parent === dir) return void 0;
+    if (parent === dir) break;
     dir = parent;
   }
-  return void 0;
+  return { cwd: real };
+}
+function worktreeMain(dir, dotGit) {
+  const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
+  if (!pointer?.[1]) return void 0;
+  const gitdir = resolve(dir, pointer[1]);
+  if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
+  const back = smallFile(join4(gitdir, "gitdir"))?.trim();
+  if (!back) return void 0;
+  try {
+    if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+      return void 0;
+  } catch {
+    return void 0;
+  }
+  const common = smallFile(join4(gitdir, "commondir"))?.trim();
+  if (!common) return void 0;
+  let commonDir;
+  try {
+    commonDir = realpathSync.native(resolve(gitdir, common));
+  } catch {
+    return void 0;
+  }
+  if (basename(commonDir) !== ".git") return void 0;
+  return dirname3(commonDir);
 }
 function validBinding(value) {
   const v = value;
@@ -560,12 +576,10 @@ function readBindings(apiBase, principalId) {
   if (!principalId) return [];
   return readStore2()[selectionKey(apiBase, principalId)] ?? [];
 }
-function bindingFor(apiBase, principalId, cwd) {
+function bindingMatchFor(apiBase, principalId, cwd) {
   const bindings = readBindings(apiBase, principalId);
   if (bindings.length === 0) return void 0;
-  const real = canonicalFolder(cwd);
-  const main2 = mainCheckoutPath(real);
-  return deepestBinding(bindings, main2 ? [real, main2] : [real], match);
+  return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
 
 // src/project-scope.ts
@@ -574,8 +588,9 @@ function effectiveProject(cwd, apiBase) {
   const base = apiBase ?? identity.apiBase;
   if (!isAllowedApiBase(base) || !identity.userId) return void 0;
   const folder = usableFolder(cwd);
-  const binding = folder ? bindingFor(base, identity.userId, folder) : void 0;
-  if (binding)
+  const found = folder ? bindingMatchFor(base, identity.userId, folder) : void 0;
+  if (found) {
+    const { binding, via } = found;
     return {
       scope: "folder",
       apiBase: normalizeApiBase(base),
@@ -585,8 +600,10 @@ function effectiveProject(cwd, apiBase) {
       name: binding.name,
       selectionId: binding.bindingId,
       folder: binding.folder,
+      via,
       ...binding.stale ? { stale: true } : {}
     };
+  }
   const selection = readSelection(base, identity.userId);
   return selection ? { scope: "computer", ...selection } : void 0;
 }
@@ -607,7 +624,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.15.0"} project`;
+  return `npx -y memroot@${"0.15.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -618,13 +635,31 @@ function staleBindingText(project) {
   const option = folderOption(folder);
   return `Memroot project "${clip(project.name, 80)}" bound to folder "${clip(folder, 300)}" is no longer available, so Memroot calls here are refused. Bind another: ${command} use "<name>" ${option}; or use the project selected on this computer: ${command} unbind ${option}.`;
 }
+function boundFrom(project) {
+  const folder = `"${clip(project.folder ?? "", 300)}"`;
+  switch (project.via) {
+    case "parent_folder":
+      return `bound to parent folder ${folder}`;
+    case "repo_root":
+      return `bound to repository root ${folder}`;
+    case "repo_folder":
+      return `bound to ${folder} in this repository`;
+    case "main_checkout":
+      return `bound to main checkout ${folder}; this is a worktree`;
+    case "main_checkout_folder":
+      return `bound to ${folder} in the main checkout; this is a worktree`;
+    default:
+      return void 0;
+  }
+}
 function projectStatusLine(cwd) {
   const command = projectCommandPrefix();
   const selected = effectiveProject(cwd);
   if (selected?.stale) return staleBindingText(selected);
   if (selected?.scope === "folder") {
     const folder = selected.folder ?? "";
-    return `Memroot project for folder "${clip(folder, 300)}": "${clip(selected.name, 80)}" (project_id ${selected.projectId}). Pass this project_id to memory_retrieve and memory_create. To switch this folder: ${command} use "<name>" ${folderOption(folder)}; other folders: ${command} use "<name>".`;
+    const inherited = boundFrom(selected);
+    return `${inherited ? `Memroot project: "${clip(selected.name, 80)}" (project_id ${selected.projectId}; ${inherited})` : `Memroot project for folder "${clip(folder, 300)}": "${clip(selected.name, 80)}" (project_id ${selected.projectId})`}. Pass this project_id to memory_retrieve and memory_create. To switch ${inherited ? "it" : "this folder"}: ${command} use "<name>" ${folderOption(folder)}; other folders: ${command} use "<name>".`;
   }
   if (selected)
     return `Memroot project for this computer: "${clip(selected.name, 80)}" (project_id ${selected.projectId}). Pass this project_id to memory_retrieve and memory_create. To switch every session on this computer: ${command} use "<name>".`;

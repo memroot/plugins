@@ -5,7 +5,7 @@ description: Lists, selects or creates the Memroot project used on this computer
 
 # Memroot project
 
-The selected project applies to every session and agent on this computer until it is changed, except in folders bound to their own project (the deepest bound folder wins; git worktrees share their repository's binding). A project represents the user's product and may cover several repositories or no repository. Invoke with `$memroot-project` and an action: `status`, `list`, `use [PROJECT]`, `create NAME` or `unbind`; a bare project name is shorthand for `use NAME`.
+The selected project applies to every session and agent on this computer until it is changed, except in folders bound to their own project (a binding covers its subfolders, and for a git repository its worktrees, but never a repository below it). A project represents the user's product and may cover several repositories or no repository. Invoke with `$memroot-project` and an action: `status`, `list`, `use [PROJECT]`, `create NAME` or `unbind`; a bare project name is shorthand for `use NAME`.
 
 Run the bundled project script with the action. The Memroot project line in the session context gives its exact command; it is `node "<plugin root>/scripts/project.mjs"`, and the plugin root is two directories above this SKILL.md:
 
