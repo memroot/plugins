@@ -104,6 +104,22 @@ export function catalogs(version) {
 }
 
 const pluginFiles = (agent, version) => {
+  if (agent === "agy")
+    return [
+      "plugin.json",
+      "README.md",
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.txt",
+      "hooks.json",
+      "skills/memroot-memory/SKILL.md",
+      "skills/memroot-memory/references/save.md",
+      "skills/memroot-status/SKILL.md",
+      "skills/memroot-project/SKILL.md",
+      "scripts/agy-hook.mjs",
+      "scripts/mcp-stdio.mjs",
+      "scripts/status.mjs",
+      "scripts/project.mjs",
+    ];
   // scripts/memory-mirror.mjs and scripts/prompt-nudge.mjs first ship in
   // 0.3.0; published tarballs before it do not carry the hooks and must still
   // export cleanly.
@@ -218,8 +234,16 @@ export async function exportTarball({
     )
       throw new Error("Unsafe archive path");
   }
+  // The requested release version determines the required payload. A
+  // missing bundle must not make a current release look historical.
+  const [major, minor, patch, alpha] = releaseParts(version);
+  const includesAgy =
+    major > 0n ||
+    minor > 17n ||
+    (minor === 17n && (patch > 0n || alpha === undefined));
+  const exportedAgents = includesAgy ? [...agents, "agy"] : agents;
   const expected = new Map(
-    agents.flatMap((agent) =>
+    exportedAgents.flatMap((agent) =>
       pluginFiles(agent, version).map((path) => [
         `package/dist/plugins/${agent}/${path}`,
         `plugins/${agent}/${path}`,
@@ -263,7 +287,7 @@ export async function exportTarball({
   const files = new Map([["LICENSE", extract("package/LICENSE")]]);
   for (const [source, destination] of expected)
     files.set(destination, extract(source));
-  for (const agent of agents) {
+  for (const agent of exportedAgents) {
     const prefix = `plugins/${agent}/`;
     const manifest = JSON.parse(
       files.get(`${prefix}${pluginFiles(agent, version)[0]}`),
@@ -281,8 +305,28 @@ export async function exportTarball({
       .toString("utf8");
     if (!notices.includes("MIT") || !notices.includes("Copyright"))
       throw new Error("Missing third-party license notices");
-    const hooks = JSON.parse(files.get(`${prefix}hooks/hooks.json`));
-    if (!hooks.hooks?.SessionEnd || !hooks.hooks?.PostCompact)
+    const hooks = JSON.parse(
+      files.get(
+        `${prefix}${agent === "agy" ? "hooks.json" : "hooks/hooks.json"}`,
+      ),
+    );
+    if (agent === "agy") {
+      if (
+        [
+          "SessionStart",
+          "PreInvocation",
+          "PreToolUse",
+          "PostToolUse",
+          "PostInvocation",
+          "Stop",
+        ].some(
+          (event) =>
+            !Array.isArray(hooks.memroot?.[event]) ||
+            !hooks.memroot[event].length,
+        )
+      )
+        throw new Error("Missing Antigravity hook events");
+    } else if (!hooks.hooks?.SessionEnd || !hooks.hooks?.PostCompact)
       throw new Error("Missing capture hook events");
     for (const [path, bytes] of files)
       if (
