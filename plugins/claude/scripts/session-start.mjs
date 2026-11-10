@@ -407,7 +407,7 @@ function upsert(store, input) {
       delete store[old];
   return record;
 }
-function offlineIdentity() {
+function offlineIdentity(recordedOnly = false) {
   let apiBase = PRODUCTION_API_BASE;
   let userId;
   try {
@@ -426,7 +426,9 @@ function offlineIdentity() {
     }
   } catch {
   }
-  apiBase = normalizeApiBase(process.env.MEMROOT_API_BASE ?? apiBase);
+  apiBase = normalizeApiBase(
+    recordedOnly ? apiBase : process.env.MEMROOT_API_BASE ?? apiBase
+  );
   return userId ? { apiBase, userId } : { apiBase };
 }
 
@@ -554,27 +556,32 @@ function validKey(key) {
   const at = key.lastIndexOf("|");
   return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
 }
-function readStore2() {
+function readStore2(strictKey) {
   try {
     const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
     if (raw === void 0) return {};
     const value = JSON.parse(raw);
     if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
-      return {};
+      throw new Error("INVALID_PROJECT_FOLDER_STORE");
     const out = {};
     for (const [key, list] of Object.entries(
       value.bindings
-    ))
+    )) {
+      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
+        throw new Error("INVALID_PROJECT_FOLDER_STORE");
       if (validKey(key) && Array.isArray(list))
         out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    }
     return out;
-  } catch {
+  } catch (error) {
+    if (strictKey !== void 0) throw error;
     return {};
   }
 }
-function readBindings(apiBase, principalId) {
+function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   if (!principalId) return [];
-  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+  const key = selectionKey(apiBase, principalId);
+  return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
 function bindingMatchFor(apiBase, principalId, cwd) {
   const bindings = readBindings(apiBase, principalId);
@@ -624,7 +631,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.16.0"} project`;
+  return `npx -y memroot@${"0.17.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -777,6 +784,7 @@ function activeAgreementFor(agent2) {
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes3 } from "node:crypto";
 import { join as join6 } from "node:path";
+var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
 var JOB_STATES = [
   "pending",
   "extracted",
@@ -812,6 +820,25 @@ function sessionRefFor(salt, agent2, sessionId) {
 function queueDir() {
   return stateSubdir("queue");
 }
+var conflictPath = (jobId) => join6(queueDir(), `${jobId}.account-conflict`);
+function hasAccountConflict(jobId) {
+  const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
+  if (marker === void 0) return false;
+  const at = Date.parse(marker);
+  if (Number.isFinite(at) && Date.now() - at > JOB_TTL_MS) {
+    removeFile(conflictPath(jobId));
+    return false;
+  }
+  return true;
+}
+function observeAccountConflict(agent2, sessionId, account) {
+  const ref = sessionRefFor(readOrCreateSalt(), agent2, sessionId);
+  const id = `${agent2}-${ref.slice(0, 32)}`;
+  const existing = readJob(id);
+  const previous = existing && (jobTarget(existing) ?? existing.account);
+  if (previous && (previous.apiBase !== account.apiBase || previous.principalId !== account.principalId))
+    createPrivateFileExclusive(conflictPath(id), (/* @__PURE__ */ new Date()).toISOString());
+}
 function jobPath(jobId) {
   return join6(queueDir(), `${jobId}.json`);
 }
@@ -824,6 +851,11 @@ function parseJob(value) {
     return void 0;
   if (job.triggerRef !== void 0 && (typeof job.triggerRef !== "string" || !HEX64.test(job.triggerRef)))
     return void 0;
+  if (job.account !== void 0) {
+    const account = job.account;
+    if (!account || typeof account.apiBase !== "string" || !validUuid(account.principalId))
+      return void 0;
+  }
   if (job.target !== void 0 && !validTarget(job.target)) return void 0;
   if (job.floorBytes !== void 0 && (!Number.isSafeInteger(job.floorBytes) || job.floorBytes < 0))
     return void 0;
@@ -837,6 +869,17 @@ function parseJob(value) {
 function validTarget(value) {
   const t = value;
   return !!t && typeof t === "object" && typeof t.apiBase === "string" && validUuid(t.principalId) && validUuid(t.tenantId) && validUuid(t.projectId) && validUuid(t.selectionId);
+}
+function jobTarget(job) {
+  if (job.target) return job.target;
+  const p = job.project;
+  return p ? {
+    apiBase: p.apiBase,
+    principalId: p.principalId,
+    tenantId: p.tenantId,
+    projectId: p.projectId,
+    selectionId: p.segmentId
+  } : void 0;
 }
 function readJob(jobId) {
   const raw = readPrivateFileIfExists(jobPath(jobId), 64 * 1024);
@@ -852,7 +895,13 @@ function writeJob(job) {
 `);
 }
 function listJobIds() {
-  return listFiles(queueDir()).filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
+  const names = listFiles(queueDir());
+  for (const name of names) {
+    const id = name.slice(0, -".account-conflict".length);
+    if (name.endsWith(".account-conflict") && JOB_ID.test(id))
+      hasAccountConflict(id);
+  }
+  return names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
 }
 function enqueueFromHook(input) {
   const salt = readOrCreateSalt();
@@ -862,6 +911,7 @@ function enqueueFromHook(input) {
   const job = {
     schemaVersion: 1,
     ...input.target ? { target: input.target } : {},
+    ...input.account ? { account: input.account } : {},
     ...input.floorBytes !== void 0 ? { floorBytes: input.floorBytes } : {},
     jobId,
     agent: input.agent,
@@ -883,10 +933,18 @@ function enqueueFromHook(input) {
       return job;
     const existing = readJob(jobId);
     if (!existing) continue;
+    const previous = jobTarget(existing) ?? existing.account;
+    const incoming = input.target ?? input.account;
+    if (previous && incoming && (previous.apiBase !== incoming.apiBase || previous.principalId !== incoming.principalId)) {
+      createPrivateFileExclusive(conflictPath(jobId), now);
+      return existing;
+    }
+    if (hasAccountConflict(jobId)) return existing;
     const target2 = input.target ?? existing.target;
     const unpark = target2 !== void 0 && (existing.state === "project_required" || existing.state === "awaiting_trigger");
     const updated = {
       ...existing,
+      ...input.account ? { account: input.account } : {},
       endedAt: now,
       reason: input.reason,
       ...target2 ? { target: target2 } : {},
@@ -1200,14 +1258,25 @@ function queueCapture(agent2, record, trigger, options = {}) {
     return false;
   if (!active.consent.includeHeadlessSessions && isHeadlessSession(agent2))
     return false;
+  const identity = offlineIdentity(true);
+  if (!identity.userId) return false;
+  const account = { apiBase: identity.apiBase, principalId: identity.userId };
+  if (identity.apiBase !== active.consent.apiBase) {
+    observeAccountConflict(agent2, envelope.sessionId, account);
+    return false;
+  }
   const destination = target(active.consent.apiBase, envelope.cwd);
+  if (destination && destination.principalId !== account.principalId) {
+    observeAccountConflict(agent2, envelope.sessionId, account);
+    return false;
+  }
   const job = {
     agent: agent2,
     sessionId: envelope.sessionId,
     transcriptPath: envelope.transcriptPath,
     cwd: envelope.cwd,
     reason: envelope.reason,
-    ...destination ? { target: destination } : {}
+    ...destination ? { target: destination } : { account }
   };
   if (options.fork) {
     let floorBytes = 0;

@@ -8,7 +8,7 @@ var __export = (target2, all) => {
 // src/capture/worker/main.ts
 import { randomBytes as randomBytes5 } from "node:crypto";
 import {
-  lstatSync as lstatSync9,
+  lstatSync as lstatSync10,
   mkdtempSync,
   realpathSync as realpathSync4,
   renameSync as renameSync6,
@@ -16,20 +16,18 @@ import {
   statSync as statSync2
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join as join19 } from "node:path";
+import { join as join20 } from "node:path";
 
-// src/project-folders.ts
-import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+// src/config.ts
 import {
-  basename,
-  dirname as dirname3,
-  isAbsolute as isAbsolute2,
-  join as join4,
-  normalize as normalize2,
-  relative,
-  resolve,
-  sep
-} from "node:path";
+  chmod,
+  lstat as lstat2,
+  readFile as readFile2,
+  rename as rename2,
+  rm as rm2,
+  writeFile as writeFile2
+} from "node:fs/promises";
+import { join as join4 } from "node:path";
 
 // src/api-base.ts
 function isLoopbackHostname(hostname4) {
@@ -179,22 +177,361 @@ function captureAgreementPath() {
   return join(memrootConfigDir(), "capture-agreement.json");
 }
 
-// src/config-store.ts
+// src/capture/queue/lock.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2
+} from "node:fs";
+import { join as join2 } from "node:path";
+function lockPath(name) {
+  return join2(stateSubdir("locks"), name);
+}
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error51) {
+    return error51.code === "EPERM";
+  }
+}
+function readOwnerFile(path2) {
+  return readPrivateFile(join2(path2, "owner.json"), 64 * 1024);
+}
+function readOwner(path2) {
+  try {
+    const value = JSON.parse(readOwnerFile(path2));
+    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : NaN;
+    if (typeof value.pid !== "number" || Number.isNaN(createdAt))
+      return void 0;
+    const heartbeat2 = typeof value.heartbeatAt === "string" ? Date.parse(value.heartbeatAt) : NaN;
+    return {
+      pid: value.pid,
+      createdAt,
+      heartbeatAt: Number.isNaN(heartbeat2) ? createdAt : heartbeat2
+    };
+  } catch {
+    return void 0;
+  }
+}
+function isStale(path2, staleMs) {
+  let info;
+  try {
+    info = lstatSync2(path2);
+  } catch {
+    return false;
+  }
+  if (info.isSymbolicLink() || !info.isDirectory()) return true;
+  const owner = readOwner(path2);
+  if (!owner) return Date.now() - info.mtimeMs > staleMs;
+  if (!processAlive(owner.pid)) return true;
+  return Date.now() - owner.heartbeatAt > staleMs;
+}
+var held = /* @__PURE__ */ new Map();
+function tryMkdir(path2) {
+  try {
+    mkdirSync2(path2, { mode: 448 });
+  } catch (error51) {
+    if (error51.code === "EEXIST") return false;
+    throw error51;
+  }
+  const token = randomBytes2(8).toString("hex");
+  held.set(path2, { ino: lstatSync2(path2).ino, token });
+  writeOwner(path2, (/* @__PURE__ */ new Date()).toISOString(), token);
+  return true;
+}
+function writeOwner(path2, createdAt, token) {
+  const temporary = join2(path2, `owner.${process.pid}.${token}.tmp`);
+  writeFileSync2(
+    temporary,
+    JSON.stringify({
+      pid: process.pid,
+      createdAt,
+      heartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
+      token
+    }),
+    { mode: 384 }
+  );
+  renameSync2(temporary, join2(path2, "owner.json"));
+}
+function readToken(path2) {
+  try {
+    const value = JSON.parse(readOwnerFile(path2));
+    return typeof value.token === "string" ? value.token : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function stillOurs(path2) {
+  const mine = held.get(path2);
+  if (!mine) return false;
+  try {
+    return lstatSync2(path2).ino === mine.ino && readToken(path2) === mine.token;
+  } catch {
+    return false;
+  }
+}
+function heartbeat(name) {
+  const path2 = lockPath(name);
+  const mine = held.get(path2);
+  const owner = readOwner(path2);
+  if (!mine || !owner || !stillOurs(path2)) {
+    held.delete(path2);
+    return false;
+  }
+  try {
+    writeOwner(path2, new Date(owner.createdAt).toISOString(), mine.token);
+  } catch {
+    held.delete(path2);
+    return false;
+  }
+  if (!stillOurs(path2)) {
+    held.delete(path2);
+    return false;
+  }
+  return true;
+}
+function clearStale(path2, staleMs) {
+  const tombstone = `${path2}.stale-${process.pid}-${randomBytes2(4).toString("hex")}`;
+  try {
+    renameSync2(path2, tombstone);
+  } catch {
+    return;
+  }
+  if (!isStale(tombstone, staleMs)) {
+    try {
+      renameSync2(tombstone, path2);
+      return;
+    } catch {
+    }
+  }
+  rmSync2(tombstone, { recursive: true, force: true });
+}
+async function acquireLock(name, options) {
+  const path2 = lockPath(name);
+  const deadline = Date.now() + (options.waitMs ?? 0);
+  let cleanups = 0;
+  for (; ; ) {
+    if (options.signal?.aborted) return void 0;
+    if (tryMkdir(path2)) {
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        if (stillOurs(path2)) rmSync2(path2, { recursive: true, force: true });
+        held.delete(path2);
+      };
+    }
+    if (cleanups < 3 && isStale(path2, options.staleMs)) {
+      cleanups++;
+      clearStale(path2, options.staleMs);
+      continue;
+    }
+    if (Date.now() >= deadline) return void 0;
+    await new Promise((resolve2) => setTimeout(resolve2, options.pollMs ?? 100));
+  }
+}
+async function withCredentialLock(name, operation) {
+  const release = await acquireLock(name, {
+    staleMs: 6e4,
+    waitMs: 6e4,
+    pollMs: 100
+  });
+  if (!release)
+    throw new Error(
+      "AUTH_BUSY: Another credential operation is in progress; retry."
+    );
+  const timer = setInterval(() => heartbeat(name), 1e4);
+  timer.unref();
+  try {
+    return await operation();
+  } finally {
+    clearInterval(timer);
+    release();
+  }
+}
+
+// src/storage.ts
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile
+} from "node:fs/promises";
+import { homedir as homedir2 } from "node:os";
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3 } from "node:path";
+function dataDirectory() {
+  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join3(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join3(homedir2(), ".local", "share");
+  if (!isAbsolute2(base))
+    throw new Error(
+      "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
+    );
+  return join3(base, "memroot");
+}
+async function safeDirectory(path2) {
+  const boundary = dataDirectory();
+  if (path2 !== boundary && path2.startsWith(`${boundary}/`))
+    await safeDirectory(dirname2(path2));
+  await mkdir(path2, { recursive: true, mode: 448 });
+  const info = await lstat(path2);
+  if (!info.isDirectory() || info.isSymbolicLink())
+    throw new Error(`UNSAFE_PATH: Expected a real directory at ${path2}.`);
+}
+
+// src/config.ts
+function configDirectory() {
+  return memrootConfigDir();
+}
+function configPath() {
+  return join4(configDirectory(), "config.json");
+}
+function optionalString(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function containsCredential(value) {
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(
+    ([key, entry]) => /token|secret|password|credential|api[_-]?key/i.test(key) || containsCredential(entry)
+  );
+}
+async function migrateLegacy(record3, raw) {
+  if (!(typeof record3.user_id === "string" || typeof record3.email === "string") || containsCredential(record3) || record3.apiBase !== void 0 && (typeof record3.apiBase !== "string" || !isAllowedApiBase(record3.apiBase)))
+    throw new Error(
+      "INVALID_CONFIG: Legacy config cannot be safely migrated. No credentials were imported."
+    );
+  await safeDirectory(configDirectory());
+  const backup = `${configPath()}.legacy-backup`;
+  try {
+    await writeFile2(backup, raw, { flag: "wx", mode: 384 });
+  } catch (error51) {
+    if (error51.code !== "EEXIST") throw error51;
+    const info = await lstat2(backup);
+    if (!info.isFile() || info.isSymbolicLink() || await readFile2(backup, "utf8") !== raw)
+      throw new Error(
+        "INVALID_CONFIG: Legacy backup differs or is unsafe. Original config was preserved."
+      );
+    await chmod(backup, 384);
+  }
+  return { schemaVersion: 1 };
+}
+async function readConfig() {
+  const path2 = configPath();
+  let raw;
+  try {
+    const info = await lstat2(path2);
+    if (!info.isFile() || info.isSymbolicLink())
+      throw new Error("INVALID_CONFIG: Expected a regular config file.");
+    raw = await readFile2(path2, "utf8");
+  } catch (error51) {
+    if (error51.code === "ENOENT")
+      return { schemaVersion: 1 };
+    throw error51;
+  }
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "INVALID_CONFIG: ~/.memroot/config.json is not valid JSON. Fix or remove it."
+    );
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("INVALID_CONFIG: Cannot safely read CLI config.");
+  const record3 = value;
+  if (record3.schemaVersion === void 0) return migrateLegacy(record3, raw);
+  const apiBase = optionalString(record3.apiBase);
+  if (record3.schemaVersion !== 1 || apiBase && !isAllowedApiBase(apiBase))
+    throw new Error("INVALID_CONFIG: Cannot safely read CLI config.");
+  const config2 = { schemaVersion: 1 };
+  if (apiBase) config2.apiBase = apiBase;
+  const clientId = optionalString(record3.clientId);
+  if (clientId) config2.clientId = clientId;
+  const clientIdApiBase = optionalString(record3.clientIdApiBase);
+  if (clientIdApiBase) config2.clientIdApiBase = clientIdApiBase;
+  const userId = optionalString(record3.userId);
+  if (userId) config2.userId = userId;
+  const mcp = record3.mcpRegistered;
+  if (mcp && typeof mcp === "object" && !Array.isArray(mcp)) {
+    const registered = {};
+    if (mcp.claude === true)
+      registered.claude = true;
+    if (mcp.codex === true)
+      registered.codex = true;
+    if (mcp.grok === true) registered.grok = true;
+    if (mcp.agy === true) registered.agy = true;
+    if (registered.claude || registered.codex || registered.grok || registered.agy)
+      config2.mcpRegistered = registered;
+  }
+  const stamps = record3.instructionsInstalled;
+  if (stamps && typeof stamps === "object" && !Array.isArray(stamps)) {
+    const installed = {};
+    for (const key of ["claude", "codex", "grok", "agy"]) {
+      const value2 = optionalString(stamps[key]);
+      if (value2) installed[key] = value2;
+    }
+    if (installed.claude || installed.codex || installed.grok || installed.agy)
+      config2.instructionsInstalled = installed;
+  }
+  const banner = optionalString(record3.importBannerShown);
+  if (banner) config2.importBannerShown = banner;
+  const agy = record3.agyMcpClient;
+  if (agy && typeof agy === "object" && !Array.isArray(agy)) {
+    const value2 = agy;
+    if (typeof value2.apiBase === "string" && isAllowedApiBase(value2.apiBase) && typeof value2.clientId === "string" && /^[A-Za-z0-9._:-]{1,256}$/u.test(value2.clientId) && typeof value2.principalId === "string" && /^[a-f0-9-]{36}$/iu.test(value2.principalId))
+      config2.agyMcpClient = {
+        apiBase: value2.apiBase,
+        clientId: value2.clientId,
+        principalId: value2.principalId
+      };
+  }
+  const registration = record3.agyMcpRegistration;
+  if (registration && typeof registration === "object" && !Array.isArray(registration)) {
+    const value2 = registration;
+    if (typeof value2.command === "string" && value2.command.startsWith("/") && value2.command.length <= 4096 && !value2.command.includes("\0") && typeof value2.script === "string" && value2.script.startsWith("/") && value2.script.length <= 4096 && !value2.script.includes("\0"))
+      config2.agyMcpRegistration = {
+        command: value2.command,
+        script: value2.script
+      };
+  }
+  return config2;
+}
+
+// src/project-folders.ts
+import { lstatSync as lstatSync5, readFileSync as readFileSync3, realpathSync } from "node:fs";
+import {
+  basename,
+  dirname as dirname4,
+  isAbsolute as isAbsolute3,
+  join as join7,
+  normalize as normalize2,
+  relative,
+  resolve,
+  sep
+} from "node:path";
+
+// src/config-store.ts
+import { randomBytes as randomBytes3 } from "node:crypto";
 import {
   closeSync as closeSync2,
   fchmodSync,
   fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
+  lstatSync as lstatSync3,
+  mkdirSync as mkdirSync3,
   openSync as openSync2,
   readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
+  renameSync as renameSync3,
+  rmSync as rmSync3,
+  writeFileSync as writeFileSync3,
   writeSync
 } from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+import { dirname as dirname3, join as join5 } from "node:path";
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
@@ -203,21 +540,21 @@ function pause(ms) {
 }
 function withConfigLock(fileName, update2) {
   const directory = memrootConfigDir();
-  ensurePrivateDir(directory, dirname2(directory), false);
-  const lock = `${join2(directory, fileName)}.lock`;
-  const nonce = randomBytes2(8).toString("hex");
-  const owner = join2(lock, "owner");
+  ensurePrivateDir(directory, dirname3(directory), false);
+  const lock = `${join5(directory, fileName)}.lock`;
+  const nonce = randomBytes3(8).toString("hex");
+  const owner = join5(lock, "owner");
   let held2 = false;
   for (let i = 0; i < LOCK_TRIES && !held2; i++) {
     try {
-      mkdirSync2(lock, { mode: 448 });
-      writeFileSync2(owner, nonce, { mode: 384 });
+      mkdirSync3(lock, { mode: 448 });
+      writeFileSync3(owner, nonce, { mode: 384 });
       held2 = true;
     } catch (error51) {
       if (error51.code !== "EEXIST") break;
       try {
-        if (Date.now() - lstatSync2(lock).mtimeMs > LOCK_STALE_MS)
-          rmSync2(lock, { recursive: true, force: true });
+        if (Date.now() - lstatSync3(lock).mtimeMs > LOCK_STALE_MS)
+          rmSync3(lock, { recursive: true, force: true });
       } catch {
       }
       pause(25);
@@ -229,27 +566,27 @@ function withConfigLock(fileName, update2) {
     if (held2)
       try {
         if (readFileSync2(owner, "utf8") === nonce)
-          rmSync2(lock, { recursive: true, force: true });
+          rmSync3(lock, { recursive: true, force: true });
       } catch {
       }
   }
 }
 function persistConfigJson(fileName, value) {
   const directory = memrootConfigDir();
-  ensurePrivateDir(directory, dirname2(directory), false);
-  const path2 = join2(directory, fileName);
+  ensurePrivateDir(directory, dirname3(directory), false);
+  const path2 = join5(directory, fileName);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
       if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
         try {
-          if (now - lstatSync2(join2(directory, name)).mtimeMs > TMP_STALE_MS)
-            rmSync2(join2(directory, name), { force: true });
+          if (now - lstatSync3(join5(directory, name)).mtimeMs > TMP_STALE_MS)
+            rmSync3(join5(directory, name), { force: true });
         } catch {
         }
   } catch {
   }
-  const temporary = `${path2}.${process.pid}.${randomBytes2(4).toString("hex")}.tmp`;
+  const temporary = `${path2}.${process.pid}.${randomBytes3(4).toString("hex")}.tmp`;
   try {
     const fd = openSync2(temporary, "wx", 384);
     try {
@@ -262,7 +599,7 @@ function persistConfigJson(fileName, value) {
     }
     for (let attempt = 0; ; attempt++)
       try {
-        renameSync2(temporary, path2);
+        renameSync3(temporary, path2);
         break;
       } catch (error51) {
         const code = error51.code;
@@ -270,21 +607,21 @@ function persistConfigJson(fileName, value) {
         pause(20);
       }
   } finally {
-    rmSync2(temporary, { force: true });
+    rmSync3(temporary, { force: true });
   }
 }
 
 // src/project-selection.ts
 import { randomUUID } from "node:crypto";
-import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
-import { join as join3 } from "node:path";
+import { lstatSync as lstatSync4, renameSync as renameSync4 } from "node:fs";
+import { join as join6 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
 var PRODUCTION_API_BASE = "https://api.memroot.dev";
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
-  return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
+  return join6(memrootConfigDir(), PROJECT_SELECTION_FILE);
 }
 function normalizeApiBase(apiBase) {
   try {
@@ -338,9 +675,9 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join3(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join6(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
-    lstatSync3(legacy);
+    lstatSync4(legacy);
   } catch {
     return false;
   }
@@ -384,7 +721,7 @@ function migrateLegacyDefaults() {
       } catch {
       }
       if (adopted > 0) persist(store);
-      renameSync3(legacy, `${legacy}.migrated`);
+      renameSync4(legacy, `${legacy}.migrated`);
       return true;
     });
   } catch {
@@ -436,12 +773,12 @@ function clearSelection(apiBase, principalId, onlyProjectId) {
     persist(store);
   });
 }
-function offlineIdentity() {
+function offlineIdentity(recordedOnly = false) {
   let apiBase = PRODUCTION_API_BASE;
   let userId;
   try {
     const raw = readPrivateFileIfExists(
-      join3(memrootConfigDir(), "config.json"),
+      join6(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw !== void 0) {
@@ -455,7 +792,9 @@ function offlineIdentity() {
     }
   } catch {
   }
-  apiBase = normalizeApiBase(process.env.MEMROOT_API_BASE ?? apiBase);
+  apiBase = normalizeApiBase(
+    recordedOnly ? apiBase : process.env.MEMROOT_API_BASE ?? apiBase
+  );
   return userId ? { apiBase, userId } : { apiBase };
 }
 function currentSelection(apiBase) {
@@ -474,7 +813,7 @@ var MAX_PATH = 4096;
 var MAX_WALK = 128;
 var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectFoldersPath() {
-  return join4(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+  return join7(memrootConfigDir(), PROJECT_FOLDERS_FILE);
 }
 var FOLD_CASE = process.platform === "win32";
 function folderContains(folder, path2, options) {
@@ -506,7 +845,7 @@ function applicableBinding(bindings, scope, options) {
 }
 var match = { foldCase: FOLD_CASE, separator: sep };
 function usableFolder(value) {
-  return typeof value === "string" && isAbsolute2(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+  return typeof value === "string" && isAbsolute3(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
 }
 function canonicalFolder(path2) {
   const absolute = normalize2(resolve(path2));
@@ -515,9 +854,9 @@ function canonicalFolder(path2) {
     try {
       const real = realpathSync.native(head);
       const rest = relative(head, absolute);
-      return rest ? join4(real, rest) : real;
+      return rest ? join7(real, rest) : real;
     } catch {
-      const parent = dirname3(head);
+      const parent = dirname4(head);
       if (parent === head) break;
       head = parent;
     }
@@ -526,7 +865,7 @@ function canonicalFolder(path2) {
 }
 function smallFile(path2) {
   try {
-    const info = lstatSync4(path2);
+    const info = lstatSync5(path2);
     if (!info.isFile() || info.size > 4096) return void 0;
     return readFileSync3(path2, "utf8");
   } catch {
@@ -535,10 +874,10 @@ function smallFile(path2) {
 }
 function folderScope(real) {
   for (let dir = real, i = 0; i < MAX_WALK; i++) {
-    const dotGit = join4(dir, ".git");
+    const dotGit = join7(dir, ".git");
     let info;
     try {
-      info = lstatSync4(dotGit);
+      info = lstatSync5(dotGit);
     } catch {
       info = void 0;
     }
@@ -549,10 +888,10 @@ function folderScope(real) {
       return {
         cwd: real,
         top: dir,
-        main: { root, path: rest ? join4(root, rest) : root }
+        main: { root, path: rest ? join7(root, rest) : root }
       };
     }
-    const parent = dirname3(dir);
+    const parent = dirname4(dir);
     if (parent === dir) break;
     dir = parent;
   }
@@ -562,8 +901,8 @@ function worktreeMain(dir, dotGit) {
   const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
   if (!pointer?.[1]) return void 0;
   const gitdir = resolve(dir, pointer[1]);
-  if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
-  const back = smallFile(join4(gitdir, "gitdir"))?.trim();
+  if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
+  const back = smallFile(join7(gitdir, "gitdir"))?.trim();
   if (!back) return void 0;
   try {
     if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
@@ -571,7 +910,7 @@ function worktreeMain(dir, dotGit) {
   } catch {
     return void 0;
   }
-  const common = smallFile(join4(gitdir, "commondir"))?.trim();
+  const common = smallFile(join7(gitdir, "commondir"))?.trim();
   if (!common) return void 0;
   let commonDir;
   try {
@@ -580,31 +919,35 @@ function worktreeMain(dir, dotGit) {
     return void 0;
   }
   if (basename(commonDir) !== ".git") return void 0;
-  return dirname3(commonDir);
+  return dirname4(commonDir);
 }
 function validBinding(value) {
   const v = value;
-  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute3(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
 }
 function validKey(key) {
   const at = key.lastIndexOf("|");
   return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
 }
-function readStore2() {
+function readStore2(strictKey) {
   try {
     const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
     if (raw === void 0) return {};
     const value = JSON.parse(raw);
     if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
-      return {};
+      throw new Error("INVALID_PROJECT_FOLDER_STORE");
     const out = {};
     for (const [key, list] of Object.entries(
       value.bindings
-    ))
+    )) {
+      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
+        throw new Error("INVALID_PROJECT_FOLDER_STORE");
       if (validKey(key) && Array.isArray(list))
         out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    }
     return out;
-  } catch {
+  } catch (error51) {
+    if (strictKey !== void 0) throw error51;
     return {};
   }
 }
@@ -624,9 +967,10 @@ function update(change) {
     return result;
   });
 }
-function readBindings(apiBase, principalId) {
+function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   if (!principalId) return [];
-  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+  const key = selectionKey(apiBase, principalId);
+  return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
 function bindingMatchFor(apiBase, principalId, cwd) {
   const bindings = readBindings(apiBase, principalId);
@@ -16960,7 +17304,7 @@ function renderExtractorInput(input) {
 // src/capture/extract/run.ts
 import { spawn } from "node:child_process";
 import { accessSync, constants as constants2, statSync } from "node:fs";
-import { delimiter, isAbsolute as isAbsolute3, join as join5 } from "node:path";
+import { delimiter, isAbsolute as isAbsolute4, join as join8 } from "node:path";
 var EXTRACTOR_TIMEOUT_MS = 18e4;
 var MAX_OUTPUT_BYTES = 256 * 1024;
 var MAX_STDERR_BYTES = 8 * 1024;
@@ -16973,8 +17317,8 @@ var RunnerError = class extends Error {
 };
 function findExecutable(name) {
   for (const directory of (process.env.PATH ?? "").split(delimiter)) {
-    if (!isAbsolute3(directory)) continue;
-    const path2 = join5(directory, name);
+    if (!isAbsolute4(directory)) continue;
+    const path2 = join8(directory, name);
     try {
       accessSync(path2, constants2.X_OK);
       if (statSync(path2).isFile()) return path2;
@@ -17181,7 +17525,7 @@ ${result.stderr}`;
 }
 
 // src/capture/extract/runners/codex.ts
-import { join as join6 } from "node:path";
+import { join as join9 } from "node:path";
 function codexArgs(input, schemaPath, outPath) {
   const args = [
     "exec",
@@ -17231,8 +17575,8 @@ function codexArgs(input, schemaPath, outPath) {
   return args;
 }
 async function runCodex(input) {
-  const schemaPath = join6(input.workDir, "schema.json");
-  const outPath = join6(input.workDir, `${input.jobId}.out.json`);
+  const schemaPath = join9(input.workDir, "schema.json");
+  const outPath = join9(input.workDir, `${input.jobId}.out.json`);
   writePrivateFileAtomic(schemaPath, input.schemaJson);
   removeFile(outPath);
   try {
@@ -17263,9 +17607,9 @@ ${result.stdout}`) ? "quota" : "exit"
 }
 
 // src/capture/extract/runners/grok.ts
-import { realpathSync as realpathSync2, rmSync as rmSync3 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute4, join as join7 } from "node:path";
+import { realpathSync as realpathSync2, rmSync as rmSync4 } from "node:fs";
+import { homedir as homedir3 } from "node:os";
+import { isAbsolute as isAbsolute5, join as join10 } from "node:path";
 var GROK_EXTRACTOR_DENY = [
   "read_file",
   "hashline_read",
@@ -17325,16 +17669,16 @@ function grokArgs(input, promptFile) {
   return args;
 }
 function removeExtractorHistory(extractorCwd, prefix = "memroot-extractor-") {
-  const home = process.env.GROK_HOME && isAbsolute4(process.env.GROK_HOME) ? process.env.GROK_HOME : join7(homedir2(), ".grok");
+  const home = process.env.GROK_HOME && isAbsolute5(process.env.GROK_HOME) ? process.env.GROK_HOME : join10(homedir3(), ".grok");
   const candidates = /* @__PURE__ */ new Set([extractorCwd]);
   try {
     candidates.add(realpathSync2(extractorCwd));
   } catch {
   }
   for (const cwd of candidates) {
-    const group = join7(home, "sessions", encodeURIComponent(cwd));
+    const group = join10(home, "sessions", encodeURIComponent(cwd));
     if (!encodeURIComponent(cwd).includes(prefix)) continue;
-    rmSync3(group, { recursive: true, force: true });
+    rmSync4(group, { recursive: true, force: true });
   }
 }
 async function runGrok(input) {
@@ -17347,7 +17691,7 @@ async function runGrok(input) {
   }
 }
 async function runGrokOnce(input) {
-  const promptFile = join7(input.workDir, `${input.jobId}.prompt`);
+  const promptFile = join10(input.workDir, `${input.jobId}.prompt`);
   let sessionId;
   writePrivateFileAtomic(promptFile, input.user);
   try {
@@ -18088,30 +18432,30 @@ var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|sessio
 
 // src/capture/hooks/guards.ts
 import { realpathSync as realpathSync3 } from "node:fs";
-import { homedir as homedir3 } from "node:os";
-import { isAbsolute as isAbsolute5, join as join8, normalize as normalize3 } from "node:path";
+import { homedir as homedir4 } from "node:os";
+import { isAbsolute as isAbsolute6, join as join11, normalize as normalize3 } from "node:path";
 function absoluteEnv2(name) {
   const value = process.env[name];
-  return value && isAbsolute5(value) ? normalize3(value) : void 0;
+  return value && isAbsolute6(value) ? normalize3(value) : void 0;
 }
 function transcriptRoots(agent) {
   if (agent === "claude")
     return [
-      join8(
-        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join8(homedir3(), ".claude"),
+      join11(
+        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join11(homedir4(), ".claude"),
         "projects"
       )
     ];
   if (agent === "codex") {
-    const home = absoluteEnv2("CODEX_HOME") ?? join8(homedir3(), ".codex");
-    return [join8(home, "sessions"), join8(home, "archived_sessions")];
+    const home = absoluteEnv2("CODEX_HOME") ?? join11(homedir4(), ".codex");
+    return [join11(home, "sessions"), join11(home, "archived_sessions")];
   }
   return [
-    join8(absoluteEnv2("GROK_HOME") ?? join8(homedir3(), ".grok"), "sessions")
+    join11(absoluteEnv2("GROK_HOME") ?? join11(homedir4(), ".grok"), "sessions")
   ];
 }
 function transcriptPathAllowed(agent, path2) {
-  if (!isAbsolute5(path2) || path2.length > 4096 || path2.includes("\0") || path2.split("/").includes("..") || normalize3(path2) !== path2)
+  if (!isAbsolute6(path2) || path2.length > 4096 || path2.includes("\0") || path2.split("/").includes("..") || normalize3(path2) !== path2)
     return false;
   if (agent !== "grok" && !path2.endsWith(".jsonl")) return false;
   return transcriptRoots(agent).some((root) => {
@@ -18127,13 +18471,13 @@ function transcriptPathAllowed(agent, path2) {
 // src/capture/hooks/spawn.ts
 import { spawn as spawn2 } from "node:child_process";
 import { existsSync } from "node:fs";
-import { dirname as dirname4, join as join9 } from "node:path";
+import { dirname as dirname5, join as join12 } from "node:path";
 import { fileURLToPath } from "node:url";
 function spawnWorker() {
   try {
-    const here = dirname4(fileURLToPath(import.meta.url));
-    const sibling = join9(here, "capture-worker.mjs");
-    const worker = existsSync(sibling) ? sibling : join9(here, "plugins", "claude", "scripts", "capture-worker.mjs");
+    const here = dirname5(fileURLToPath(import.meta.url));
+    const sibling = join12(here, "capture-worker.mjs");
+    const worker = existsSync(sibling) ? sibling : join12(here, "plugins", "claude", "scripts", "capture-worker.mjs");
     if (!existsSync(worker)) return;
     const child = spawn2(process.execPath, [worker], {
       detached: true,
@@ -18148,13 +18492,13 @@ function spawnWorker() {
 }
 
 // src/capture/queue/cursor-source.ts
-import { join as join10 } from "node:path";
+import { join as join13 } from "node:path";
 var PUBLISHED_SOURCE = "grok_chat_history";
 var SOURCES = ["grok_updates", "grok_chat_history"];
 var MAX_RECORDS2 = 1e3;
 var HEX64 = /^[a-f0-9]{64}$/;
 function path() {
-  return join10(stateSubdir(), "cursor-sources.json");
+  return join13(stateSubdir(), "cursor-sources.json");
 }
 function read() {
   const records = {};
@@ -18203,8 +18547,8 @@ function recordCursorSource(sessionRef, source, cursor, ledgerSessions) {
 }
 
 // src/capture/queue/job.ts
-import { createHash as createHash3, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join11 } from "node:path";
+import { createHash as createHash3, randomBytes as randomBytes4 } from "node:crypto";
+import { join as join14 } from "node:path";
 
 // src/project-context.ts
 var UUID4 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -18213,6 +18557,7 @@ function validUuid(value) {
 }
 
 // src/capture/queue/job.ts
+var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
 var JOB_STATES = [
   "pending",
   "extracted",
@@ -18230,14 +18575,14 @@ function sha256Hex2(value) {
   return createHash3("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path2 = join11(stateSubdir(), "salt");
+  const path2 = join14(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path2, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
     if (!HEX642.test(value)) throw new Error("INVALID_SALT");
     return value;
   }
-  const salt = randomBytes3(32).toString("hex");
+  const salt = randomBytes4(32).toString("hex");
   if (createPrivateFileExclusive(path2, `${salt}
 `)) return salt;
   return readOrCreateSalt();
@@ -18248,8 +18593,19 @@ function sessionRefFor(salt, agent, sessionId) {
 function queueDir() {
   return stateSubdir("queue");
 }
+var conflictPath = (jobId) => join14(queueDir(), `${jobId}.account-conflict`);
+function hasAccountConflict(jobId) {
+  const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
+  if (marker === void 0) return false;
+  const at = Date.parse(marker);
+  if (Number.isFinite(at) && Date.now() - at > JOB_TTL_MS) {
+    removeFile(conflictPath(jobId));
+    return false;
+  }
+  return true;
+}
 function jobPath(jobId) {
-  return join11(queueDir(), `${jobId}.json`);
+  return join14(queueDir(), `${jobId}.json`);
 }
 function parseJob(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -18260,6 +18616,11 @@ function parseJob(value) {
     return void 0;
   if (job.triggerRef !== void 0 && (typeof job.triggerRef !== "string" || !HEX642.test(job.triggerRef)))
     return void 0;
+  if (job.account !== void 0) {
+    const account = job.account;
+    if (!account || typeof account.apiBase !== "string" || !validUuid(account.principalId))
+      return void 0;
+  }
   if (job.target !== void 0 && !validTarget(job.target)) return void 0;
   if (job.floorBytes !== void 0 && (!Number.isSafeInteger(job.floorBytes) || job.floorBytes < 0))
     return void 0;
@@ -18302,11 +18663,17 @@ function deleteJob(jobId) {
   removeFile(jobPath(jobId));
 }
 function listJobIds() {
-  return listFiles(queueDir()).filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
+  const names = listFiles(queueDir());
+  for (const name of names) {
+    const id = name.slice(0, -".account-conflict".length);
+    if (name.endsWith(".account-conflict") && JOB_ID.test(id))
+      hasAccountConflict(id);
+  }
+  return names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
 }
 
 // src/capture/queue/ledger.ts
-import { join as join12 } from "node:path";
+import { join as join15 } from "node:path";
 var MAX_CURSORS = 1e3;
 var MAX_TITLE_HASHES = 5e3;
 var MAX_UPLOADS = 5e3;
@@ -18323,7 +18690,7 @@ function empty() {
   };
 }
 function ledgerPath() {
-  return join12(stateSubdir(), "ledger.json");
+  return join15(stateSubdir(), "ledger.json");
 }
 function sanitize(value) {
   const ledger = empty();
@@ -18419,171 +18786,13 @@ function uploadsInLastDay(ledger, now = Date.now()) {
   ).length;
 }
 
-// src/capture/queue/lock.ts
-import { randomBytes as randomBytes4 } from "node:crypto";
-import {
-  lstatSync as lstatSync5,
-  mkdirSync as mkdirSync3,
-  renameSync as renameSync4,
-  rmSync as rmSync4,
-  writeFileSync as writeFileSync3
-} from "node:fs";
-import { join as join13 } from "node:path";
-function lockPath(name) {
-  return join13(stateSubdir("locks"), name);
-}
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error51) {
-    return error51.code === "EPERM";
-  }
-}
-function readOwnerFile(path2) {
-  return readPrivateFile(join13(path2, "owner.json"), 64 * 1024);
-}
-function readOwner(path2) {
-  try {
-    const value = JSON.parse(readOwnerFile(path2));
-    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : NaN;
-    if (typeof value.pid !== "number" || Number.isNaN(createdAt))
-      return void 0;
-    const heartbeat2 = typeof value.heartbeatAt === "string" ? Date.parse(value.heartbeatAt) : NaN;
-    return {
-      pid: value.pid,
-      createdAt,
-      heartbeatAt: Number.isNaN(heartbeat2) ? createdAt : heartbeat2
-    };
-  } catch {
-    return void 0;
-  }
-}
-function isStale(path2, staleMs) {
-  let info;
-  try {
-    info = lstatSync5(path2);
-  } catch {
-    return false;
-  }
-  if (info.isSymbolicLink() || !info.isDirectory()) return true;
-  const owner = readOwner(path2);
-  if (!owner) return Date.now() - info.mtimeMs > staleMs;
-  if (!processAlive(owner.pid)) return true;
-  return Date.now() - owner.heartbeatAt > staleMs;
-}
-var held = /* @__PURE__ */ new Map();
-function tryMkdir(path2) {
-  try {
-    mkdirSync3(path2, { mode: 448 });
-  } catch (error51) {
-    if (error51.code === "EEXIST") return false;
-    throw error51;
-  }
-  const token = randomBytes4(8).toString("hex");
-  held.set(path2, { ino: lstatSync5(path2).ino, token });
-  writeOwner(path2, (/* @__PURE__ */ new Date()).toISOString(), token);
-  return true;
-}
-function writeOwner(path2, createdAt, token) {
-  const temporary = join13(path2, `owner.${process.pid}.${token}.tmp`);
-  writeFileSync3(
-    temporary,
-    JSON.stringify({
-      pid: process.pid,
-      createdAt,
-      heartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
-      token
-    }),
-    { mode: 384 }
-  );
-  renameSync4(temporary, join13(path2, "owner.json"));
-}
-function readToken(path2) {
-  try {
-    const value = JSON.parse(readOwnerFile(path2));
-    return typeof value.token === "string" ? value.token : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function stillOurs(path2) {
-  const mine = held.get(path2);
-  if (!mine) return false;
-  try {
-    return lstatSync5(path2).ino === mine.ino && readToken(path2) === mine.token;
-  } catch {
-    return false;
-  }
-}
-function heartbeat(name) {
-  const path2 = lockPath(name);
-  const mine = held.get(path2);
-  const owner = readOwner(path2);
-  if (!mine || !owner || !stillOurs(path2)) {
-    held.delete(path2);
-    return false;
-  }
-  try {
-    writeOwner(path2, new Date(owner.createdAt).toISOString(), mine.token);
-  } catch {
-    held.delete(path2);
-    return false;
-  }
-  if (!stillOurs(path2)) {
-    held.delete(path2);
-    return false;
-  }
-  return true;
-}
-function clearStale(path2, staleMs) {
-  const tombstone = `${path2}.stale-${process.pid}-${randomBytes4(4).toString("hex")}`;
-  try {
-    renameSync4(path2, tombstone);
-  } catch {
-    return;
-  }
-  if (!isStale(tombstone, staleMs)) {
-    try {
-      renameSync4(tombstone, path2);
-      return;
-    } catch {
-    }
-  }
-  rmSync4(tombstone, { recursive: true, force: true });
-}
-async function acquireLock(name, options) {
-  const path2 = lockPath(name);
-  const deadline = Date.now() + (options.waitMs ?? 0);
-  let cleanups = 0;
-  for (; ; ) {
-    if (tryMkdir(path2)) {
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        if (stillOurs(path2)) rmSync4(path2, { recursive: true, force: true });
-        held.delete(path2);
-      };
-    }
-    if (cleanups < 3 && isStale(path2, options.staleMs)) {
-      cleanups++;
-      clearStale(path2, options.staleMs);
-      continue;
-    }
-    if (Date.now() >= deadline) return void 0;
-    await new Promise((resolve2) => setTimeout(resolve2, options.pollMs ?? 100));
-  }
-}
-
 // src/capture/queue/purge.ts
-import { join as join14 } from "node:path";
+import { join as join16 } from "node:path";
 function removeJobFiles(jobId) {
   deleteJob(jobId);
   const work = stateSubdir("work");
   for (const name of listFiles(work))
-    if (name.startsWith(`${jobId}.`)) removeFile(join14(work, name));
+    if (name.startsWith(`${jobId}.`)) removeFile(join16(work, name));
 }
 function purgeAgent(agent) {
   let removed = 0;
@@ -18598,14 +18807,15 @@ function purgeQueue() {
   const jobs = listJobIds();
   for (const jobId of jobs) removeJobFiles(jobId);
   for (const name of listFiles(queueDir()))
-    if (name.endsWith(".json.finishing")) removeFile(join14(queueDir(), name));
+    if (name.endsWith(".json.finishing") || name.endsWith(".account-conflict"))
+      removeFile(join16(queueDir(), name));
   const work = stateSubdir("work");
-  for (const name of listFiles(work)) removeFile(join14(work, name));
+  for (const name of listFiles(work)) removeFile(join16(work, name));
   return jobs.length;
 }
 
 // src/capture/transcript/claude.ts
-import { isAbsolute as isAbsolute6, relative as relative2 } from "node:path";
+import { isAbsolute as isAbsolute7, relative as relative2 } from "node:path";
 
 // src/capture/transcript/types.ts
 import { closeSync as closeSync3, constants as constants3, fstatSync as fstatSync2, openSync as openSync3, readSync } from "node:fs";
@@ -18731,7 +18941,7 @@ function toolLine(name, input, cwd) {
   const safeName = name.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 64) || "tool";
   const path2 = typeof input?.file_path === "string" ? input.file_path : typeof input?.notebook_path === "string" ? input.notebook_path : void 0;
   if (path2) {
-    const display = isAbsolute6(path2) && (path2 === cwd || path2.startsWith(`${cwd}/`)) ? relative2(cwd, path2) || "." : path2;
+    const display = isAbsolute7(path2) && (path2 === cwd || path2.startsWith(`${cwd}/`)) ? relative2(cwd, path2) || "." : path2;
     return `${safeName} path=${display.replace(/\s+/g, " ").slice(0, 300)}`;
   }
   if (safeName === "Bash" && typeof input?.description === "string")
@@ -19030,16 +19240,16 @@ function condense(turns, cursor, redactor) {
 
 // src/capture/transcript/grok.ts
 import { lstatSync as lstatSync6 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-import { dirname as dirname5, isAbsolute as isAbsolute7, join as join15 } from "node:path";
+import { homedir as homedir5 } from "node:os";
+import { dirname as dirname6, isAbsolute as isAbsolute8, join as join17 } from "node:path";
 function grokSessionDir(transcriptPath, cwd, sessionId) {
-  if (transcriptPath) return dirname5(transcriptPath);
-  const home = process.env.GROK_HOME && isAbsolute7(process.env.GROK_HOME) ? process.env.GROK_HOME : join15(homedir4(), ".grok");
-  return join15(home, "sessions", encodeURIComponent(cwd), sessionId);
+  if (transcriptPath) return dirname6(transcriptPath);
+  const home = process.env.GROK_HOME && isAbsolute8(process.env.GROK_HOME) ? process.env.GROK_HOME : join17(homedir5(), ".grok");
+  return join17(home, "sessions", encodeURIComponent(cwd), sessionId);
 }
 function grokPrimaryFile(dir) {
-  const updates = join15(dir, "updates.jsonl");
-  for (const path2 of [updates, join15(dir, "chat_history.jsonl")])
+  const updates = join17(dir, "updates.jsonl");
+  for (const path2 of [updates, join17(dir, "chat_history.jsonl")])
     try {
       if (lstatSync6(path2).isFile()) return path2;
     } catch {
@@ -19108,7 +19318,7 @@ function parseUpdates(path2, range) {
 function parseGrokSession(dir, range) {
   let updates = { turns: [], open: false };
   try {
-    updates = parseUpdates(join15(dir, "updates.jsonl"), range);
+    updates = parseUpdates(join17(dir, "updates.jsonl"), range);
   } catch (error51) {
     if (range || !(error51 instanceof UnsupportedTranscriptError)) throw error51;
   }
@@ -19121,7 +19331,7 @@ function parseGrokSession(dir, range) {
       ...updates.open ? { settledTurns: updates.turns.length - 1 } : {}
     };
   return {
-    turns: parseChatHistory(join15(dir, "chat_history.jsonl")),
+    turns: parseChatHistory(join17(dir, "chat_history.jsonl")),
     headless: false,
     skip: false,
     cursorSource: "grok_chat_history"
@@ -19140,7 +19350,7 @@ var TransportError = class extends Error {
   }
   code;
 };
-function httpPost(target2, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
+function httpPost(target2, headers, payload, timeoutMs = HTTP_TIMEOUT_MS, budget) {
   const transport = target2.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise((resolve2, reject) => {
     const req = transport(
@@ -19149,6 +19359,7 @@ function httpPost(target2, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
         method: "POST",
         agent: false,
         timeout: timeoutMs,
+        ...budget?.signal ? { signal: budget.signal } : {},
         headers: { ...headers, "content-length": Buffer.byteLength(payload) }
       },
       (response) => {
@@ -19173,6 +19384,8 @@ function httpPost(target2, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
         response.on("error", () => reject(new TransportError("network_error")));
       }
     );
+    const deadline = budget?.absoluteTimeout ? setTimeout(() => req.destroy(new TransportError("timeout")), timeoutMs) : void 0;
+    if (deadline) req.once("close", () => clearTimeout(deadline));
     req.on("timeout", () => req.destroy(new TransportError("timeout")));
     req.on(
       "error",
@@ -19186,52 +19399,16 @@ function httpPost(target2, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
 
 // src/credentials.ts
 import { spawnSync } from "node:child_process";
+import { lstatSync as lstatSync7 } from "node:fs";
 import {
-  chmod,
-  lstat as lstat2,
-  readFile as readFile2,
-  rename as rename2,
-  rm as rm2,
-  writeFile as writeFile2
+  chmod as chmod2,
+  lstat as lstat3,
+  readFile as readFile3,
+  rename as rename3,
+  rm as rm3,
+  writeFile as writeFile3
 } from "node:fs/promises";
-import { join as join17 } from "node:path";
-
-// src/storage.ts
-import {
-  lstat,
-  mkdir,
-  readdir,
-  readFile,
-  rename,
-  rm,
-  writeFile
-} from "node:fs/promises";
-import { homedir as homedir5 } from "node:os";
-import { dirname as dirname6, isAbsolute as isAbsolute8, join as join16 } from "node:path";
-function dataDirectory() {
-  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join16(homedir5(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join16(homedir5(), ".local", "share");
-  if (!isAbsolute8(base))
-    throw new Error(
-      "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
-    );
-  return join16(base, "memroot");
-}
-async function safeDirectory(path2) {
-  const boundary = dataDirectory();
-  if (path2 !== boundary && path2.startsWith(`${boundary}/`))
-    await safeDirectory(dirname6(path2));
-  await mkdir(path2, { recursive: true, mode: 448 });
-  const info = await lstat(path2);
-  if (!info.isDirectory() || info.isSymbolicLink())
-    throw new Error(`UNSAFE_PATH: Expected a real directory at ${path2}.`);
-}
-
-// src/config.ts
-function configDirectory() {
-  return memrootConfigDir();
-}
-
-// src/credentials.ts
+import { isAbsolute as isAbsolute9, join as join18 } from "node:path";
 var SERVICE = "memroot";
 var TOOL_TIMEOUT_MS = 15e3;
 function credentialStoreKind() {
@@ -19249,11 +19426,12 @@ function unavailable(tool) {
     `AUTH_KEYCHAIN_UNAVAILABLE: ${tool} is not installed, so there is no OS credential store for the Memroot refresh token. Tokens are never written to files; install ${tool === "security" ? "the macOS security tool" : "libsecret's secret-tool"} or sign in on a supported system.`
   );
 }
-function run(tool, args, input, allowNotFound = false) {
+function run(tool, args, input, allowNotFound = false, timeoutMs = TOOL_TIMEOUT_MS, hardDeadline = false) {
   const result = spawnSync(tool, args, {
     encoding: "utf8",
     input,
-    timeout: TOOL_TIMEOUT_MS,
+    timeout: Math.max(1, Math.min(TOOL_TIMEOUT_MS, timeoutMs)),
+    ...hardDeadline ? { killSignal: "SIGKILL" } : {},
     shell: false,
     maxBuffer: 1024 * 1024
   });
@@ -19275,14 +19453,14 @@ function quote(value) {
   return JSON.stringify(value);
 }
 function testStorePath() {
-  return join17(configDirectory(), "test-credentials.json");
+  return join18(configDirectory(), "test-credentials.json");
 }
 async function readTestStore() {
   try {
-    const info = await lstat2(testStorePath());
+    const info = await lstat3(testStorePath());
     if (!info.isFile() || info.isSymbolicLink())
       throw new Error("INVALID_CREDENTIAL_STORE: Expected a regular file.");
-    const value = JSON.parse(await readFile2(testStorePath(), "utf8"));
+    const value = JSON.parse(await readFile3(testStorePath(), "utf8"));
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return value;
   } catch (error51) {
@@ -19296,18 +19474,39 @@ async function writeTestStore(entries) {
   const path2 = testStorePath();
   const temporary = `${path2}.${process.pid}.tmp`;
   try {
-    await writeFile2(temporary, `${JSON.stringify(entries, null, 2)}
+    await writeFile3(temporary, `${JSON.stringify(entries, null, 2)}
 `, {
       flag: "wx",
       mode: 384
     });
-    await rename2(temporary, path2);
-    await chmod(path2, 384);
+    await rename3(temporary, path2);
+    await chmod2(path2, 384);
   } finally {
-    await rm2(temporary, { force: true });
+    await rm3(temporary, { force: true });
   }
 }
-async function storeSecret(account, secret) {
+function assertMacOSDefaultKeychain(timeoutMs) {
+  try {
+    const result = run(
+      "/usr/bin/security",
+      ["default-keychain", "-d", "user"],
+      void 0,
+      true,
+      Math.min(5e3, timeoutMs ?? 5e3),
+      true
+    );
+    const match2 = /^"([^"\r\n]+)"$/u.exec(result.stdout.trim());
+    const path2 = match2?.[1];
+    if (result.status !== 0 || !path2 || !isAbsolute9(path2)) throw new Error();
+    const info = lstatSync7(path2);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error();
+  } catch {
+    throw new Error(
+      "AUTH_KEYCHAIN_DEFAULT_UNAVAILABLE: This process has no usable default macOS keychain. Open Keychain Access for this macOS account, or run Memroot from its usual signed-in HOME, then retry. No keychain was created or changed."
+    );
+  }
+}
+async function storeSecret(account, secret, timeoutMs) {
   const kind = credentialStoreKind();
   if (kind === "test-file") {
     const entries = await readTestStore();
@@ -19316,21 +19515,34 @@ async function storeSecret(account, secret) {
     return;
   }
   if (kind === "macos-keychain") {
+    const started = Date.now();
+    assertMacOSDefaultKeychain(timeoutMs);
+    const remaining = timeoutMs === void 0 ? void 0 : timeoutMs - (Date.now() - started);
+    if (remaining !== void 0 && remaining <= 0)
+      throw new Error(
+        "AUTH_KEYCHAIN_FAILED: Credential write deadline expired before any write."
+      );
     run(
       "security",
       ["-i"],
       `add-generic-password -U -s ${quote(SERVICE)} -a ${quote(account)} -w ${quote(secret)}
-`
+`,
+      false,
+      remaining,
+      timeoutMs !== void 0
     );
     return;
   }
   run(
     "secret-tool",
     ["store", "--label", "Memroot CLI", "service", SERVICE, "account", account],
-    secret
+    secret,
+    false,
+    timeoutMs,
+    timeoutMs !== void 0
   );
 }
-async function readSecret(account) {
+async function readSecret(account, timeoutMs) {
   const kind = credentialStoreKind();
   if (kind === "test-file") return (await readTestStore())[account];
   if (kind === "macos-keychain") {
@@ -19338,7 +19550,9 @@ async function readSecret(account) {
       "security",
       ["find-generic-password", "-s", SERVICE, "-a", account, "-w"],
       void 0,
-      true
+      true,
+      timeoutMs,
+      timeoutMs !== void 0
     );
     if (result2.status !== 0) {
       if (/could not be found|item not found/i.test(result2.stderr))
@@ -19354,11 +19568,18 @@ async function readSecret(account) {
     "secret-tool",
     ["lookup", "service", SERVICE, "account", account],
     void 0,
-    true
+    true,
+    timeoutMs,
+    timeoutMs !== void 0
   );
-  if (result.status !== 0) return void 0;
+  if (noUnlockedMatch(result)) return void 0;
   const secret = result.stdout.replace(/\n$/, "");
-  return secret.length ? secret : void 0;
+  if (result.status !== 0 || !secret)
+    throw new Error("AUTH_KEYCHAIN_FAILED: secret-tool lookup failed.");
+  return secret;
+}
+function noUnlockedMatch(result) {
+  return result.status === 1 && result.stderr === "" && result.stdout === "";
 }
 
 // src/capture/upload/token-broker.ts
@@ -19382,31 +19603,69 @@ var TokenBroker = class {
    * a broker never reads the credential store, which still holds the
    * previous connection.
    */
-  constructor(apiBase, pending) {
+  constructor(apiBase, pending, credentials) {
     this.apiBase = apiBase;
     this.pending = pending;
+    this.credentials = credentials;
   }
   apiBase;
   pending;
+  credentials;
   cached;
+  refreshing;
   invalidate() {
     this.cached = void 0;
   }
-  async accessToken() {
+  async accessToken(signal) {
     if (this.pending) {
       if (this.pending.expiresAt <= Date.now()) throw new AuthRequiredError();
       return this.pending.token;
     }
     if (this.cached && this.cached.expiresAt - Date.now() > REFRESH_SKEW_MS)
       return this.cached.token;
-    const release = await acquireLock("auth.lock", {
-      staleMs: 6e4,
-      waitMs: 2e4,
-      pollMs: 100
-    });
+    if (this.credentials?.authTimeoutMs !== void 0) {
+      if (!this.refreshing) {
+        const deadline = Date.now() + this.credentials.authTimeoutMs;
+        const abort = AbortSignal.any([
+          AbortSignal.timeout(this.credentials.authTimeoutMs),
+          ...signal ? [signal] : []
+        ]);
+        this.refreshing = this.refreshAccessToken(deadline, abort).finally(
+          () => {
+            this.refreshing = void 0;
+          }
+        );
+      }
+      const pending = this.refreshing;
+      if (!signal) return pending;
+      if (signal.aborted) throw new TransportError("auth_cancelled");
+      return new Promise((resolve2, reject) => {
+        const aborted2 = () => reject(new TransportError("auth_cancelled"));
+        signal.addEventListener("abort", aborted2, { once: true });
+        pending.then(resolve2, reject).finally(() => signal.removeEventListener("abort", aborted2));
+      });
+    }
+    return this.refreshAccessToken();
+  }
+  async refreshAccessToken(deadline, signal) {
+    const remaining = () => {
+      if (signal?.aborted || deadline !== void 0 && deadline <= Date.now())
+        throw new TransportError("auth_timeout");
+      return deadline === void 0 ? void 0 : Math.max(1, deadline - Date.now());
+    };
+    const release = await acquireLock(
+      this.credentials?.lockName ?? "auth.lock",
+      {
+        staleMs: 6e4,
+        waitMs: Math.min(2e4, remaining() ?? 2e4),
+        pollMs: 100,
+        ...signal ? { signal } : {}
+      }
+    );
     if (!release) throw new TransportError("auth_lock_busy");
     try {
-      const refreshToken = await readSecret(mcpAccount(this.apiBase));
+      const account = this.credentials?.account ?? mcpAccount(this.apiBase);
+      const refreshToken = await readSecret(account, remaining());
       if (!refreshToken) throw new AuthRequiredError();
       const response = await httpPost(
         new URL(`${this.apiBase}/oauth/token`),
@@ -19417,9 +19676,11 @@ var TokenBroker = class {
         new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: refreshToken,
-          client_id: MCP_CLIENT_ID,
+          client_id: this.credentials?.clientId ?? MCP_CLIENT_ID,
           resource: mcpResource(this.apiBase)
-        }).toString()
+        }).toString(),
+        remaining(),
+        deadline === void 0 ? void 0 : { absoluteTimeout: true, ...signal ? { signal } : {} }
       );
       let body = {};
       try {
@@ -19437,7 +19698,8 @@ var TokenBroker = class {
       if (typeof body.access_token !== "string" || !body.access_token)
         throw new TransportError("token_response_invalid");
       if (typeof body.refresh_token === "string" && body.refresh_token && body.refresh_token !== refreshToken)
-        await storeSecret(mcpAccount(this.apiBase), body.refresh_token);
+        await storeSecret(account, body.refresh_token, remaining());
+      remaining();
       const lifetime = typeof body.expires_in === "number" && body.expires_in > 0 ? body.expires_in : 300;
       this.cached = {
         token: body.access_token,
@@ -19651,14 +19913,14 @@ async function uploadItems(client, projectId, items, persist2, onUploaded, befor
 }
 
 // src/capture/worker/log.ts
-import { appendFileSync, lstatSync as lstatSync7, renameSync as renameSync5 } from "node:fs";
-import { join as join18 } from "node:path";
+import { appendFileSync, lstatSync as lstatSync8, renameSync as renameSync5 } from "node:fs";
+import { join as join19 } from "node:path";
 var MAX_LOG_BYTES = 256 * 1024;
 function logEvent(event, fields = {}) {
   try {
-    const path2 = join18(stateSubdir("log"), "worker.log");
+    const path2 = join19(stateSubdir("log"), "worker.log");
     try {
-      const info = lstatSync7(path2);
+      const info = lstatSync8(path2);
       if (info.isSymbolicLink()) return;
       if (info.size > MAX_LOG_BYTES) renameSync5(path2, `${path2}.1`);
     } catch {
@@ -19678,7 +19940,7 @@ function jobHash(jobId) {
 
 // src/capture/worker/repo.ts
 import { spawnSync as spawnSync2 } from "node:child_process";
-import { lstatSync as lstatSync8 } from "node:fs";
+import { lstatSync as lstatSync9 } from "node:fs";
 import { basename as basename2 } from "node:path";
 var GIT_TIMEOUT_MS = 15e3;
 function git2(cwd, args) {
@@ -19716,7 +19978,7 @@ function normalizeRemote(url2) {
 }
 function repoInfo(cwd, salt) {
   try {
-    if (!lstatSync8(cwd).isDirectory()) return { repo: null, branch: null };
+    if (!lstatSync9(cwd).isDirectory()) return { repo: null, branch: null };
   } catch {
     return { repo: null, branch: null };
   }
@@ -19773,7 +20035,6 @@ function errorCode(error51) {
     return "unsupported_transcript";
   return "internal_error";
 }
-var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
 var MAX_ATTEMPTS = 5;
 var BACKOFF_MS = [
   15 * 6e4,
@@ -19826,7 +20087,7 @@ async function settle(path2) {
   }
 }
 function candidatesPath(jobId) {
-  return join19(stateSubdir("work"), `${jobId}.candidates.json`);
+  return join20(stateSubdir("work"), `${jobId}.candidates.json`);
 }
 function readCandidates(jobId) {
   const raw = readPrivateFileIfExists(candidatesPath(jobId), 4 * 1024 * 1024);
@@ -19890,10 +20151,10 @@ function recoverFinishing() {
     const now = Date.now();
     for (const name of listFiles(queue)) {
       if (!name.endsWith(".json.finishing")) continue;
-      const aside = join19(queue, name);
+      const aside = join20(queue, name);
       const jobId = name.slice(0, -".json.finishing".length);
       try {
-        if (now - lstatSync9(aside).mtimeMs < FINISHING_STALE_MS) continue;
+        if (now - lstatSync10(aside).mtimeMs < FINISHING_STALE_MS) continue;
         if (readJob(jobId)) removeFile(aside);
         else {
           renameSync6(aside, jobPath(jobId));
@@ -19949,7 +20210,7 @@ function realUnder(path2, roots) {
 function regularFile(path2) {
   let info;
   try {
-    info = lstatSync9(path2);
+    info = lstatSync10(path2);
   } catch (error51) {
     if (error51.code === "ENOENT")
       throw new TranscriptMissingError();
@@ -19964,7 +20225,7 @@ function relocateTranscript(job) {
   const current = transcriptFile(job);
   if (current)
     try {
-      lstatSync9(current);
+      lstatSync10(current);
       return job;
     } catch (error51) {
       if (error51.code !== "ENOENT") return job;
@@ -19977,10 +20238,10 @@ function relocateTranscript(job) {
       continue;
     }
     for (const folder of folders) {
-      const candidate = job.agent === "claude" ? join19(root, folder, `${job.sessionId}.jsonl`) : join19(root, folder, job.sessionId, "updates.jsonl");
-      const probe = job.agent === "claude" ? candidate : grokPrimaryFile(join19(root, folder, job.sessionId));
+      const candidate = job.agent === "claude" ? join20(root, folder, `${job.sessionId}.jsonl`) : join20(root, folder, job.sessionId, "updates.jsonl");
+      const probe = job.agent === "claude" ? candidate : grokPrimaryFile(join20(root, folder, job.sessionId));
       try {
-        const info = lstatSync9(probe);
+        const info = lstatSync10(probe);
         if (!info.isFile() || info.isSymbolicLink() || !transcriptPathAllowed(job.agent, candidate) || !realUnder(probe, [root]))
           continue;
       } catch {
@@ -20094,6 +20355,12 @@ async function listProjects(context) {
   } : null;
   return context.listedProjects;
 }
+async function requireCaptureAccount(context, principalId) {
+  const config2 = await readConfig();
+  if (!config2.userId || (config2.apiBase ?? "https://api.memroot.dev") !== context.consent.apiBase || principalId !== void 0 && principalId !== config2.userId)
+    throw new TransportError("project_account_mismatch");
+  return config2.userId;
+}
 async function selectedTarget(context, cwd) {
   const asTarget = (s) => ({
     apiBase: s.apiBase,
@@ -20102,14 +20369,16 @@ async function selectedTarget(context, cwd) {
     projectId: s.projectId,
     selectionId: s.selectionId
   });
+  const principal = await requireCaptureAccount(context);
   const local = effectiveProject(cwd, context.consent.apiBase);
   if (local?.stale) return void 0;
-  if (local) return asTarget(local);
+  if (local?.principalId === principal) return asTarget(local);
   const listed = await listProjects(context);
   if (!listed) return void 0;
+  await requireCaptureAccount(context, listed.principalId);
   const recorded = effectiveProject(cwd, context.consent.apiBase);
   if (recorded?.stale) return void 0;
-  if (recorded) return asTarget(recorded);
+  if (recorded?.principalId === principal) return asTarget(recorded);
   if (listed.projects.length !== 1) return void 0;
   const only = listed.projects[0];
   return asTarget(
@@ -20137,6 +20406,7 @@ function forgetSelection(context, target2) {
     }
 }
 async function resolveProject(context, target2) {
+  await requireCaptureAccount(context, target2.principalId);
   if (target2.apiBase !== context.consent.apiBase)
     throw new TransportError("project_selection_required");
   const listed = await listProjects(context);
@@ -20288,13 +20558,19 @@ async function extract(job, context, target2, cursorRef) {
     backoff(job, "runner_unavailable", "runner_not_installed");
     return "deferred";
   }
-  const projectId = await resolveProject(context, target2);
+  const projectId = await withCredentialLock(
+    "auth-agy.lock",
+    () => resolveProject(context, target2)
+  );
   const { repo, branch } = repoInfo(job.cwd, context.salt);
   const repoName = context.redactor.redact(repo?.name ?? "unknown") ?? "unknown";
   let existing = [];
   if (repo)
     try {
-      existing = await existingMemories(context, projectId, repoName);
+      existing = await withCredentialLock("auth-agy.lock", async () => {
+        await requireCaptureAccount(context, target2.principalId);
+        return existingMemories(context, projectId, repoName);
+      });
     } catch {
       backoff(job, "auth_required", "auth_required");
       return "deferred";
@@ -20313,7 +20589,7 @@ async function extract(job, context, target2, cursorRef) {
     max_items: PROMPT_MAX_ITEMS
   });
   const workDir = stateSubdir("work");
-  const extractorCwd = mkdtempSync(join19(tmpdir(), "memroot-extractor-"));
+  const extractorCwd = mkdtempSync(join20(tmpdir(), "memroot-extractor-"));
   let output;
   let usedRunner;
   try {
@@ -20465,38 +20741,46 @@ async function upload(job, context, fallbackTarget, fallbackCursorRef) {
     `${JSON.stringify(stored2)}
 `
   );
-  const stop = await uploadItems(
-    context.client,
-    stored2.projectId,
-    stored2.items,
-    persist2,
-    (item) => {
-      context.ledger.uploads.push({
-        at: (/* @__PURE__ */ new Date()).toISOString(),
-        titleHash: item.titleHash,
-        memoryId: item.memoryId
-      });
-      context.ledger.titleHashes.push(item.titleHash);
-      writeLedger(context.ledger);
-      count2("uploaded");
-    },
-    () => {
-      if (context.lockLost || !heartbeat("worker.lock"))
-        return { kind: "lock_lost" };
-      if (consentRevocation(context, job.agent))
-        return { kind: "consent_revoked" };
-      context.ledger = mergedLedger(context.ledger);
-      if (uploadsInLastDay(context.ledger) >= context.agreement.maxItemsPerDay)
-        return { kind: "daily_cap" };
-      return void 0;
-    },
-    {
-      schema_version: 1,
-      principal_id: project.principalId,
-      project_id: project.projectId,
-      selection_id: project.selectionId
-    }
-  );
+  const stop = await withCredentialLock("auth-agy.lock", async () => {
+    if (hasAccountConflict(job.jobId))
+      throw new TransportError("account_conflict");
+    if (stored2.projectId !== await resolveProject(context, project))
+      throw new TransportError("project_account_mismatch");
+    return uploadItems(
+      context.client,
+      stored2.projectId,
+      stored2.items,
+      persist2,
+      (item) => {
+        context.ledger.uploads.push({
+          at: (/* @__PURE__ */ new Date()).toISOString(),
+          titleHash: item.titleHash,
+          memoryId: item.memoryId
+        });
+        context.ledger.titleHashes.push(item.titleHash);
+        writeLedger(context.ledger);
+        count2("uploaded");
+      },
+      () => {
+        if (context.lockLost || !heartbeat("worker.lock") || !heartbeat("auth-agy.lock"))
+          return { kind: "lock_lost" };
+        if (hasAccountConflict(job.jobId))
+          throw new TransportError("account_conflict");
+        if (consentRevocation(context, job.agent))
+          return { kind: "consent_revoked" };
+        context.ledger = mergedLedger(context.ledger);
+        if (uploadsInLastDay(context.ledger) >= context.agreement.maxItemsPerDay)
+          return { kind: "daily_cap" };
+        return void 0;
+      },
+      {
+        schema_version: 1,
+        principal_id: project.principalId,
+        project_id: project.projectId,
+        selection_id: project.selectionId
+      }
+    );
+  });
   const current = readJob(job.jobId) ?? job;
   if (stop) {
     if (stop.kind === "lock_lost") throw new DrainAborted("lock_lost");
@@ -20559,11 +20843,19 @@ async function processJob(job, context) {
   activeClaim = claimName;
   try {
     assertMayContinue(context, job.agent);
+    if (hasAccountConflict(job.jobId)) {
+      count2("account_conflict");
+      return;
+    }
     job = relocateTranscript(job);
     const cursorRef = sessionRefFor(context.salt, job.agent, job.sessionId);
     const stored2 = readCandidates(job.jobId);
     let target2 = stored2?.target ?? jobTarget(job);
     if (!target2) {
+      if (!job.account) {
+        finishJob(job, "account_unverified");
+        return;
+      }
       const path2 = transcriptFile(job);
       try {
         if (!path2) throw new UnsupportedTranscriptError();
@@ -20575,7 +20867,14 @@ async function processJob(job, context) {
         );
         return;
       }
-      target2 = await selectedTarget(context, job.cwd);
+      target2 = await withCredentialLock("auth-agy.lock", async () => {
+        if (job.account) {
+          if (job.account.apiBase !== context.consent.apiBase)
+            throw new TransportError("project_account_mismatch");
+          await requireCaptureAccount(context, job.account.principalId);
+        }
+        return selectedTarget(context, job.cwd);
+      });
       if (!target2) {
         backoff(
           job,
@@ -20595,6 +20894,10 @@ async function processJob(job, context) {
     if (!hasCandidates) {
       const result = await extract(job, context, target2, cursorRef);
       if (result !== "stored") return;
+    }
+    if (hasAccountConflict(job.jobId)) {
+      count2("account_conflict");
+      return;
     }
     if (readJob(job.jobId)) await upload(job, context, target2, cursorRef);
     logEvent("job_processed", {
@@ -20711,7 +21014,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.16.0"}`
+        `memroot-capture/${"0.17.0"}`
       ),
       salt,
       redactor: createRedactor(salt),

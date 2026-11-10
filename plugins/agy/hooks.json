@@ -1,0 +1,56 @@
+{
+  "memroot": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "node \"./scripts/agy-hook.mjs\" SessionStart",
+        "timeout": 3
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node \"./scripts/agy-hook.mjs\" PreInvocation",
+        "timeout": 3
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "node \"./scripts/agy-hook.mjs\" PostInvocation",
+        "timeout": 3
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "node \"./scripts/agy-hook.mjs\" Stop",
+        "timeout": 3
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"./scripts/agy-hook.mjs\" PreToolUse",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"./scripts/agy-hook.mjs\" PostToolUse",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

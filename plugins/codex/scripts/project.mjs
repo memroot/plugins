@@ -92,8 +92,8 @@ var require_src = __commonJS({
 
 // src/project-command.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
-import { existsSync as existsSync3, lstatSync as lstatSync6, rmSync as rmSync5, statSync } from "node:fs";
-import { join as join12, normalize as normalize3, resolve as resolve2 } from "node:path";
+import { existsSync as existsSync3, lstatSync as lstatSync7, rmSync as rmSync5, statSync } from "node:fs";
+import { join as join13, normalize as normalize3, resolve as resolve2 } from "node:path";
 
 // src/plugin/node-util-compat.ts
 var node_util_compat_exports = {};
@@ -178,7 +178,7 @@ import { mkdtempSync, rmSync as rmSync4, writeFileSync as writeFileSync4 } from 
 import { createServer, request as httpRequest2 } from "node:http";
 import { request as httpsRequest2 } from "node:https";
 import { tmpdir } from "node:os";
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 
 // ../../node_modules/.pnpm/@clack+core@1.5.1/node_modules/@clack/core/dist/index.mjs
 import { stdout, stdin } from "node:process";
@@ -925,44 +925,8 @@ var SELECT_INSTRUCTIONS = [
 ];
 var i = `${styleText2("gray", S_BAR)}  `;
 
-// src/credentials.ts
-import { spawnSync } from "node:child_process";
-import {
-  chmod as chmod2,
-  lstat as lstat3,
-  readFile as readFile3,
-  rename as rename3,
-  rm as rm3,
-  writeFile as writeFile3
-} from "node:fs/promises";
-import { join as join4 } from "node:path";
-
-// src/config.ts
-import { randomUUID } from "node:crypto";
-import {
-  chmod,
-  lstat as lstat2,
-  readFile as readFile2,
-  rename as rename2,
-  rm as rm2,
-  writeFile as writeFile2
-} from "node:fs/promises";
-import { join as join3 } from "node:path";
-
-// src/api-base.ts
-function isLoopbackHostname(hostname) {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
-}
-function isAllowedApiBase(value) {
-  try {
-    const url = new URL(value);
-    if (url.username || url.password || url.search || url.hash) return false;
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
-  } catch {
-    return false;
-  }
-}
+// ../../node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/stringify.js
+var HAS_WELLFORMED = !!"".isWellFormed;
 
 // src/capture/paths.ts
 import { randomBytes } from "node:crypto";
@@ -1091,6 +1055,211 @@ function captureAgreementPath() {
   return join(memrootConfigDir(), "capture-agreement.json");
 }
 
+// src/config.ts
+import { randomUUID } from "node:crypto";
+import {
+  chmod,
+  lstat as lstat2,
+  readFile as readFile2,
+  rename as rename2,
+  rm as rm2,
+  writeFile as writeFile2
+} from "node:fs/promises";
+import { join as join4 } from "node:path";
+
+// src/api-base.ts
+function isLoopbackHostname(hostname) {
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
+}
+function isAllowedApiBase(value) {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+// src/capture/queue/lock.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2
+} from "node:fs";
+import { join as join2 } from "node:path";
+function lockPath(name) {
+  return join2(stateSubdir("locks"), name);
+}
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+function readOwnerFile(path) {
+  return readPrivateFile(join2(path, "owner.json"), 64 * 1024);
+}
+function readOwner(path) {
+  try {
+    const value = JSON.parse(readOwnerFile(path));
+    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : NaN;
+    if (typeof value.pid !== "number" || Number.isNaN(createdAt))
+      return void 0;
+    const heartbeat2 = typeof value.heartbeatAt === "string" ? Date.parse(value.heartbeatAt) : NaN;
+    return {
+      pid: value.pid,
+      createdAt,
+      heartbeatAt: Number.isNaN(heartbeat2) ? createdAt : heartbeat2
+    };
+  } catch {
+    return void 0;
+  }
+}
+function isStale(path, staleMs) {
+  let info;
+  try {
+    info = lstatSync2(path);
+  } catch {
+    return false;
+  }
+  if (info.isSymbolicLink() || !info.isDirectory()) return true;
+  const owner = readOwner(path);
+  if (!owner) return Date.now() - info.mtimeMs > staleMs;
+  if (!processAlive(owner.pid)) return true;
+  return Date.now() - owner.heartbeatAt > staleMs;
+}
+var held = /* @__PURE__ */ new Map();
+function tryMkdir(path) {
+  try {
+    mkdirSync2(path, { mode: 448 });
+  } catch (error) {
+    if (error.code === "EEXIST") return false;
+    throw error;
+  }
+  const token = randomBytes2(8).toString("hex");
+  held.set(path, { ino: lstatSync2(path).ino, token });
+  writeOwner(path, (/* @__PURE__ */ new Date()).toISOString(), token);
+  return true;
+}
+function writeOwner(path, createdAt, token) {
+  const temporary = join2(path, `owner.${process.pid}.${token}.tmp`);
+  writeFileSync2(
+    temporary,
+    JSON.stringify({
+      pid: process.pid,
+      createdAt,
+      heartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
+      token
+    }),
+    { mode: 384 }
+  );
+  renameSync2(temporary, join2(path, "owner.json"));
+}
+function readToken(path) {
+  try {
+    const value = JSON.parse(readOwnerFile(path));
+    return typeof value.token === "string" ? value.token : void 0;
+  } catch {
+    return void 0;
+  }
+}
+function stillOurs(path) {
+  const mine = held.get(path);
+  if (!mine) return false;
+  try {
+    return lstatSync2(path).ino === mine.ino && readToken(path) === mine.token;
+  } catch {
+    return false;
+  }
+}
+function heartbeat(name) {
+  const path = lockPath(name);
+  const mine = held.get(path);
+  const owner = readOwner(path);
+  if (!mine || !owner || !stillOurs(path)) {
+    held.delete(path);
+    return false;
+  }
+  try {
+    writeOwner(path, new Date(owner.createdAt).toISOString(), mine.token);
+  } catch {
+    held.delete(path);
+    return false;
+  }
+  if (!stillOurs(path)) {
+    held.delete(path);
+    return false;
+  }
+  return true;
+}
+function clearStale(path, staleMs) {
+  const tombstone = `${path}.stale-${process.pid}-${randomBytes2(4).toString("hex")}`;
+  try {
+    renameSync2(path, tombstone);
+  } catch {
+    return;
+  }
+  if (!isStale(tombstone, staleMs)) {
+    try {
+      renameSync2(tombstone, path);
+      return;
+    } catch {
+    }
+  }
+  rmSync2(tombstone, { recursive: true, force: true });
+}
+async function acquireLock(name, options) {
+  const path = lockPath(name);
+  const deadline = Date.now() + (options.waitMs ?? 0);
+  let cleanups = 0;
+  for (; ; ) {
+    if (options.signal?.aborted) return void 0;
+    if (tryMkdir(path)) {
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        if (stillOurs(path)) rmSync2(path, { recursive: true, force: true });
+        held.delete(path);
+      };
+    }
+    if (cleanups < 3 && isStale(path, options.staleMs)) {
+      cleanups++;
+      clearStale(path, options.staleMs);
+      continue;
+    }
+    if (Date.now() >= deadline) return void 0;
+    await new Promise((resolve3) => setTimeout(resolve3, options.pollMs ?? 100));
+  }
+}
+async function withCredentialLock(name, operation) {
+  const release = await acquireLock(name, {
+    staleMs: 6e4,
+    waitMs: 6e4,
+    pollMs: 100
+  });
+  if (!release)
+    throw new Error(
+      "AUTH_BUSY: Another credential operation is in progress; retry."
+    );
+  const timer = setInterval(() => heartbeat(name), 1e4);
+  timer.unref();
+  try {
+    return await operation();
+  } finally {
+    clearInterval(timer);
+    release();
+  }
+}
+
 // src/storage.ts
 import {
   lstat,
@@ -1102,14 +1271,14 @@ import {
   writeFile
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join2 } from "node:path";
+import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3 } from "node:path";
 function dataDirectory() {
-  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join2(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join2(homedir2(), ".local", "share");
+  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join3(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join3(homedir2(), ".local", "share");
   if (!isAbsolute2(base))
     throw new Error(
       "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
     );
-  return join2(base, "memroot");
+  return join3(base, "memroot");
 }
 async function safeDirectory(path) {
   const boundary = dataDirectory();
@@ -1126,7 +1295,7 @@ function configDirectory() {
   return memrootConfigDir();
 }
 function configPath() {
-  return join3(configDirectory(), "config.json");
+  return join4(configDirectory(), "config.json");
 }
 function optionalString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -1155,9 +1324,7 @@ async function migrateLegacy(record, raw) {
       );
     await chmod(backup, 384);
   }
-  const config = { schemaVersion: 1 };
-  await writeConfig(config);
-  return config;
+  return { schemaVersion: 1 };
 }
 async function readConfig() {
   const path = configPath();
@@ -1203,21 +1370,41 @@ async function readConfig() {
     if (mcp.codex === true)
       registered.codex = true;
     if (mcp.grok === true) registered.grok = true;
-    if (registered.claude || registered.codex || registered.grok)
+    if (mcp.agy === true) registered.agy = true;
+    if (registered.claude || registered.codex || registered.grok || registered.agy)
       config.mcpRegistered = registered;
   }
   const stamps = record.instructionsInstalled;
   if (stamps && typeof stamps === "object" && !Array.isArray(stamps)) {
     const installed = {};
-    for (const key of ["claude", "codex", "grok"]) {
+    for (const key of ["claude", "codex", "grok", "agy"]) {
       const value2 = optionalString(stamps[key]);
       if (value2) installed[key] = value2;
     }
-    if (installed.claude || installed.codex || installed.grok)
+    if (installed.claude || installed.codex || installed.grok || installed.agy)
       config.instructionsInstalled = installed;
   }
   const banner = optionalString(record.importBannerShown);
   if (banner) config.importBannerShown = banner;
+  const agy = record.agyMcpClient;
+  if (agy && typeof agy === "object" && !Array.isArray(agy)) {
+    const value2 = agy;
+    if (typeof value2.apiBase === "string" && isAllowedApiBase(value2.apiBase) && typeof value2.clientId === "string" && /^[A-Za-z0-9._:-]{1,256}$/u.test(value2.clientId) && typeof value2.principalId === "string" && /^[a-f0-9-]{36}$/iu.test(value2.principalId))
+      config.agyMcpClient = {
+        apiBase: value2.apiBase,
+        clientId: value2.clientId,
+        principalId: value2.principalId
+      };
+  }
+  const registration = record.agyMcpRegistration;
+  if (registration && typeof registration === "object" && !Array.isArray(registration)) {
+    const value2 = registration;
+    if (typeof value2.command === "string" && value2.command.startsWith("/") && value2.command.length <= 4096 && !value2.command.includes("\0") && typeof value2.script === "string" && value2.script.startsWith("/") && value2.script.length <= 4096 && !value2.script.includes("\0"))
+      config.agyMcpRegistration = {
+        command: value2.command,
+        script: value2.script
+      };
+  }
   return config;
 }
 async function writeConfig(config) {
@@ -1237,29 +1424,19 @@ async function writeConfig(config) {
     await rm2(temporary, { force: true });
   }
 }
-var AccountMismatchError = class extends Error {
-  constructor(previous, next) {
-    super(
-      "ACCOUNT_MISMATCH: The Memroot CLI connection belongs to another account than the one this computer is signed in to. Run memroot logout first, or pass --switch-account."
-    );
-    this.previous = previous;
-    this.next = next;
-  }
-  previous;
-  next;
-};
-async function recordAccount(apiBase, principalId, options = {}) {
-  if (!/^[a-f0-9-]{36}$/i.test(principalId)) return;
-  const config = await readConfig();
-  if (config.userId === principalId && config.apiBase) return;
-  if (config.userId && config.userId !== principalId && (!config.apiBase || config.apiBase === apiBase) && !options.allowSwitch)
-    throw new AccountMismatchError(config.userId, principalId);
-  config.userId = principalId;
-  if (!config.apiBase) config.apiBase = apiBase;
-  await writeConfig(config);
-}
 
 // src/credentials.ts
+import { spawnSync } from "node:child_process";
+import { lstatSync as lstatSync3 } from "node:fs";
+import {
+  chmod as chmod2,
+  lstat as lstat3,
+  readFile as readFile3,
+  rename as rename3,
+  rm as rm3,
+  writeFile as writeFile3
+} from "node:fs/promises";
+import { isAbsolute as isAbsolute3, join as join5 } from "node:path";
 var SERVICE = "memroot";
 var TOOL_TIMEOUT_MS = 15e3;
 function credentialStoreKind() {
@@ -1277,11 +1454,12 @@ function unavailable(tool) {
     `AUTH_KEYCHAIN_UNAVAILABLE: ${tool} is not installed, so there is no OS credential store for the Memroot refresh token. Tokens are never written to files; install ${tool === "security" ? "the macOS security tool" : "libsecret's secret-tool"} or sign in on a supported system.`
   );
 }
-function run(tool, args, input, allowNotFound = false) {
+function run(tool, args, input, allowNotFound = false, timeoutMs = TOOL_TIMEOUT_MS, hardDeadline = false) {
   const result = spawnSync(tool, args, {
     encoding: "utf8",
     input,
-    timeout: TOOL_TIMEOUT_MS,
+    timeout: Math.max(1, Math.min(TOOL_TIMEOUT_MS, timeoutMs)),
+    ...hardDeadline ? { killSignal: "SIGKILL" } : {},
     shell: false,
     maxBuffer: 1024 * 1024
   });
@@ -1303,7 +1481,7 @@ function quote(value) {
   return JSON.stringify(value);
 }
 function testStorePath() {
-  return join4(configDirectory(), "test-credentials.json");
+  return join5(configDirectory(), "test-credentials.json");
 }
 async function readTestStore() {
   try {
@@ -1335,25 +1513,50 @@ async function writeTestStore(entries) {
     await rm3(temporary, { force: true });
   }
 }
+function assertMacOSDefaultKeychain(timeoutMs) {
+  try {
+    const result = run(
+      "/usr/bin/security",
+      ["default-keychain", "-d", "user"],
+      void 0,
+      true,
+      Math.min(5e3, timeoutMs ?? 5e3),
+      true
+    );
+    const match2 = /^"([^"\r\n]+)"$/u.exec(result.stdout.trim());
+    const path = match2?.[1];
+    if (result.status !== 0 || !path || !isAbsolute3(path)) throw new Error();
+    const info = lstatSync3(path);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error();
+  } catch {
+    throw new Error(
+      "AUTH_KEYCHAIN_DEFAULT_UNAVAILABLE: This process has no usable default macOS keychain. Open Keychain Access for this macOS account, or run Memroot from its usual signed-in HOME, then retry. No keychain was created or changed."
+    );
+  }
+}
 function assertCredentialStoreAvailable() {
   const kind = credentialStoreKind();
   if (kind === "test-file") return;
-  if (kind === "macos-keychain")
+  if (kind === "macos-keychain") {
+    assertMacOSDefaultKeychain();
     run(
       "security",
       ["find-generic-password", "-s", SERVICE, "-a", "memroot:probe"],
       void 0,
       true
     );
-  else
-    run(
+  } else {
+    const result = run(
       "secret-tool",
       ["lookup", "service", SERVICE, "account", "memroot:probe"],
       void 0,
       true
     );
+    if (result.status !== 0 && !noUnlockedMatch(result))
+      throw new Error("AUTH_KEYCHAIN_FAILED: secret-tool lookup failed.");
+  }
 }
-async function storeSecret(account, secret) {
+async function storeSecret(account, secret, timeoutMs) {
   const kind = credentialStoreKind();
   if (kind === "test-file") {
     const entries = await readTestStore();
@@ -1362,21 +1565,34 @@ async function storeSecret(account, secret) {
     return;
   }
   if (kind === "macos-keychain") {
+    const started = Date.now();
+    assertMacOSDefaultKeychain(timeoutMs);
+    const remaining = timeoutMs === void 0 ? void 0 : timeoutMs - (Date.now() - started);
+    if (remaining !== void 0 && remaining <= 0)
+      throw new Error(
+        "AUTH_KEYCHAIN_FAILED: Credential write deadline expired before any write."
+      );
     run(
       "security",
       ["-i"],
       `add-generic-password -U -s ${quote(SERVICE)} -a ${quote(account)} -w ${quote(secret)}
-`
+`,
+      false,
+      remaining,
+      timeoutMs !== void 0
     );
     return;
   }
   run(
     "secret-tool",
     ["store", "--label", "Memroot CLI", "service", SERVICE, "account", account],
-    secret
+    secret,
+    false,
+    timeoutMs,
+    timeoutMs !== void 0
   );
 }
-async function readSecret(account) {
+async function readSecret(account, timeoutMs) {
   const kind = credentialStoreKind();
   if (kind === "test-file") return (await readTestStore())[account];
   if (kind === "macos-keychain") {
@@ -1384,7 +1600,9 @@ async function readSecret(account) {
       "security",
       ["find-generic-password", "-s", SERVICE, "-a", account, "-w"],
       void 0,
-      true
+      true,
+      timeoutMs,
+      timeoutMs !== void 0
     );
     if (result2.status !== 0) {
       if (/could not be found|item not found/i.test(result2.stderr))
@@ -1400,13 +1618,20 @@ async function readSecret(account) {
     "secret-tool",
     ["lookup", "service", SERVICE, "account", account],
     void 0,
-    true
+    true,
+    timeoutMs,
+    timeoutMs !== void 0
   );
-  if (result.status !== 0) return void 0;
+  if (noUnlockedMatch(result)) return void 0;
   const secret = result.stdout.replace(/\n$/, "");
-  return secret.length ? secret : void 0;
+  if (result.status !== 0 || !secret)
+    throw new Error("AUTH_KEYCHAIN_FAILED: secret-tool lookup failed.");
+  return secret;
 }
-async function deleteSecret(account) {
+function noUnlockedMatch(result) {
+  return result.status === 1 && result.stderr === "" && result.stdout === "";
+}
+async function deleteSecret(account, knownPresent = false) {
   const kind = credentialStoreKind();
   if (kind === "test-file") {
     const entries = await readTestStore();
@@ -1417,39 +1642,42 @@ async function deleteSecret(account) {
     return;
   }
   if (kind === "macos-keychain") {
-    const result = run(
+    assertMacOSDefaultKeychain();
+    const result2 = run(
       "security",
       ["delete-generic-password", "-s", SERVICE, "-a", account],
       void 0,
       true
     );
-    if (result.status !== 0 && !/could not be found|item not found/i.test(result.stderr))
+    if (result2.status !== 0 && (knownPresent || !/could not be found|item not found/i.test(result2.stderr)))
       throw new Error(
-        `AUTH_KEYCHAIN_FAILED: security delete-generic-password failed (${result.status ?? "signal"}).`
+        `AUTH_KEYCHAIN_FAILED: security delete-generic-password failed (${result2.status ?? "signal"}).`
       );
     return;
   }
-  run(
+  const result = run(
     "secret-tool",
     ["clear", "service", SERVICE, "account", account],
     void 0,
     true
   );
+  if (result.status !== 0 && (knownPresent || !noUnlockedMatch(result)))
+    throw new Error("AUTH_KEYCHAIN_FAILED: secret-tool clear failed.");
 }
 
 // src/project-context.ts
 import { existsSync } from "node:fs";
-import { dirname as dirname5, join as join8 } from "node:path";
+import { dirname as dirname5, join as join9 } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // src/project-folders.ts
 import { randomUUID as randomUUID3 } from "node:crypto";
-import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+import { lstatSync as lstatSync6, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import {
   basename,
   dirname as dirname4,
-  isAbsolute as isAbsolute3,
-  join as join7,
+  isAbsolute as isAbsolute4,
+  join as join8,
   normalize as normalize2,
   relative,
   resolve,
@@ -1457,21 +1685,21 @@ import {
 } from "node:path";
 
 // src/config-store.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
+import { randomBytes as randomBytes3 } from "node:crypto";
 import {
   closeSync as closeSync2,
   fchmodSync,
   fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
+  lstatSync as lstatSync4,
+  mkdirSync as mkdirSync3,
   openSync as openSync2,
   readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
+  renameSync as renameSync3,
+  rmSync as rmSync3,
+  writeFileSync as writeFileSync3,
   writeSync
 } from "node:fs";
-import { dirname as dirname3, join as join5 } from "node:path";
+import { dirname as dirname3, join as join6 } from "node:path";
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
@@ -1481,20 +1709,20 @@ function pause(ms) {
 function withConfigLock(fileName, update2) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname3(directory), false);
-  const lock = `${join5(directory, fileName)}.lock`;
-  const nonce = randomBytes2(8).toString("hex");
-  const owner = join5(lock, "owner");
+  const lock = `${join6(directory, fileName)}.lock`;
+  const nonce = randomBytes3(8).toString("hex");
+  const owner = join6(lock, "owner");
   let held2 = false;
   for (let i2 = 0; i2 < LOCK_TRIES && !held2; i2++) {
     try {
-      mkdirSync2(lock, { mode: 448 });
-      writeFileSync2(owner, nonce, { mode: 384 });
+      mkdirSync3(lock, { mode: 448 });
+      writeFileSync3(owner, nonce, { mode: 384 });
       held2 = true;
     } catch (error) {
       if (error.code !== "EEXIST") break;
       try {
-        if (Date.now() - lstatSync2(lock).mtimeMs > LOCK_STALE_MS)
-          rmSync2(lock, { recursive: true, force: true });
+        if (Date.now() - lstatSync4(lock).mtimeMs > LOCK_STALE_MS)
+          rmSync3(lock, { recursive: true, force: true });
       } catch {
       }
       pause(25);
@@ -1506,7 +1734,7 @@ function withConfigLock(fileName, update2) {
     if (held2)
       try {
         if (readFileSync2(owner, "utf8") === nonce)
-          rmSync2(lock, { recursive: true, force: true });
+          rmSync3(lock, { recursive: true, force: true });
       } catch {
       }
   }
@@ -1514,19 +1742,19 @@ function withConfigLock(fileName, update2) {
 function persistConfigJson(fileName, value) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname3(directory), false);
-  const path = join5(directory, fileName);
+  const path = join6(directory, fileName);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
       if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
         try {
-          if (now - lstatSync2(join5(directory, name)).mtimeMs > TMP_STALE_MS)
-            rmSync2(join5(directory, name), { force: true });
+          if (now - lstatSync4(join6(directory, name)).mtimeMs > TMP_STALE_MS)
+            rmSync3(join6(directory, name), { force: true });
         } catch {
         }
   } catch {
   }
-  const temporary = `${path}.${process.pid}.${randomBytes2(4).toString("hex")}.tmp`;
+  const temporary = `${path}.${process.pid}.${randomBytes3(4).toString("hex")}.tmp`;
   try {
     const fd = openSync2(temporary, "wx", 384);
     try {
@@ -1539,7 +1767,7 @@ function persistConfigJson(fileName, value) {
     }
     for (let attempt = 0; ; attempt++)
       try {
-        renameSync2(temporary, path);
+        renameSync3(temporary, path);
         break;
       } catch (error) {
         const code = error.code;
@@ -1547,20 +1775,20 @@ function persistConfigJson(fileName, value) {
         pause(20);
       }
   } finally {
-    rmSync2(temporary, { force: true });
+    rmSync3(temporary, { force: true });
   }
 }
 
 // src/project-selection.ts
 import { randomUUID as randomUUID2 } from "node:crypto";
-import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
-import { join as join6 } from "node:path";
+import { lstatSync as lstatSync5, renameSync as renameSync4 } from "node:fs";
+import { join as join7 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
-  return join6(memrootConfigDir(), PROJECT_SELECTION_FILE);
+  return join7(memrootConfigDir(), PROJECT_SELECTION_FILE);
 }
 function normalizeApiBase(apiBase) {
   try {
@@ -1614,9 +1842,9 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join6(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join7(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
-    lstatSync3(legacy);
+    lstatSync5(legacy);
   } catch {
     return false;
   }
@@ -1660,7 +1888,7 @@ function migrateLegacyDefaults() {
       } catch {
       }
       if (adopted > 0) persist(store);
-      renameSync3(legacy, `${legacy}.migrated`);
+      renameSync4(legacy, `${legacy}.migrated`);
       return true;
     });
   } catch {
@@ -1722,7 +1950,7 @@ var MAX_PATH = 4096;
 var MAX_WALK = 128;
 var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectFoldersPath() {
-  return join7(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+  return join8(memrootConfigDir(), PROJECT_FOLDERS_FILE);
 }
 var FOLD_CASE = process.platform === "win32";
 function folderContains(folder, path, options) {
@@ -1760,7 +1988,7 @@ function canonicalFolder(path) {
     try {
       const real = realpathSync.native(head);
       const rest = relative(head, absolute);
-      return rest ? join7(real, rest) : real;
+      return rest ? join8(real, rest) : real;
     } catch {
       const parent = dirname4(head);
       if (parent === head) break;
@@ -1771,7 +1999,7 @@ function canonicalFolder(path) {
 }
 function smallFile(path) {
   try {
-    const info = lstatSync4(path);
+    const info = lstatSync6(path);
     if (!info.isFile() || info.size > 4096) return void 0;
     return readFileSync3(path, "utf8");
   } catch {
@@ -1780,10 +2008,10 @@ function smallFile(path) {
 }
 function folderScope(real) {
   for (let dir = real, i2 = 0; i2 < MAX_WALK; i2++) {
-    const dotGit = join7(dir, ".git");
+    const dotGit = join8(dir, ".git");
     let info;
     try {
-      info = lstatSync4(dotGit);
+      info = lstatSync6(dotGit);
     } catch {
       info = void 0;
     }
@@ -1794,7 +2022,7 @@ function folderScope(real) {
       return {
         cwd: real,
         top: dir,
-        main: { root, path: rest ? join7(root, rest) : root }
+        main: { root, path: rest ? join8(root, rest) : root }
       };
     }
     const parent = dirname4(dir);
@@ -1808,7 +2036,7 @@ function worktreeMain(dir, dotGit) {
   if (!pointer?.[1]) return void 0;
   const gitdir = resolve(dir, pointer[1]);
   if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
-  const back = smallFile(join7(gitdir, "gitdir"))?.trim();
+  const back = smallFile(join8(gitdir, "gitdir"))?.trim();
   if (!back) return void 0;
   try {
     if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
@@ -1816,7 +2044,7 @@ function worktreeMain(dir, dotGit) {
   } catch {
     return void 0;
   }
-  const common = smallFile(join7(gitdir, "commondir"))?.trim();
+  const common = smallFile(join8(gitdir, "commondir"))?.trim();
   if (!common) return void 0;
   let commonDir;
   try {
@@ -1839,27 +2067,31 @@ function bindingFolder(path) {
 }
 function validBinding(value) {
   const v = value;
-  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute3(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute4(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
 }
 function validKey(key) {
   const at = key.lastIndexOf("|");
   return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
 }
-function readStore2() {
+function readStore2(strictKey) {
   try {
     const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
     if (raw === void 0) return {};
     const value = JSON.parse(raw);
     if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
-      return {};
+      throw new Error("INVALID_PROJECT_FOLDER_STORE");
     const out = {};
     for (const [key, list] of Object.entries(
       value.bindings
-    ))
+    )) {
+      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
+        throw new Error("INVALID_PROJECT_FOLDER_STORE");
       if (validKey(key) && Array.isArray(list))
         out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    }
     return out;
-  } catch {
+  } catch (error) {
+    if (strictKey !== void 0) throw error;
     return {};
   }
 }
@@ -1880,9 +2112,10 @@ function update(change) {
   });
 }
 var sameFolder = (a2, b) => FOLD_CASE ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
-function readBindings(apiBase, principalId) {
+function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   if (!principalId) return [];
-  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+  const key = selectionKey(apiBase, principalId);
+  return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
 function bindingMatchFor(apiBase, principalId, cwd) {
   const bindings = readBindings(apiBase, principalId);
@@ -1947,7 +2180,7 @@ function refreshBindings(apiBase, principalId, tenantId, projects) {
 }
 function folderMissing(folder) {
   try {
-    return !lstatSync4(folder).isDirectory();
+    return !lstatSync6(folder).isDirectory();
   } catch {
     return true;
   }
@@ -1961,18 +2194,18 @@ function validUuid(value) {
 function projectCommandPrefix() {
   try {
     const here = dirname5(fileURLToPath(import.meta.url));
-    const script = join8(here, "project.mjs");
+    const script = join9(here, "project.mjs");
     if (existsSync(script) && !/["\\$`\n]/.test(script))
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.16.0"} project`;
+  return `npx -y memroot@${"0.17.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
 }
 function legacySessionRecordsDir() {
-  return join8(stateDir(), "project-sessions");
+  return join9(stateDir(), "project-sessions");
 }
 
 // src/capture/consent.ts
@@ -2068,12 +2301,31 @@ var MAX_OUTPUT_BYTES = 256 * 1024;
 var MAX_STDERR_BYTES = 8 * 1024;
 
 // src/capture/queue/job.ts
+import { join as join10 } from "node:path";
+var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
 var JOB_ID = /^(claude|codex|grok)-[a-f0-9]{32}$/;
 function queueDir() {
   return stateSubdir("queue");
 }
+var conflictPath = (jobId) => join10(queueDir(), `${jobId}.account-conflict`);
+function hasAccountConflict(jobId) {
+  const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
+  if (marker === void 0) return false;
+  const at = Date.parse(marker);
+  if (Number.isFinite(at) && Date.now() - at > JOB_TTL_MS) {
+    removeFile(conflictPath(jobId));
+    return false;
+  }
+  return true;
+}
 function listJobIds() {
-  return listFiles(queueDir()).filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
+  const names = listFiles(queueDir());
+  for (const name of names) {
+    const id = name.slice(0, -".account-conflict".length);
+    if (name.endsWith(".account-conflict") && JOB_ID.test(id))
+      hasAccountConflict(id);
+  }
+  return names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
 }
 
 // src/capture/queue/ledger.ts
@@ -2091,7 +2343,7 @@ var TransportError = class extends Error {
   }
   code;
 };
-function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
+function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS, budget) {
   const transport = target.protocol === "https:" ? httpsRequest : httpRequest;
   return new Promise((resolve3, reject) => {
     const req = transport(
@@ -2100,6 +2352,7 @@ function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
         method: "POST",
         agent: false,
         timeout: timeoutMs,
+        ...budget?.signal ? { signal: budget.signal } : {},
         headers: { ...headers, "content-length": Buffer.byteLength(payload) }
       },
       (response) => {
@@ -2124,6 +2377,8 @@ function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
         response.on("error", () => reject(new TransportError("network_error")));
       }
     );
+    const deadline = budget?.absoluteTimeout ? setTimeout(() => req.destroy(new TransportError("timeout")), timeoutMs) : void 0;
+    if (deadline) req.once("close", () => clearTimeout(deadline));
     req.on("timeout", () => req.destroy(new TransportError("timeout")));
     req.on(
       "error",
@@ -2133,144 +2388,6 @@ function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS) {
     );
     req.end(payload);
   });
-}
-
-// src/capture/queue/lock.ts
-import { randomBytes as randomBytes3 } from "node:crypto";
-import {
-  lstatSync as lstatSync5,
-  mkdirSync as mkdirSync3,
-  renameSync as renameSync4,
-  rmSync as rmSync3,
-  writeFileSync as writeFileSync3
-} from "node:fs";
-import { join as join9 } from "node:path";
-function lockPath(name) {
-  return join9(stateSubdir("locks"), name);
-}
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-function readOwnerFile(path) {
-  return readPrivateFile(join9(path, "owner.json"), 64 * 1024);
-}
-function readOwner(path) {
-  try {
-    const value = JSON.parse(readOwnerFile(path));
-    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : NaN;
-    if (typeof value.pid !== "number" || Number.isNaN(createdAt))
-      return void 0;
-    const heartbeat = typeof value.heartbeatAt === "string" ? Date.parse(value.heartbeatAt) : NaN;
-    return {
-      pid: value.pid,
-      createdAt,
-      heartbeatAt: Number.isNaN(heartbeat) ? createdAt : heartbeat
-    };
-  } catch {
-    return void 0;
-  }
-}
-function isStale(path, staleMs) {
-  let info;
-  try {
-    info = lstatSync5(path);
-  } catch {
-    return false;
-  }
-  if (info.isSymbolicLink() || !info.isDirectory()) return true;
-  const owner = readOwner(path);
-  if (!owner) return Date.now() - info.mtimeMs > staleMs;
-  if (!processAlive(owner.pid)) return true;
-  return Date.now() - owner.heartbeatAt > staleMs;
-}
-var held = /* @__PURE__ */ new Map();
-function tryMkdir(path) {
-  try {
-    mkdirSync3(path, { mode: 448 });
-  } catch (error) {
-    if (error.code === "EEXIST") return false;
-    throw error;
-  }
-  const token = randomBytes3(8).toString("hex");
-  held.set(path, { ino: lstatSync5(path).ino, token });
-  writeOwner(path, (/* @__PURE__ */ new Date()).toISOString(), token);
-  return true;
-}
-function writeOwner(path, createdAt, token) {
-  const temporary = join9(path, `owner.${process.pid}.${token}.tmp`);
-  writeFileSync3(
-    temporary,
-    JSON.stringify({
-      pid: process.pid,
-      createdAt,
-      heartbeatAt: (/* @__PURE__ */ new Date()).toISOString(),
-      token
-    }),
-    { mode: 384 }
-  );
-  renameSync4(temporary, join9(path, "owner.json"));
-}
-function readToken(path) {
-  try {
-    const value = JSON.parse(readOwnerFile(path));
-    return typeof value.token === "string" ? value.token : void 0;
-  } catch {
-    return void 0;
-  }
-}
-function stillOurs(path) {
-  const mine = held.get(path);
-  if (!mine) return false;
-  try {
-    return lstatSync5(path).ino === mine.ino && readToken(path) === mine.token;
-  } catch {
-    return false;
-  }
-}
-function clearStale(path, staleMs) {
-  const tombstone = `${path}.stale-${process.pid}-${randomBytes3(4).toString("hex")}`;
-  try {
-    renameSync4(path, tombstone);
-  } catch {
-    return;
-  }
-  if (!isStale(tombstone, staleMs)) {
-    try {
-      renameSync4(tombstone, path);
-      return;
-    } catch {
-    }
-  }
-  rmSync3(tombstone, { recursive: true, force: true });
-}
-async function acquireLock(name, options) {
-  const path = lockPath(name);
-  const deadline = Date.now() + (options.waitMs ?? 0);
-  let cleanups = 0;
-  for (; ; ) {
-    if (tryMkdir(path)) {
-      let released = false;
-      return () => {
-        if (released) return;
-        released = true;
-        if (stillOurs(path)) rmSync3(path, { recursive: true, force: true });
-        held.delete(path);
-      };
-    }
-    if (cleanups < 3 && isStale(path, options.staleMs)) {
-      cleanups++;
-      clearStale(path, options.staleMs);
-      continue;
-    }
-    if (Date.now() >= deadline) return void 0;
-    await new Promise((resolve3) => setTimeout(resolve3, options.pollMs ?? 100));
-  }
 }
 
 // src/capture/upload/token-broker.ts
@@ -2294,31 +2411,69 @@ var TokenBroker = class {
    * a broker never reads the credential store, which still holds the
    * previous connection.
    */
-  constructor(apiBase, pending) {
+  constructor(apiBase, pending, credentials) {
     this.apiBase = apiBase;
     this.pending = pending;
+    this.credentials = credentials;
   }
   apiBase;
   pending;
+  credentials;
   cached;
+  refreshing;
   invalidate() {
     this.cached = void 0;
   }
-  async accessToken() {
+  async accessToken(signal) {
     if (this.pending) {
       if (this.pending.expiresAt <= Date.now()) throw new AuthRequiredError();
       return this.pending.token;
     }
     if (this.cached && this.cached.expiresAt - Date.now() > REFRESH_SKEW_MS)
       return this.cached.token;
-    const release = await acquireLock("auth.lock", {
-      staleMs: 6e4,
-      waitMs: 2e4,
-      pollMs: 100
-    });
+    if (this.credentials?.authTimeoutMs !== void 0) {
+      if (!this.refreshing) {
+        const deadline = Date.now() + this.credentials.authTimeoutMs;
+        const abort = AbortSignal.any([
+          AbortSignal.timeout(this.credentials.authTimeoutMs),
+          ...signal ? [signal] : []
+        ]);
+        this.refreshing = this.refreshAccessToken(deadline, abort).finally(
+          () => {
+            this.refreshing = void 0;
+          }
+        );
+      }
+      const pending = this.refreshing;
+      if (!signal) return pending;
+      if (signal.aborted) throw new TransportError("auth_cancelled");
+      return new Promise((resolve3, reject) => {
+        const aborted = () => reject(new TransportError("auth_cancelled"));
+        signal.addEventListener("abort", aborted, { once: true });
+        pending.then(resolve3, reject).finally(() => signal.removeEventListener("abort", aborted));
+      });
+    }
+    return this.refreshAccessToken();
+  }
+  async refreshAccessToken(deadline, signal) {
+    const remaining = () => {
+      if (signal?.aborted || deadline !== void 0 && deadline <= Date.now())
+        throw new TransportError("auth_timeout");
+      return deadline === void 0 ? void 0 : Math.max(1, deadline - Date.now());
+    };
+    const release = await acquireLock(
+      this.credentials?.lockName ?? "auth.lock",
+      {
+        staleMs: 6e4,
+        waitMs: Math.min(2e4, remaining() ?? 2e4),
+        pollMs: 100,
+        ...signal ? { signal } : {}
+      }
+    );
     if (!release) throw new TransportError("auth_lock_busy");
     try {
-      const refreshToken = await readSecret(mcpAccount(this.apiBase));
+      const account = this.credentials?.account ?? mcpAccount(this.apiBase);
+      const refreshToken = await readSecret(account, remaining());
       if (!refreshToken) throw new AuthRequiredError();
       const response = await httpPost(
         new URL(`${this.apiBase}/oauth/token`),
@@ -2329,9 +2484,11 @@ var TokenBroker = class {
         new URLSearchParams({
           grant_type: "refresh_token",
           refresh_token: refreshToken,
-          client_id: MCP_CLIENT_ID,
+          client_id: this.credentials?.clientId ?? MCP_CLIENT_ID,
           resource: mcpResource(this.apiBase)
-        }).toString()
+        }).toString(),
+        remaining(),
+        deadline === void 0 ? void 0 : { absoluteTimeout: true, ...signal ? { signal } : {} }
       );
       let body = {};
       try {
@@ -2349,7 +2506,8 @@ var TokenBroker = class {
       if (typeof body.access_token !== "string" || !body.access_token)
         throw new TransportError("token_response_invalid");
       if (typeof body.refresh_token === "string" && body.refresh_token && body.refresh_token !== refreshToken)
-        await storeSecret(mcpAccount(this.apiBase), body.refresh_token);
+        await storeSecret(account, body.refresh_token, remaining());
+      remaining();
       const lifetime = typeof body.expires_in === "number" && body.expires_in > 0 ? body.expires_in : 300;
       this.cached = {
         token: body.access_token,
@@ -2494,9 +2652,6 @@ var McpClient = class {
   }
 };
 
-// ../../node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/stringify.js
-var HAS_WELLFORMED = !!"".isWellFormed;
-
 // src/auth.ts
 var PROD_API_BASE = "https://api.memroot.dev";
 var DEV_API_BASE = "http://localhost:8787";
@@ -2615,13 +2770,13 @@ async function postForm(apiBase, path, params) {
   if (response.status >= 400) throw oauthFailure(record, response.status);
   return parseJsonBody(response.body);
 }
-async function registerClient(apiBase, redirectUri) {
+async function registerClient(apiBase, redirectUri, clientName = "Memroot CLI") {
   const response = await request(
     new URL(`${apiBase}/oauth/register`),
     "POST",
     "application/json",
     JSON.stringify({
-      client_name: "Memroot CLI",
+      client_name: clientName,
       redirect_uris: [redirectUri],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -2692,7 +2847,7 @@ async function revokeRefreshToken(apiBase, refreshToken, clientId) {
       client_id: clientId
     }).toString()
   );
-  if (response.status >= 400)
+  if (response.status !== 200)
     throw new Error(
       `AUTH_REVOKE_FAILED: Revocation returned ${response.status}.`
     );
@@ -2848,11 +3003,11 @@ function openBrowser(url) {
     process.off("SIGTERM", onSignal);
   };
   try {
-    directory = mkdtempSync(join10(tmpdir(), "memroot-login-"));
+    directory = mkdtempSync(join11(tmpdir(), "memroot-login-"));
     process.on("exit", cleanup);
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
-    const file = join10(directory, "sign-in.html");
+    const file = join11(directory, "sign-in.html");
     const target = htmlAttribute(url);
     writeFileSync4(
       file,
@@ -2884,6 +3039,19 @@ async function authorizePkce(requestOptions) {
     const redirectUri = `http://127.0.0.1:${waiter.port}${CALLBACK_PATH}`;
     let clientId = requestOptions.clientId;
     let retriedWithRegistration = false;
+    if (requestOptions.registerFirst) {
+      const registered = await registerClient(
+        apiBase,
+        redirectUri,
+        requestOptions.registerFirst.clientName
+      );
+      if (!registered)
+        throw new Error(
+          "AUTH_REGISTRATION_REQUIRED: The separate agent connection requires dynamic client registration."
+        );
+      clientId = registered;
+      retriedWithRegistration = true;
+    }
     for (; ; ) {
       const authorize = new URL(`${apiBase}/authorize`);
       authorize.searchParams.set("response_type", "code");
@@ -2932,7 +3100,11 @@ ${url}`
         );
       if (rejectedClient && !retriedWithRegistration) {
         retriedWithRegistration = true;
-        const registered = await registerClient(apiBase, redirectUri);
+        const registered = await registerClient(
+          apiBase,
+          redirectUri,
+          requestOptions.registerFirst?.clientName
+        );
         if (registered && registered !== clientId) {
           clientId = registered;
           console.log(
@@ -2976,27 +3148,137 @@ async function confirmAccountSwitch(previous, next, options) {
     `ACCOUNT_SWITCH_REFUSED: The sign-in returned another account (${terminalSafe(next)}) than the one this computer uses (${terminalSafe(previous)}); it was discarded. To change accounts, run memroot logout first or pass --switch-account.`
   );
 }
-async function discardCredential(apiBase, account) {
-  const stored = await readSecret(account).catch(() => void 0);
-  if (!stored) return;
-  const config = await readConfig().catch(() => void 0);
-  const clientId = account === apiBase && config?.clientId && config.clientIdApiBase === apiBase ? config.clientId : STATIC_CLIENT_ID;
-  await revokeRefreshToken(apiBase, stored, clientId).catch(() => {
-  });
-  await deleteSecret(account).catch(() => {
-  });
-  if (account === apiBase) cachedAccessToken = void 0;
+function assertCredentialLocks() {
+  if (!heartbeat("auth-agy.lock") || !heartbeat("auth.lock"))
+    throw new Error("AUTH_LOCK_LOST");
 }
-async function acceptConnectionAccount(apiBase, principalId, options) {
-  try {
-    await recordAccount(apiBase, principalId);
+async function retireCredential(base, account, clientId, paired = false, recoverOrphan = false) {
+  assertCredentialLocks();
+  const old = await readSecret(account);
+  if (!old) {
+    if (paired && credentialStoreKind() === "libsecret")
+      throw new Error(
+        "AUTH_KEYCHAIN_FAILED: The paired credential could not be read for retirement."
+      );
     return;
-  } catch (error) {
-    if (!(error instanceof AccountMismatchError)) throw error;
-    await confirmAccountSwitch(error.previous, principalId, options);
-    await discardCredential(apiBase, apiBase);
-    await recordAccount(apiBase, principalId, { allowSwitch: true });
   }
+  if (clientId) await revokeRefreshToken(base, old, clientId);
+  else if (!recoverOrphan)
+    throw new Error(
+      "AGY_AUTH_STATE_INVALID: An Antigravity credential lacks its client registration. Run memroot agy login --force to replace it."
+    );
+  assertCredentialLocks();
+  await deleteSecret(account, true);
+  if (await readSecret(account)) throw new Error("AUTH_CREDENTIAL_NOT_REMOVED");
+  if (!clientId)
+    console.error(
+      "Removed the unpaired local Antigravity credential. Its previous remote grant revocation is unverified."
+    );
+}
+async function acceptConnectionAccount(base, verify, options, grant) {
+  await withCredentialLock("auth-agy.lock", async () => {
+    const principal = await verify();
+    if (!principal) throw new Error("AUTH_ACCOUNT_UNVERIFIED");
+    const current = await readConfig();
+    const oldBase = current.apiBase ?? base;
+    const switched = current.userId !== void 0 && (current.userId !== principal || oldBase !== base);
+    if (switched && current.userId)
+      await confirmAccountSwitch(current.userId, principal, options);
+    if (!switched && !grant && current.userId === principal && current.apiBase === base)
+      return;
+    await withCredentialLock("auth.lock", async () => {
+      assertCredentialLocks();
+      const restClient = current.clientIdApiBase === oldBase ? current.clientId : void 0;
+      const agyClient = current.agyMcpClient?.apiBase === oldBase ? current.agyMcpClient.clientId : void 0;
+      const recoverOrphan = grant?.kind === "agy" && options.force === true;
+      if (switched || grant?.kind === "agy") {
+        await retireCredential(
+          oldBase,
+          `${oldBase}#agy-mcp`,
+          agyClient,
+          Boolean(agyClient),
+          recoverOrphan
+        );
+        if (agyClient) {
+          delete current.agyMcpClient;
+          await writeConfig(current);
+        }
+      }
+      if (switched || grant?.kind === "rest" && restClient && restClient !== grant.clientId) {
+        await retireCredential(
+          oldBase,
+          oldBase,
+          restClient ?? STATIC_CLIENT_ID,
+          Boolean(restClient)
+        );
+        cachedAccessToken = void 0;
+        if (restClient) {
+          delete current.clientId;
+          delete current.clientIdApiBase;
+          await writeConfig(current);
+        }
+      }
+      if (switched) {
+        if (grant || oldBase !== base)
+          await retireCredential(
+            oldBase,
+            mcpCredentialAccount(oldBase),
+            STATIC_CLIENT_ID
+          );
+      }
+      const next = { ...current, apiBase: base, userId: principal };
+      let account;
+      if (grant?.kind === "rest") {
+        next.clientId = grant.clientId;
+        next.clientIdApiBase = base;
+        account = base;
+        cachedAccessToken = void 0;
+      } else if (grant?.kind === "capture") {
+        account = mcpCredentialAccount(base);
+      } else if (grant?.kind === "agy") {
+        next.agyMcpClient = {
+          apiBase: base,
+          clientId: grant.clientId,
+          principalId: principal
+        };
+        account = `${base}#agy-mcp`;
+      }
+      assertCredentialLocks();
+      if (!account || !grant) {
+        await writeConfig(next);
+        return;
+      }
+      const staged = { ...current };
+      if (grant.kind === "agy")
+        staged.agyMcpClient = {
+          apiBase: base,
+          clientId: grant.clientId,
+          principalId: principal
+        };
+      if (grant.kind === "rest") {
+        staged.clientId = grant.clientId;
+        staged.clientIdApiBase = base;
+      }
+      await writeConfig(staged);
+      try {
+        await storeSecret(account, grant.refresh);
+        assertCredentialLocks();
+        await writeConfig(next);
+      } catch (error) {
+        assertCredentialLocks();
+        await writeConfig(staged);
+        const stored = await readSecret(account);
+        if (!stored && credentialStoreKind() === "libsecret") throw error;
+        if (stored === grant.refresh) {
+          await deleteSecret(account, true);
+          if (await readSecret(account))
+            throw new Error("AUTH_CREDENTIAL_NOT_REMOVED");
+        }
+        await writeConfig(current);
+        throw error;
+      }
+    });
+  });
 }
 function mcpCredentialAccount(apiBase) {
   return `${apiBase}#mcp`;
@@ -3012,11 +3294,16 @@ async function loginMcp(apiBase, options, settle) {
   });
   const refreshToken = tokens.refreshToken;
   try {
-    await settle(
-      new TokenBroker(apiBase, {
-        token: tokens.accessToken,
-        expiresAt: Date.now() + (tokens.expiresIn ?? 300) * 1e3
-      })
+    await acceptConnectionAccount(
+      apiBase,
+      () => settle(
+        new TokenBroker(apiBase, {
+          token: tokens.accessToken,
+          expiresAt: Date.now() + (tokens.expiresIn ?? 300) * 1e3
+        })
+      ),
+      options,
+      { kind: "capture", clientId: STATIC_CLIENT_ID, refresh: refreshToken }
     );
   } catch (error) {
     await revokeRefreshToken(apiBase, refreshToken, STATIC_CLIENT_ID).catch(
@@ -3025,7 +3312,6 @@ async function loginMcp(apiBase, options, settle) {
     );
     throw error;
   }
-  await storeSecret(mcpCredentialAccount(apiBase), refreshToken);
   console.log(
     "Memroot CLI connection authorized; its refresh token is stored in the OS credential store. Session capture remains controlled by memroot capture on|off."
   );
@@ -3034,13 +3320,13 @@ async function loginMcp(apiBase, options, settle) {
 // src/capture/hooks/spawn.ts
 import { spawn as spawn2 } from "node:child_process";
 import { existsSync as existsSync2 } from "node:fs";
-import { dirname as dirname6, join as join11 } from "node:path";
+import { dirname as dirname6, join as join12 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 function spawnWorker() {
   try {
     const here = dirname6(fileURLToPath2(import.meta.url));
-    const sibling = join11(here, "capture-worker.mjs");
-    const worker = existsSync2(sibling) ? sibling : join11(here, "plugins", "claude", "scripts", "capture-worker.mjs");
+    const sibling = join12(here, "capture-worker.mjs");
+    const worker = existsSync2(sibling) ? sibling : join12(here, "plugins", "claude", "scripts", "capture-worker.mjs");
     if (!existsSync2(worker)) return;
     const child = spawn2(process.execPath, [worker], {
       detached: true,
@@ -3067,7 +3353,7 @@ function parseProjectList(value) {
 }
 var PENDING_FILE = "project-create-pending.json";
 function pendingPath() {
-  return join12(memrootConfigDir(), PENDING_FILE);
+  return join13(memrootConfigDir(), PENDING_FILE);
 }
 function readPending() {
   try {
@@ -3082,15 +3368,15 @@ function readPending() {
 function removeLegacySessionRecords() {
   try {
     const dir = legacySessionRecordsDir();
-    const info = lstatSync6(dir);
+    const info = lstatSync7(dir);
     if (!info.isDirectory() || info.isSymbolicLink()) return;
     const records = listFiles(dir).filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).map((name) => {
-      const path = join12(dir, name);
+      const path = join13(dir, name);
       try {
         const value = JSON.parse(
           readPrivateFileIfExists(path, 16 * 1024) ?? "null"
         );
-        return { at: lstatSync6(path).mtimeMs, selection: value?.selection };
+        return { at: lstatSync7(path).mtimeMs, selection: value?.selection };
       } catch {
         return { at: 0, selection: void 0 };
       }
@@ -3120,8 +3406,8 @@ function removeLegacySessionRecords() {
     const cutoff = Date.now() - LEGACY_RECORD_TTL_MS;
     for (const name of listFiles(dir))
       try {
-        if (lstatSync6(join12(dir, name)).mtimeMs < cutoff)
-          rmSync5(join12(dir, name), { force: true });
+        if (lstatSync7(join13(dir, name)).mtimeMs < cutoff)
+          rmSync5(join13(dir, name), { force: true });
       } catch {
       }
     if (listFiles(dir).length === 0)
@@ -3234,7 +3520,7 @@ function bindingToRemove(base, principalId, folder) {
     (b) => forms.some((form) => sameFolder2(b.folder, form))
   ) ?? bindingFor(base, principalId, folder);
 }
-async function projectCommand(args, _bundledAgent) {
+async function projectCommand(args, _bundledAgent, transport) {
   const requested = args.shift() ?? "status";
   const actions = ["list", "use", "create", "status", "unbind", "login"];
   const action = actions.includes(requested) ? requested : "use";
@@ -3276,6 +3562,10 @@ async function projectCommand(args, _bundledAgent) {
     throw new Error(
       "INVALID_ARGUMENT: --here and --folder apply to use, create, status and unbind."
     );
+  if (transport && (folder !== void 0 || action === "unbind"))
+    throw new Error(
+      "AGY_PROJECT_SCOPE_UNSUPPORTED: Antigravity uses the computer-wide Memroot project."
+    );
   const config = await readConfig();
   const base = resolveApiBase(apiBase ? { apiBase } : {}, config);
   const command = projectCommandPrefix();
@@ -3303,9 +3593,9 @@ async function projectCommand(args, _bundledAgent) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.16.0"}`;
-  const client = new McpClient(base, new TokenBroker(base), userAgent);
-  const listProjects = async (via = client) => {
+  const userAgent = `memroot-cli/${"0.17.0"}`;
+  const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
+  const fetchProjects = async (via = client) => {
     let projects2;
     try {
       projects2 = parseProjectList(await via.call("projects_list", {}));
@@ -3316,16 +3606,38 @@ async function projectCommand(args, _bundledAgent) {
         );
       throw e;
     }
-    await acceptConnectionAccount(base, projects2.principal_id, {
-      switchAccount
-    });
     return projects2;
+  };
+  const listProjects = async (via = client) => {
+    if (transport) {
+      const projects2 = await fetchProjects(via);
+      const current = await readConfig();
+      if (current.apiBase !== base || current.userId !== projects2.principal_id)
+        throw new Error("AGY_ACCOUNT_MISMATCH");
+      return projects2;
+    }
+    let listed;
+    await acceptConnectionAccount(
+      base,
+      async () => {
+        listed = await fetchProjects(via);
+        return listed.principal_id;
+      },
+      { switchAccount }
+    );
+    return listed;
   };
   if (action === "login") {
     let projects2;
-    await loginMcp(base, { noBrowser }, async (broker) => {
-      projects2 = await listProjects(new McpClient(base, broker, userAgent));
-    });
+    if (transport)
+      await transport.login(base, { noBrowser, switchAccount }, async (via) => {
+        projects2 = await listProjects(via);
+      });
+    else
+      await loginMcp(base, { noBrowser, switchAccount }, async (broker) => {
+        projects2 = await fetchProjects(new McpClient(base, broker, userAgent));
+        return projects2.principal_id;
+      });
     if (!projects2) throw new Error("PROJECT_LOGIN_FAILED");
     const { selection } = resolveSelection(base, projects2);
     console.log(
@@ -3355,21 +3667,19 @@ async function projectCommand(args, _bundledAgent) {
       JSON.stringify({
         ...projects,
         selected_project_id: selected2 && selected2.tenantId === projects.tenant_id ? selected2.projectId : null,
-        bindings: readBindings(base, projects.principal_id).map((b) => ({
-          ...bindingOutput(b),
-          ...folderMissing(b.folder) ? { missing: true } : {}
-        }))
+        ...!transport ? {
+          bindings: readBindings(base, projects.principal_id).map((b) => ({
+            ...bindingOutput(b),
+            ...folderMissing(b.folder) ? { missing: true } : {}
+          }))
+        } : {}
       })
     );
     return;
   }
   if (action === "status") {
     const { selection, stale } = resolveSelection(base, projects);
-    const found = bindingMatchFor(
-      base,
-      projects.principal_id,
-      folder ?? process.cwd()
-    );
+    const found = !transport ? bindingMatchFor(base, projects.principal_id, folder ?? process.cwd()) : void 0;
     if (found) {
       const { binding, via } = found;
       console.log(

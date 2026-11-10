@@ -1,0 +1,12 @@
+{
+  "name": "memroot",
+  "version": "0.17.0",
+  "description": "Memroot engineering memory, project selection and recall hooks for Antigravity. Session capture and memory import are not yet supported.",
+  "author": {
+    "name": "Memroot",
+    "url": "https://memroot.dev"
+  },
+  "homepage": "https://memroot.dev",
+  "repository": "https://github.com/memroot/plugins",
+  "license": "LicenseRef-Memroot-Proprietary"
+}

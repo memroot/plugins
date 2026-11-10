@@ -428,7 +428,7 @@ function upsert(store, input) {
       delete store[old];
   return record2;
 }
-function offlineIdentity() {
+function offlineIdentity(recordedOnly = false) {
   let apiBase = PRODUCTION_API_BASE;
   let userId;
   try {
@@ -447,7 +447,9 @@ function offlineIdentity() {
     }
   } catch {
   }
-  apiBase = normalizeApiBase(process.env.MEMROOT_API_BASE ?? apiBase);
+  apiBase = normalizeApiBase(
+    recordedOnly ? apiBase : process.env.MEMROOT_API_BASE ?? apiBase
+  );
   return userId ? { apiBase, userId } : { apiBase };
 }
 
@@ -575,27 +577,32 @@ function validKey(key) {
   const at = key.lastIndexOf("|");
   return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
 }
-function readStore2() {
+function readStore2(strictKey) {
   try {
     const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
     if (raw === void 0) return {};
     const value = JSON.parse(raw);
     if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
-      return {};
+      throw new Error("INVALID_PROJECT_FOLDER_STORE");
     const out = {};
     for (const [key, list] of Object.entries(
       value.bindings
-    ))
+    )) {
+      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
+        throw new Error("INVALID_PROJECT_FOLDER_STORE");
       if (validKey(key) && Array.isArray(list))
         out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    }
     return out;
-  } catch {
+  } catch (error) {
+    if (strictKey !== void 0) throw error;
     return {};
   }
 }
-function readBindings(apiBase, principalId) {
+function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   if (!principalId) return [];
-  return readStore2()[selectionKey(apiBase, principalId)] ?? [];
+  const key = selectionKey(apiBase, principalId);
+  return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
 function bindingMatchFor(apiBase, principalId, cwd) {
   const bindings = readBindings(apiBase, principalId);
@@ -646,7 +653,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.16.0"} project`;
+  return `npx -y memroot@${"0.17.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
