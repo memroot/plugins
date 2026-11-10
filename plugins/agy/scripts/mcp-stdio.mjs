@@ -38708,7 +38708,7 @@ function boundedFetch(endpoint, shutdown2) {
 async function connectAgyMcp(apiBase, broker, signal) {
   const endpoint = new URL(`${apiBase}/mcp`);
   const client = new Client(
-    { name: "Memroot Antigravity adapter", version: "0.17.0" },
+    { name: "Memroot Antigravity adapter", version: "0.17.1" },
     {
       capabilities: {},
       supportedProtocolVersions: ["2025-11-25"],
@@ -38857,7 +38857,7 @@ var handle = serveStdio(
       }
       const instructions = remote.getInstructions();
       const server = new Server(
-        { name: "memroot", version: "0.17.0" },
+        { name: "memroot", version: "0.17.1" },
         {
           capabilities: { tools: {} },
           ...instructions ? { instructions } : {}

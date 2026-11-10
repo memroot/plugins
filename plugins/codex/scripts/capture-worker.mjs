@@ -20420,31 +20420,6 @@ async function resolveProject(context, target2) {
   }
   return target2.projectId;
 }
-async function existingMemories(context, projectId, query) {
-  try {
-    const pack = await context.client.call("memory_retrieve", {
-      project_id: projectId,
-      retrieval_request: {
-        schema_version: 1,
-        query,
-        context: {
-          task: "Find existing durable lessons before extracting new session memories"
-        },
-        budget: { max_items: 8 }
-      }
-    });
-    return (pack?.pack ?? []).filter(
-      (item) => typeof item.memory_id === "string" && typeof item.kind === "string" && typeof item.title === "string"
-    ).slice(0, 8).map((item) => ({
-      id: item.memory_id,
-      kind: item.kind,
-      title: item.title
-    }));
-  } catch (error51) {
-    if (error51 instanceof AuthRequiredError) throw error51;
-    return [];
-  }
-}
 function runnerOrder(job, consent) {
   const order = [job.agent];
   if (consent.crossAgentExtraction) {
@@ -20564,25 +20539,13 @@ async function extract(job, context, target2, cursorRef) {
   );
   const { repo, branch } = repoInfo(job.cwd, context.salt);
   const repoName = context.redactor.redact(repo?.name ?? "unknown") ?? "unknown";
-  let existing = [];
-  if (repo)
-    try {
-      existing = await withCredentialLock("auth-agy.lock", async () => {
-        await requireCaptureAccount(context, target2.principalId);
-        return existingMemories(context, projectId, repoName);
-      });
-    } catch {
-      backoff(job, "auth_required", "auth_required");
-      return "deferred";
-    }
   const nonce = randomBytes5(8).toString("hex");
   const input = renderExtractorInput({
     session_date: job.endedAt.slice(0, 10),
     agent: job.agent,
     repo_name: repoName,
     branch_hint: context.redactor.redact(branch ?? "unknown") ?? "unknown",
-    // Stored titles are used only for local deduplication; never sent to
-    // the agent model provider as additional customer content.
+    // Stored memories are never sent to the agent model provider.
     existing_memories: [],
     transcript: condensed.text,
     nonce,
@@ -20654,10 +20617,7 @@ async function extract(job, context, target2, cursorRef) {
       agent: job.agent
     });
   }
-  const known = /* @__PURE__ */ new Set([
-    ...context.ledger.titleHashes,
-    ...existing.map((memory) => titleHash(`${projectId}\0${memory.title}`))
-  ]);
+  const known = new Set(context.ledger.titleHashes);
   const model = context.consent.models[usedRunner] ?? EXTRACTOR_VERSION.models[usedRunner];
   const items = [];
   for (const candidate of validated.candidates) {
@@ -21014,7 +20974,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.17.0"}`
+        `memroot-capture/${"0.17.1"}`
       ),
       salt,
       redactor: createRedactor(salt),
