@@ -2,7 +2,7 @@
 
 **[memroot.dev](https://memroot.dev)** · [Console](https://console.memroot.dev) · [npm](https://www.npmjs.com/package/memroot)
 
-Persistent engineering memory for Claude Code, Codex, Grok and Antigravity CLI (Alpha). Keep project decisions, conventions, root causes and lessons available across coding sessions and agents.
+Persistent engineering memory for Claude Code, Codex, Grok and Antigravity CLI. Keep project decisions, conventions, root causes and lessons available across coding sessions and agents.
 
 This is Memroot's official **plugin distribution repository**. It contains the built plugins from the published `memroot` npm package, three native marketplace catalogs, and the tooling that verifies and publishes them. The application source is maintained separately.
 
@@ -33,17 +33,17 @@ npx memroot@latest setup --agent codex --agent grok
 
 An existing disabled plugin or explicit update opt-out stays disabled. A conflicting marketplace or MCP registration needs to be resolved before setup can continue.
 
-## Antigravity CLI (Alpha)
+## Antigravity CLI
 
-Install Antigravity CLI 1.4.12 or later and Node.js 22 or later on macOS or Linux. Install Memroot 0.17.0, set up its verified npm-bundled plugin, then authorize the separate Memroot connection in a terminal:
+Install Antigravity CLI 1.4.12 or later and Node.js 22 or later on macOS or Linux. Install [Memroot 0.18.0](https://www.npmjs.com/package/memroot/v/0.18.0), set up its verified npm-bundled plugin, then authorize the separate Memroot connection in a terminal:
 
 ```sh
-npm install -g memroot@0.17.0
+npm install -g memroot@0.18.0
 memroot setup --agent agy --yes
 memroot agy login
 ```
 
-Start a new Antigravity session after signing in. The bundled adapter uses your computer-wide Memroot project. Some child contexts omit plugin hooks, and shell-failure reminders depend on errors reported by Antigravity. Session capture and memory import are unavailable for Antigravity.
+Start a new Antigravity session after signing in. The bundled adapter uses your computer-wide Memroot project for project-bound tools. It refuses those calls if your account has a stale binding, a binding to a different project, or unreadable binding data. Some child contexts omit plugin hooks, and shell-failure reminders depend on errors reported by Antigravity. Session capture and memory import are unavailable for Antigravity.
 
 ## What the plugin adds
 
