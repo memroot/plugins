@@ -2148,7 +2148,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.17.1"} project`;
+  return `npx -y memroot@${"0.18.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -3542,7 +3542,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.17.1"}`;
+  const userAgent = `memroot-cli/${"0.18.0"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;
@@ -26724,7 +26724,7 @@ function boundedFetch(endpoint, shutdown) {
 async function connectAgyMcp(apiBase, broker, signal) {
   const endpoint = new URL(`${apiBase}/mcp`);
   const client = new Client(
-    { name: "Memroot Antigravity adapter", version: "0.17.1" },
+    { name: "Memroot Antigravity adapter", version: "0.18.0" },
     {
       capabilities: {},
       supportedProtocolVersions: ["2025-11-25"],
