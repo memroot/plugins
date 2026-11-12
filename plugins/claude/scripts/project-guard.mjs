@@ -663,7 +663,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.19.0"} project`;
+  return `npx -y memroot@${"0.19.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -775,7 +775,7 @@ async function main() {
     reason,
     withClientVersion(
       { ...input, project_id: selected.projectId },
-      strictClientVersion("0.19.0")
+      strictClientVersion("0.19.1")
     )
   );
 }
