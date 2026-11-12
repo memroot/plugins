@@ -22342,6 +22342,16 @@ function resolveApiBase(options, config2) {
   return normalized;
 }
 
+// src/client-version.ts
+var STRICT_VERSION = /^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,4})$/u;
+function strictClientVersion(version3) {
+  return typeof version3 === "string" && STRICT_VERSION.test(version3) ? version3 : void 0;
+}
+function withClientVersion(args, version3) {
+  const { client_version: _ignored, ...rest } = args;
+  return version3 ? { ...rest, client_version: version3 } : rest;
+}
+
 // src/agy/sdk-client.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 
@@ -38708,7 +38718,7 @@ function boundedFetch(endpoint, shutdown2) {
 async function connectAgyMcp(apiBase, broker, signal) {
   const endpoint = new URL(`${apiBase}/mcp`);
   const client = new Client(
-    { name: "Memroot Antigravity adapter", version: "0.18.0" },
+    { name: "Memroot Antigravity adapter", version: "0.19.0" },
     {
       capabilities: {},
       supportedProtocolVersions: ["2025-11-25"],
@@ -38857,7 +38867,7 @@ var handle = serveStdio(
       }
       const instructions = remote.getInstructions();
       const server = new Server(
-        { name: "memroot", version: "0.18.0" },
+        { name: "memroot", version: "0.19.0" },
         {
           capabilities: { tools: {} },
           ...instructions ? { instructions } : {}
@@ -38939,10 +38949,10 @@ var handle = serveStdio(
               };
             params = {
               ...params,
-              arguments: {
-                ...params.arguments,
-                project_id: selected.projectId
-              }
+              arguments: withClientVersion(
+                { ...params.arguments, project_id: selected.projectId },
+                strictClientVersion("0.19.0")
+              )
             };
           }
           const result = await withAgyRequest(

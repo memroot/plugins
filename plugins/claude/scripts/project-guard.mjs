@@ -72,6 +72,16 @@ function hostAgent(bundled) {
   return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
 }
 
+// src/client-version.ts
+var STRICT_VERSION = /^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,4})$/u;
+function strictClientVersion(version) {
+  return typeof version === "string" && STRICT_VERSION.test(version) ? version : void 0;
+}
+function withClientVersion(args, version) {
+  const { client_version: _ignored, ...rest } = args;
+  return version ? { ...rest, client_version: version } : rest;
+}
+
 // src/project-context.ts
 import { existsSync } from "node:fs";
 import { dirname as dirname4, join as join5 } from "node:path";
@@ -653,7 +663,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.18.0"} project`;
+  return `npx -y memroot@${"0.19.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -760,7 +770,14 @@ async function main() {
       );
     return;
   }
-  decide("allow", reason, { ...input, project_id: selected.projectId });
+  decide(
+    "allow",
+    reason,
+    withClientVersion(
+      { ...input, project_id: selected.projectId },
+      strictClientVersion("0.19.0")
+    )
+  );
 }
 main().catch(() => {
   if (!memroot) return;

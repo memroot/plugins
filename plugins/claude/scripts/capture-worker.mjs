@@ -20974,7 +20974,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.18.0"}`
+        `memroot-capture/${"0.19.0"}`
       ),
       salt,
       redactor: createRedactor(salt),
