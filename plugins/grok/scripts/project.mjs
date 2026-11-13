@@ -1,17 +1,8 @@
 #!/usr/bin/env node
-var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
-var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
-var __commonJS = (cb, mod) => function __require() {
-  try {
-    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
-  } catch (e) {
-    throw mod = 0, e;
-  }
-};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -25,70 +16,6 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __reExport = (target, mod, secondTarget) => (__copyProps(target, mod, "default"), secondTarget && __copyProps(secondTarget, mod, "default"));
-var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-  // If the importer is in node compatibility mode or this is not an ESM
-  // file that has been converted to a CommonJS file using a Babel-
-  // compatible transform (i.e. "__esModule" has not been set), then set
-  // "default" to the CommonJS "module.exports" for node compatibility.
-  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-  mod
-));
-
-// ../../node_modules/.pnpm/sisteransi@1.0.5/node_modules/sisteransi/src/index.js
-var require_src = __commonJS({
-  "../../node_modules/.pnpm/sisteransi@1.0.5/node_modules/sisteransi/src/index.js"(exports, module) {
-    "use strict";
-    var ESC2 = "\x1B";
-    var CSI2 = `${ESC2}[`;
-    var beep = "\x07";
-    var cursor3 = {
-      to(x, y2) {
-        if (!y2) return `${CSI2}${x + 1}G`;
-        return `${CSI2}${y2 + 1};${x + 1}H`;
-      },
-      move(x, y2) {
-        let ret = "";
-        if (x < 0) ret += `${CSI2}${-x}D`;
-        else if (x > 0) ret += `${CSI2}${x}C`;
-        if (y2 < 0) ret += `${CSI2}${-y2}A`;
-        else if (y2 > 0) ret += `${CSI2}${y2}B`;
-        return ret;
-      },
-      up: (count = 1) => `${CSI2}${count}A`,
-      down: (count = 1) => `${CSI2}${count}B`,
-      forward: (count = 1) => `${CSI2}${count}C`,
-      backward: (count = 1) => `${CSI2}${count}D`,
-      nextLine: (count = 1) => `${CSI2}E`.repeat(count),
-      prevLine: (count = 1) => `${CSI2}F`.repeat(count),
-      left: `${CSI2}G`,
-      hide: `${CSI2}?25l`,
-      show: `${CSI2}?25h`,
-      save: `${ESC2}7`,
-      restore: `${ESC2}8`
-    };
-    var scroll = {
-      up: (count = 1) => `${CSI2}S`.repeat(count),
-      down: (count = 1) => `${CSI2}T`.repeat(count)
-    };
-    var erase3 = {
-      screen: `${CSI2}2J`,
-      up: (count = 1) => `${CSI2}1J`.repeat(count),
-      down: (count = 1) => `${CSI2}J`.repeat(count),
-      line: `${CSI2}2K`,
-      lineEnd: `${CSI2}K`,
-      lineStart: `${CSI2}1K`,
-      lines(count) {
-        let clear = "";
-        for (let i2 = 0; i2 < count; i2++)
-          clear += this.line + (i2 < count - 1 ? cursor3.up() : "");
-        if (count)
-          clear += cursor3.left;
-        return clear;
-      }
-    };
-    module.exports = { cursor: cursor3, scroll, erase: erase3, beep };
-  }
-});
 
 // src/project-command.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
@@ -180,9 +107,9 @@ import { request as httpsRequest2 } from "node:https";
 import { tmpdir } from "node:os";
 import { join as join11 } from "node:path";
 
-// ../../node_modules/.pnpm/@clack+core@1.5.1/node_modules/@clack/core/dist/index.mjs
+// ../../node_modules/.pnpm/@clack+core@1.6.0/node_modules/@clack/core/dist/index.mjs
 import { stdout, stdin } from "node:process";
-import l__default from "node:readline";
+import f__default from "node:readline";
 
 // ../../node_modules/.pnpm/fast-string-truncated-width@3.0.3/node_modules/fast-string-truncated-width/dist/utils.js
 var getCodePointsLength = /* @__PURE__ */ (() => {
@@ -520,8 +447,60 @@ function wrapAnsi(string, columns, options) {
   return String(string).normalize().split(CRLF_OR_LF).map((line) => exec(line, columns, options)).join("\n");
 }
 
-// ../../node_modules/.pnpm/@clack+core@1.5.1/node_modules/@clack/core/dist/index.mjs
-var import_sisteransi = __toESM(require_src(), 1);
+// ../../node_modules/.pnpm/sisteransi@2.0.0/node_modules/sisteransi/dist/index.js
+var ESC2 = "\x1B";
+var CSI2 = `${ESC2}[`;
+var cursor = {
+  to(x, y) {
+    if (!y)
+      return `${CSI2}${x + 1}G`;
+    return `${CSI2}${y + 1};${x + 1}H`;
+  },
+  move(x, y) {
+    let ret = "";
+    if (x < 0)
+      ret += `${CSI2}${-x}D`;
+    else if (x > 0)
+      ret += `${CSI2}${x}C`;
+    if (y < 0)
+      ret += `${CSI2}${-y}A`;
+    else if (y > 0)
+      ret += `${CSI2}${y}B`;
+    return ret;
+  },
+  up: (count = 1) => `${CSI2}${count}A`,
+  down: (count = 1) => `${CSI2}${count}B`,
+  forward: (count = 1) => `${CSI2}${count}C`,
+  backward: (count = 1) => `${CSI2}${count}D`,
+  nextLine: (count = 1) => `${CSI2}E`.repeat(count),
+  prevLine: (count = 1) => `${CSI2}F`.repeat(count),
+  left: `${CSI2}G`,
+  hide: `${CSI2}?25l`,
+  show: `${CSI2}?25h`,
+  save: `${ESC2}7`,
+  restore: `${ESC2}8`
+};
+var erase = {
+  screen: `${CSI2}2J`,
+  up: (count = 1) => `${CSI2}1J`.repeat(count),
+  down: (count = 1) => `${CSI2}J`.repeat(count),
+  line: `${CSI2}2K`,
+  lineEnd: `${CSI2}K`,
+  lineStart: `${CSI2}1K`,
+  lines(count) {
+    let clear2 = "";
+    for (let i2 = 0; i2 < count; i2++)
+      clear2 += this.line + (i2 < count - 1 ? cursor.up() : "");
+    if (count)
+      clear2 += cursor.left;
+    return clear2;
+  }
+};
+var clear = {
+  screen: `${ESC2}c`
+};
+
+// ../../node_modules/.pnpm/@clack+core@1.6.0/node_modules/@clack/core/dist/index.mjs
 var a$1 = ["up", "down", "left", "right", "space", "enter", "cancel"];
 var t = [
   "January",
@@ -606,14 +585,14 @@ function setRawMode(e, r2) {
 var getColumns = (e) => "columns" in e && typeof e.columns == "number" ? e.columns : 80;
 var getRows = (e) => "rows" in e && typeof e.rows == "number" ? e.rows : 20;
 function wrapTextWithPrefix(e, r2, o, n2 = o, s = o, t2) {
-  const f = getColumns(e ?? stdout);
-  return wrapAnsi(r2, f - o.length, {
+  const l = getColumns(e ?? stdout), i2 = dist_default2(o);
+  return wrapAnsi(r2, l - i2, {
     hard: true,
     trim: false
   }).split(`
-`).map((c, i2, m) => {
-    const d = t2 ? t2(c, i2) : c;
-    return i2 === 0 ? `${n2}${d}` : i2 === m.length - 1 ? `${s}${d}` : `${o}${d}`;
+`).map((c2, a2, g) => {
+    const m = t2 ? t2(c2, a2) : c2;
+    return a2 === 0 ? `${n2}${m}` : a2 === g.length - 1 ? `${s}${m}` : `${o}${m}`;
   }).join(`
 `);
 }
@@ -624,7 +603,7 @@ function runValidation(e, a2) {
   }
   return e(a2);
 }
-var y = class {
+var C$1 = class C {
   input;
   output;
   _abortSignal;
@@ -706,16 +685,16 @@ var y = class {
           { once: true }
         );
       }
-      this.rl = l__default.createInterface({
+      this.rl = f__default.createInterface({
         input: this.input,
         tabSize: 2,
         prompt: "",
         escapeCodeTimeout: 50,
         terminal: true
       }), this.rl.prompt(), this.opts.initialUserInput !== void 0 && this._setUserInput(this.opts.initialUserInput, true), this.input.on("keypress", this.onKeypress), setRawMode(this.input, true), this.output.on("resize", this.render), this.render(), this.once("submit", () => {
-        this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(this.value);
+        this.output.write(cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(this.value);
       }), this.once("cancel", () => {
-        this.output.write(import_sisteransi.cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(CANCEL_SYMBOL);
+        this.output.write(cursor.show), this.output.off("resize", this.render), setRawMode(this.input, false), t2(CANCEL_SYMBOL);
       });
     });
   }
@@ -752,18 +731,18 @@ var y = class {
 `), setRawMode(this.input, false), this.rl?.close(), this.rl = void 0, this.emit(`${this.state}`, this.value), this.unsubscribe();
   }
   restoreCursor() {
-    const t2 = wrapAnsi(this._prevFrame, process.stdout.columns, { hard: true, trim: false }).split(`
+    const t2 = wrapAnsi(this._prevFrame, getColumns(this.output), { hard: true, trim: false }).split(`
 `).length - 1;
-    this.output.write(import_sisteransi.cursor.move(-999, t2 * -1));
+    this.output.write(cursor.move(-999, t2 * -1));
   }
   render() {
-    const t2 = wrapAnsi(this._render(this) ?? "", process.stdout.columns, {
+    const t2 = wrapAnsi(this._render(this) ?? "", getColumns(this.output), {
       hard: true,
       trim: false
     });
     if (t2 !== this._prevFrame) {
       if (this.state === "initial")
-        this.output.write(import_sisteransi.cursor.hide);
+        this.output.write(cursor.hide);
       else {
         const e = diffLines(this._prevFrame, t2), i2 = getRows(this.output);
         if (this.restoreCursor(), e) {
@@ -774,33 +753,33 @@ var y = class {
             return;
           }
           if (e.lines.length === 1) {
-            this.output.write(import_sisteransi.cursor.move(0, n2 - r2)), this.output.write(import_sisteransi.erase.lines(1));
+            this.output.write(cursor.move(0, n2 - r2)), this.output.write(erase.lines(1));
             const o = t2.split(`
 `);
-            this.output.write(o[n2]), this._prevFrame = t2, this.output.write(import_sisteransi.cursor.move(0, o.length - n2 - 1));
+            this.output.write(o[n2]), this._prevFrame = t2, this.output.write(cursor.move(0, o.length - n2 - 1));
             return;
           } else if (e.lines.length > 1) {
             if (s < r2)
               n2 = s;
             else {
               const h2 = n2 - r2;
-              h2 > 0 && this.output.write(import_sisteransi.cursor.move(0, h2));
+              h2 > 0 && this.output.write(cursor.move(0, h2));
             }
-            this.output.write(import_sisteransi.erase.down());
-            const f = t2.split(`
+            this.output.write(erase.down());
+            const m = t2.split(`
 `).slice(n2);
-            this.output.write(f.join(`
+            this.output.write(m.join(`
 `)), this._prevFrame = t2;
             return;
           }
         }
-        this.output.write(import_sisteransi.erase.down());
+        this.output.write(erase.down());
       }
       this.output.write(t2), this.state === "initial" && (this.state = "active"), this._prevFrame = t2;
     }
   }
 };
-var r = class extends y {
+var r = class extends C$1 {
   get cursor() {
     return this.value ? 0 : 1;
   }
@@ -811,16 +790,15 @@ var r = class extends y {
     super(t2, false), this.value = !!t2.initialValue, this.on("userInput", () => {
       this.value = this._value;
     }), this.on("confirm", (i2) => {
-      this.output.write(import_sisteransi.cursor.move(0, -1)), this.value = i2, this.state = "submit", this.close();
+      this.output.write(cursor.move(0, -1)), this.value = i2, this.state = "submit", this.close();
     }), this.on("cursor", () => {
       this.value = !this.value;
     });
   }
 };
 
-// ../../node_modules/.pnpm/@clack+prompts@1.8.1/node_modules/@clack/prompts/dist/index.mjs
+// ../../node_modules/.pnpm/@clack+prompts@1.9.0/node_modules/@clack/prompts/dist/index.mjs
 import process$1 from "node:process";
-var import_sisteransi2 = __toESM(require_src(), 1);
 function isUnicodeSupported() {
   if (process$1.platform !== "win32") {
     return process$1.env.TERM !== "linux";
@@ -828,7 +806,7 @@ function isUnicodeSupported() {
   return Boolean(process$1.env.CI) || Boolean(process$1.env.WT_SESSION) || Boolean(process$1.env.TERMINUS_SUBLIME) || process$1.env.ConEmuTask === "{cmd::Cmder}" || process$1.env.TERM_PROGRAM === "Terminus-Sublime" || process$1.env.TERM_PROGRAM === "vscode" || process$1.env.TERM === "xterm-256color" || process$1.env.TERM === "alacritty" || process$1.env.TERMINAL_EMULATOR === "JetBrains-JediTerm";
 }
 var unicode = isUnicodeSupported();
-var unicodeOr = (o, e) => unicode ? o : e;
+var unicodeOr = (e, o) => unicode ? e : o;
 var S_STEP_ACTIVE = unicodeOr("\u25C6", "*");
 var S_STEP_CANCEL = unicodeOr("\u25A0", "x");
 var S_STEP_ERROR = unicodeOr("\u25B2", "x");
@@ -854,8 +832,8 @@ var S_INFO = unicodeOr("\u25CF", "\u2022");
 var S_SUCCESS = unicodeOr("\u25C6", "*");
 var S_WARN = unicodeOr("\u25B2", "!");
 var S_ERROR = unicodeOr("\u25A0", "x");
-var symbol = (o) => {
-  switch (o) {
+var symbol = (e) => {
+  switch (e) {
     case "initial":
     case "active":
       return styleText2("cyan", S_STEP_ACTIVE);
@@ -886,15 +864,15 @@ var confirm = (e) => {
         u3
       ), s = `${i2 ? `${styleText2("gray", S_BAR)}
 ` : ""}${f}
-`, c = this.value ? a2 : o;
+`, c2 = this.value ? a2 : o;
       switch (this.state) {
         case "submit": {
           const r2 = i2 ? `${styleText2("gray", S_BAR)}  ` : "";
-          return `${s}${r2}${styleText2("dim", c)}`;
+          return `${s}${r2}${styleText2("dim", c2)}`;
         }
         case "cancel": {
           const r2 = i2 ? `${styleText2("gray", S_BAR)}  ` : "";
-          return `${s}${r2}${styleText2(["strikethrough", "dim"], c)}${i2 ? `
+          return `${s}${r2}${styleText2(["strikethrough", "dim"], c2)}${i2 ? `
 ${styleText2("gray", S_BAR)}` : ""}`;
         }
         default: {
@@ -1919,7 +1897,7 @@ function upsert(store, input) {
   const keys = Object.keys(store);
   if (keys.length > MAX_RECORDS)
     for (const old of keys.sort(
-      (x, y2) => (store[x]?.selectedAt ?? "").localeCompare(store[y2]?.selectedAt ?? "")
+      (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
     ).slice(0, keys.length - MAX_RECORDS))
       delete store[old];
   return record;
@@ -2203,7 +2181,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.20.1"} project`;
+  return `npx -y memroot@${"0.20.2"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -3597,7 +3575,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.20.1"}`;
+  const userAgent = `memroot-cli/${"0.20.2"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;

@@ -5,18 +5,18 @@ stays under its own license, reproduced here with its copyright
 notice. The Memroot LICENSE does not apply to them. This file is
 generated at build time from the bundler's record of what was bundled.
 
-- @clack/core 1.5.1 (MIT)
-- @clack/prompts 1.8.1 (MIT)
+- @clack/core 1.6.0 (MIT)
+- @clack/prompts 1.9.0 (MIT)
 - esbuild 0.28.2 (MIT)
 - fast-string-truncated-width 3.0.3 (MIT)
 - fast-string-width 3.0.2 (MIT)
 - fast-wrap-ansi 0.2.2 (MIT)
-- sisteransi 1.0.5 (MIT)
+- sisteransi 2.0.0 (MIT)
 - smol-toml 1.9.1 (BSD-3-Clause)
-- zod 4.4.3 (MIT)
+- zod 4.6.7 (MIT)
 
 ==============================================================================
-@clack/core 1.5.1
+@clack/core 1.6.0
 License: MIT
 Source: https://github.com/bombshell-dev/clack
 
@@ -31,7 +31,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
-@clack/prompts 1.8.1
+@clack/prompts 1.9.0
 License: MIT
 Source: https://github.com/bombshell-dev/clack
 
@@ -157,7 +157,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ==============================================================================
-sisteransi 1.0.5
+sisteransi 2.0.0
 License: MIT
 Source: https://github.com/terkelg/sisteransi
 
@@ -214,7 +214,7 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-zod 4.4.3
+zod 4.6.7
 License: MIT
 Source: https://github.com/colinhacks/zod
 
