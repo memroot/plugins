@@ -1,6 +1,6 @@
 {
   "name": "memroot",
-  "version": "0.20.0",
+  "version": "0.20.1",
   "description": "Memroot engineering memory, project selection and recall hooks for Antigravity. Session capture and memory import are not yet supported.",
   "author": {
     "name": "Memroot",

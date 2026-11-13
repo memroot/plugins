@@ -71,6 +71,9 @@ function ensurePrivateDir(path, boundary, checkRoot = false) {
   if ((info.mode & 511) !== 448) chmodSync(target, 448);
 }
 function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
+  return readPrivateBytes(path, maxBytes).bytes.toString("utf8");
+}
+function readPrivateBytes(path, maxBytes = 16 * 1024 * 1024) {
   const fd = openSync(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0)
@@ -79,7 +82,7 @@ function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
     const info = fstatSync(fd);
     if (!info.isFile()) throw new UnsafePathError();
     if (info.size > maxBytes) throw new UnsafePathError("FILE_TOO_LARGE");
-    return readFileSync(fd, "utf8");
+    return { bytes: readFileSync(fd), mode: info.mode & 511 };
   } finally {
     closeSync(fd);
   }
@@ -660,7 +663,7 @@ var capture = consent.kind === "ok" ? {
 process.stdout.write(
   `${JSON.stringify({
     plugin: "memroot",
-    version: "0.20.0",
+    version: "0.20.1",
     agent,
     connection: "not_checked",
     capabilities: {

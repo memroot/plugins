@@ -78,6 +78,9 @@ function stateSubdir(...parts) {
   return path;
 }
 function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
+  return readPrivateBytes(path, maxBytes).bytes.toString("utf8");
+}
+function readPrivateBytes(path, maxBytes = 16 * 1024 * 1024) {
   const fd = openSync(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0)
@@ -86,7 +89,7 @@ function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
     const info = fstatSync(fd);
     if (!info.isFile()) throw new UnsafePathError();
     if (info.size > maxBytes) throw new UnsafePathError("FILE_TOO_LARGE");
-    return readFileSync(fd, "utf8");
+    return { bytes: readFileSync(fd), mode: info.mode & 511 };
   } finally {
     closeSync(fd);
   }
@@ -613,7 +616,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.20.0"} project`;
+  return `npx -y memroot@${"0.20.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;

@@ -120,6 +120,9 @@ function stateSubdir(...parts) {
   return path2;
 }
 function readPrivateFile(path2, maxBytes = 16 * 1024 * 1024) {
+  return readPrivateBytes(path2, maxBytes).bytes.toString("utf8");
+}
+function readPrivateBytes(path2, maxBytes = 16 * 1024 * 1024) {
   const fd = openSync(
     path2,
     constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0)
@@ -128,7 +131,7 @@ function readPrivateFile(path2, maxBytes = 16 * 1024 * 1024) {
     const info = fstatSync(fd);
     if (!info.isFile()) throw new UnsafePathError();
     if (info.size > maxBytes) throw new UnsafePathError("FILE_TOO_LARGE");
-    return readFileSync(fd, "utf8");
+    return { bytes: readFileSync(fd), mode: info.mode & 511 };
   } finally {
     closeSync(fd);
   }
@@ -143,10 +146,11 @@ function readPrivateFileIfExists(path2, maxBytes) {
     throw error51;
   }
 }
-function writePrivateFileAtomic(path2, content) {
+function writePrivateFileAtomic(path2, content, mode) {
   const temporary = `${path2}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   try {
     writeFileSync(temporary, content, { flag: "wx", mode: 384 });
+    if (mode !== void 0) chmodSync(temporary, mode);
     renameSync(temporary, path2);
   } finally {
     rmSync(temporary, { force: true });
@@ -20974,7 +20978,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.20.0"}`
+        `memroot-capture/${"0.20.1"}`
       ),
       salt,
       redactor: createRedactor(salt),

@@ -1007,6 +1007,9 @@ function stateSubdir(...parts) {
   return path;
 }
 function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
+  return readPrivateBytes(path, maxBytes).bytes.toString("utf8");
+}
+function readPrivateBytes(path, maxBytes = 16 * 1024 * 1024) {
   const fd = openSync(
     path,
     constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0)
@@ -1015,7 +1018,7 @@ function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
     const info = fstatSync(fd);
     if (!info.isFile()) throw new UnsafePathError();
     if (info.size > maxBytes) throw new UnsafePathError("FILE_TOO_LARGE");
-    return readFileSync(fd, "utf8");
+    return { bytes: readFileSync(fd), mode: info.mode & 511 };
   } finally {
     closeSync(fd);
   }
@@ -1030,10 +1033,11 @@ function readPrivateFileIfExists(path, maxBytes) {
     throw error;
   }
 }
-function writePrivateFileAtomic(path, content) {
+function writePrivateFileAtomic(path, content, mode) {
   const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   try {
     writeFileSync(temporary, content, { flag: "wx", mode: 384 });
+    if (mode !== void 0) chmodSync(temporary, mode);
     renameSync(temporary, path);
   } finally {
     rmSync(temporary, { force: true });
@@ -2199,7 +2203,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.20.0"} project`;
+  return `npx -y memroot@${"0.20.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -3593,7 +3597,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.20.0"}`;
+  const userAgent = `memroot-cli/${"0.20.1"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;
