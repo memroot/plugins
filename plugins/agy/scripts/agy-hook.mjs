@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// src/agy/hooks.ts
+// src/agents/agy/hooks.ts
 import { lstatSync as lstatSync7 } from "node:fs";
 import { homedir as homedir3, tmpdir } from "node:os";
 import { isAbsolute as isAbsolute3, join as join11, normalize as normalize4 } from "node:path";
@@ -24,64 +24,16 @@ var MCP_TOOL_NAMES_V1 = [
   ...MCP_READ_ONLY_TOOL_NAMES_V1
 ];
 
-// src/capture/hooks/envelope.ts
-var MAX_ENVELOPE_BYTES = 64 * 1024;
-var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
-var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
-var STDIN_DEADLINE_MS = 500;
-function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve2) => {
-    let bytes = 0;
-    let chunks = [];
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      chunks = [];
-      process.stdin.removeAllListeners("data");
-      if (bytes > maxBytes) process.stdin.on("data", () => {
-      });
-      else process.stdin.destroy();
-      resolve2(value);
-    };
-    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
-    process.stdin.on("error", () => finish(void 0));
-    process.stdin.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes <= maxBytes) chunks.push(chunk);
-    });
-    process.stdin.on("end", () => {
-      if (bytes > maxBytes) return finish(void 0);
-      try {
-        const value = JSON.parse(
-          Buffer.concat(chunks).toString("utf8")
-        );
-        finish(
-          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
-        );
-      } catch {
-        finish(void 0);
-      }
-    });
-  });
-}
+// src/capture/queue/job.ts
+import { createHash, randomBytes as randomBytes3 } from "node:crypto";
+import { join as join6 } from "node:path";
 
-// src/capture/hooks/guards.ts
-function inertProcess() {
-  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
-  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
-  return false;
-}
-function processGuard() {
-  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
-}
+// src/project/context.ts
+import { existsSync } from "node:fs";
+import { dirname as dirname4, join as join5 } from "node:path";
+import { fileURLToPath } from "node:url";
 
-// src/capture/hooks/markers.ts
-import { lstatSync as lstatSync5 } from "node:fs";
-import { join as join7 } from "node:path";
-
-// src/capture/paths.ts
+// src/state/paths.ts
 import { randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -212,16 +164,7 @@ function listFiles(path) {
   }
 }
 
-// src/capture/queue/job.ts
-import { createHash, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join6 } from "node:path";
-
-// src/project-context.ts
-import { existsSync } from "node:fs";
-import { dirname as dirname4, join as join5 } from "node:path";
-import { fileURLToPath } from "node:url";
-
-// src/project-folders.ts
+// src/project/folders.ts
 import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import {
   basename,
@@ -234,7 +177,7 @@ import {
   sep
 } from "node:path";
 
-// src/api-base.ts
+// src/connection/api-base.ts
 function isLoopbackHostname(hostname) {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
 }
@@ -248,8 +191,9 @@ function isAllowedApiBase(value) {
     return false;
   }
 }
+var PROD_API_BASE = "https://api.memroot.dev";
 
-// src/config-store.ts
+// src/state/config-store.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 import {
   closeSync as closeSync2,
@@ -344,14 +288,13 @@ function persistConfigJson(fileName2, value) {
   }
 }
 
-// src/project-selection.ts
+// src/project/selection.ts
 import { randomUUID } from "node:crypto";
 import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
 import { join as join3 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
   return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
@@ -487,7 +430,7 @@ function upsert(store, input) {
   return record2;
 }
 function offlineIdentity(recordedOnly = false) {
-  let apiBase = PRODUCTION_API_BASE;
+  let apiBase = PROD_API_BASE;
   let userId;
   try {
     const raw = readPrivateFileIfExists(
@@ -517,7 +460,7 @@ function currentSelection(apiBase) {
   return readSelection(base, identity.userId);
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
 var MAX_BINDINGS = 256;
 var MAX_FILE_BYTES2 = 512 * 1024;
@@ -674,7 +617,7 @@ function bindingMatchFor(apiBase, principalId, cwd) {
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
 
-// src/project-scope.ts
+// src/project/scope.ts
 function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
@@ -700,7 +643,7 @@ function effectiveProject(cwd, apiBase) {
   return selection ? { scope: "computer", ...selection } : void 0;
 }
 
-// src/project-context.ts
+// src/project/context.ts
 function clip(value, max) {
   return value.replace(/[\r\n"\\`$]+/g, " ").slice(0, max);
 }
@@ -712,7 +655,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.20.2"} project`;
+  return `npx -y memroot@${"0.21.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -777,35 +720,6 @@ function sessionRefFor(salt, agent, sessionId) {
   return sha256Hex(`${salt}\0${agent}\0${sessionId}`);
 }
 
-// src/capture/hooks/markers.ts
-var MARKER_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
-var MAX_CLEANUP = 512;
-function cleanup(directory, keep, pattern) {
-  const cutoff = Date.now() - MARKER_TTL_MS;
-  for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
-    if (name === keep || !pattern.test(name)) continue;
-    try {
-      const path = join7(directory, name);
-      const info = lstatSync5(path);
-      if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
-    } catch {
-    }
-  }
-}
-function markerName(agent, sessionId) {
-  return `${agent}-${sessionRefFor(readOrCreateSalt(), agent, sessionId).slice(0, 32)}`;
-}
-function claimSessionMarker(subdir, agent, sessionId) {
-  const directory = stateSubdir(subdir);
-  const name = markerName(agent, sessionId);
-  if (!createPrivateFileExclusive(join7(directory, name), "")) return false;
-  try {
-    cleanup(directory, name, new RegExp(`^${agent}-[a-f0-9]{32}$`));
-  } catch {
-  }
-  return true;
-}
-
 // ../../packages/contracts/src/recall-guidance-v7.ts
 var RECALL_PRIMARY = "Memroot, not your own memory, is this project's shared memory: check it even if you remember or know the code; a check is cheap.";
 var RECALL_RULE = "Memroot is checked with memory_retrieve at the start of each task, whenever the work moves to another component or failure, and again before an action others will see or that is hard to undo, with a query naming that action.";
@@ -866,7 +780,7 @@ function recallGuidance2(...clauses) {
   return clauses.map((clause) => RECALL_CLAUSES2[clause]).join(" ");
 }
 
-// src/capture/hooks/session-context.ts
+// src/hooks/session-context.ts
 var SESSION_START_CONTEXT = recallGuidance2(
   "primary",
   "rule",
@@ -892,7 +806,7 @@ var MIRROR_NO_PROJECT = "Memroot: you wrote to your local memory. Save its durab
 var FAILURE_NUDGE = FAILURE_RECALL_NUDGE;
 var SESSION_START_NOT_CONNECTED = "Memroot plugin is installed but not connected for this agent, so the Memroot memory tools are unavailable. If the user asks about Memroot, suggest running `npx memroot setup` to connect it.";
 
-// src/capture/hooks/recall-text.ts
+// src/hooks/recall/recall-text.ts
 var SETUP_FACT = "The user set up Memroot for this project.";
 var clip2 = (text, max) => text.length <= max ? text : `${text.slice(0, max - 3)}...`;
 function safeName(name) {
@@ -900,9 +814,6 @@ function safeName(name) {
 }
 function ago(count2) {
   return count2 === 1 ? "1 prompt ago" : `${count2} prompts ago`;
-}
-function optedOutThisPrompt(counts) {
-  return counts !== void 0 && counts.prompts > 0 && counts.optOut >= counts.prompts;
 }
 function sessionFact(counts) {
   const prompt = Math.max(1, counts.prompts);
@@ -941,17 +852,6 @@ function conditionalNudge(counts, project) {
   return recent ? `${sessionFact(counts)} ${RECALL_REMINDER}` : stateNudge(counts, project);
 }
 var NO_TOOLS_FACT = "A session without the Memroot tools skips the check: it sends this call again and tells the user Memroot is unavailable.";
-function gateAction(mode, counts, firstForPrompt) {
-  if (mode === "off" || !counts || counts.prompts < 1) return "none";
-  if (counts.stopped) return "none";
-  if (counts.exempt >= counts.prompts) return "none";
-  if (counts.lastCheck >= counts.prompts) return "none";
-  if (!firstForPrompt) return "none";
-  return mode === "deny-once" ? "deny" : "context";
-}
-function gateWouldAct(mode, counts) {
-  return gateAction(mode, counts, true) !== "none";
-}
 function gateText(action, counts, project, options) {
   const prompt = Math.max(1, counts.prompts);
   const since = counts.lastCheck < 1 ? "no check yet" : `last check during ${options.subagent ? "task" : "prompt"} ${counts.lastCheck}`;
@@ -962,7 +862,7 @@ function gateText(action, counts, project, options) {
   return [head, practice, tail].join(" ");
 }
 
-// src/capture/hooks/prompt-nudge-mode.ts
+// src/hooks/recall/prompt-nudge-mode.ts
 var PROMPT_NUDGE_MODES = [
   "full",
   "short-after-first",
@@ -986,7 +886,7 @@ function promptNudgeText(mode, firstPrompt, counts, project) {
   return PROMPT_NUDGE;
 }
 
-// src/capture/hooks/prompt-skip.ts
+// src/hooks/recall/prompt-skip.ts
 var MAX_SHORT_PROMPT = 160;
 var MAX_PROJECT_COMMAND = 100;
 var TRIVIAL_WORDS = new Set(
@@ -1084,19 +984,33 @@ function optsOutOfMemroot(prompt) {
   return DONT_CHECK_MEMORY.some((pattern) => pattern.test(text));
 }
 
-// src/capture/hooks/recall-gate-mode.ts
+// src/hooks/recall/recall-gate.ts
 var RECALL_GATE_MODES = ["off", "context", "deny-once"];
 var RECALL_GATE_MODE = "deny-once";
 function recallGateMode(override) {
   return RECALL_GATE_MODES.includes(override) ? override : RECALL_GATE_MODE;
 }
+function gateAction(mode, counts, firstForPrompt) {
+  if (mode === "off" || !counts || counts.prompts < 1) return "none";
+  if (counts.stopped) return "none";
+  if (counts.exempt >= counts.prompts) return "none";
+  if (counts.lastCheck >= counts.prompts) return "none";
+  if (!firstForPrompt) return "none";
+  return mode === "deny-once" ? "deny" : "context";
+}
+function gateWouldAct(mode, counts) {
+  return gateAction(mode, counts, true) !== "none";
+}
 
-// src/capture/hooks/recall-state.ts
-import { lstatSync as lstatSync6 } from "node:fs";
-import { join as join8 } from "node:path";
+// src/hooks/recall/recall-state.ts
+import { lstatSync as lstatSync5 } from "node:fs";
+import { join as join7 } from "node:path";
+function optedOutThisPrompt(counts) {
+  return counts !== void 0 && counts.prompts > 0 && counts.optOut >= counts.prompts;
+}
 var DIRECTORY = "recall-state";
 var STATE_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
-var MAX_CLEANUP2 = 512;
+var MAX_CLEANUP = 512;
 function fileName(agent, key) {
   return `${agent}-${sessionRefFor(readOrCreateSalt(), agent, key).slice(0, 32)}.json`;
 }
@@ -1122,7 +1036,7 @@ function readRecallState(agent, key) {
   try {
     return parse(
       readPrivateFileIfExists(
-        join8(stateSubdir(DIRECTORY), fileName(agent, key)),
+        join7(stateSubdir(DIRECTORY), fileName(agent, key)),
         1024
       )
     );
@@ -1130,14 +1044,14 @@ function readRecallState(agent, key) {
     return void 0;
   }
 }
-function cleanup2(directory, keep) {
+function cleanup(directory, keep) {
   const cutoff = Date.now() - STATE_TTL_MS;
-  for (const name of listFiles(directory).slice(0, MAX_CLEANUP2)) {
+  for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
     if (name === keep || !/^(claude|codex|grok|agy)-[a-f0-9]{32}\.json$/u.test(name))
       continue;
     try {
-      const path = join8(directory, name);
-      if (lstatSync6(path).mtimeMs < cutoff) removeFile(path);
+      const path = join7(directory, name);
+      if (lstatSync5(path).mtimeMs < cutoff) removeFile(path);
     } catch {
     }
   }
@@ -1145,7 +1059,7 @@ function cleanup2(directory, keep) {
 function updateRecallState(agent, key, change) {
   const directory = stateSubdir(DIRECTORY);
   const name = fileName(agent, key);
-  const path = join8(directory, name);
+  const path = join7(directory, name);
   const prior = parse(readPrivateFileIfExists(path, 1024));
   const next = change(
     prior ?? {
@@ -1161,7 +1075,7 @@ function updateRecallState(agent, key, change) {
 `);
   if (!prior)
     try {
-      cleanup2(directory, name);
+      cleanup(directory, name);
     } catch {
     }
   return next;
@@ -1188,7 +1102,91 @@ function noteCheck(agent, key, options = {}) {
   }));
 }
 
-// src/capture/hooks/registration.ts
+// src/hooks/shared/envelope.ts
+var MAX_ENVELOPE_BYTES = 64 * 1024;
+var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
+var STDIN_DEADLINE_MS = 500;
+function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
+  return new Promise((resolve2) => {
+    let bytes = 0;
+    let chunks = [];
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      chunks = [];
+      process.stdin.removeAllListeners("data");
+      if (bytes > maxBytes) process.stdin.on("data", () => {
+      });
+      else process.stdin.destroy();
+      resolve2(value);
+    };
+    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
+    process.stdin.on("error", () => finish(void 0));
+    process.stdin.on("data", (chunk) => {
+      bytes += chunk.length;
+      if (bytes <= maxBytes) chunks.push(chunk);
+    });
+    process.stdin.on("end", () => {
+      if (bytes > maxBytes) return finish(void 0);
+      try {
+        const value = JSON.parse(
+          Buffer.concat(chunks).toString("utf8")
+        );
+        finish(
+          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
+        );
+      } catch {
+        finish(void 0);
+      }
+    });
+  });
+}
+
+// src/hooks/shared/guards.ts
+function inertProcess() {
+  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
+  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
+  return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
+}
+
+// src/hooks/shared/markers.ts
+import { lstatSync as lstatSync6 } from "node:fs";
+import { join as join8 } from "node:path";
+var MARKER_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
+var MAX_CLEANUP2 = 512;
+function cleanup2(directory, keep, pattern) {
+  const cutoff = Date.now() - MARKER_TTL_MS;
+  for (const name of listFiles(directory).slice(0, MAX_CLEANUP2)) {
+    if (name === keep || !pattern.test(name)) continue;
+    try {
+      const path = join8(directory, name);
+      const info = lstatSync6(path);
+      if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
+    } catch {
+    }
+  }
+}
+function markerName(agent, sessionId) {
+  return `${agent}-${sessionRefFor(readOrCreateSalt(), agent, sessionId).slice(0, 32)}`;
+}
+function claimSessionMarker(subdir, agent, sessionId) {
+  const directory = stateSubdir(subdir);
+  const name = markerName(agent, sessionId);
+  if (!createPrivateFileExclusive(join8(directory, name), "")) return false;
+  try {
+    cleanup2(directory, name, new RegExp(`^${agent}-[a-f0-9]{32}$`));
+  } catch {
+  }
+  return true;
+}
+
+// src/hooks/shared/registration.ts
 import { join as join9 } from "node:path";
 function mcpRegistered(agent) {
   try {
@@ -1204,7 +1202,7 @@ function mcpRegistered(agent) {
   }
 }
 
-// src/capture/hooks/shell-targets.ts
+// src/hooks/writes/shell-targets.ts
 var MAX_SHELL_COMMAND = 16 * 1024;
 var MAX_TOKENS = 4096;
 var MAX_TARGETS = 64;
@@ -1718,7 +1716,7 @@ function shellChanges(command) {
   };
 }
 
-// src/capture/hooks/write-scope.ts
+// src/hooks/writes/write-scope.ts
 import { posix } from "node:path";
 var DEFAULT_TEMP_DIRS = ["/tmp", "/var/folders"];
 function usableTempRoots(candidates, home, projectDir) {
@@ -1846,7 +1844,7 @@ function scratchEdit(input, scope2) {
   return targets?.every((target) => scratchWrite(target, [], scope2)) ?? false;
 }
 
-// src/capture/hooks/shell-mutation.ts
+// src/hooks/writes/shell-mutation.ts
 var GIT = "\\bgit\\s+(?:(?:-[Cc]\\s+\\S+|--[\\w-]+(?:=\\S*)?|-[pP])\\s+)*";
 var END = "(?![\\w.-])";
 var MUTATING = new RegExp(
@@ -1878,7 +1876,7 @@ function mutatingShellCommand(command, scope2 = { tempDirs: DEFAULT_TEMP_DIRS })
   return INLINE_SCRIPT.test(command) && WRITE_API.test(command);
 }
 
-// src/agy/config.ts
+// src/agents/agy/config.ts
 import { homedir as homedir2 } from "node:os";
 import { join as join10 } from "node:path";
 function agyGeminiDir() {
@@ -1888,7 +1886,7 @@ function agyConfigDir() {
   return join10(agyGeminiDir(), "config");
 }
 
-// src/agy/hooks.ts
+// src/agents/agy/hooks.ts
 var eventName = process.argv[2];
 var record = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 var token = (value) => typeof value === "string" && /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/u.test(value);

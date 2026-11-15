@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-// src/project-context.ts
+// src/project/context.ts
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname as dirname4, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/capture/paths.ts
+// src/state/paths.ts
 import {
   chmodSync,
   closeSync,
@@ -126,7 +126,7 @@ function listFiles(path) {
   }
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import {
   basename,
@@ -139,7 +139,7 @@ import {
   sep
 } from "node:path";
 
-// src/api-base.ts
+// src/connection/api-base.ts
 function isLoopbackHostname(hostname) {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
 }
@@ -153,8 +153,9 @@ function isAllowedApiBase(value) {
     return false;
   }
 }
+var PROD_API_BASE = "https://api.memroot.dev";
 
-// src/config-store.ts
+// src/state/config-store.ts
 import { randomBytes } from "node:crypto";
 import {
   closeSync as closeSync2,
@@ -249,14 +250,13 @@ function persistConfigJson(fileName, value) {
   }
 }
 
-// src/project-selection.ts
+// src/project/selection.ts
 import { randomUUID } from "node:crypto";
 import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
 import { join as join3 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
   return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
@@ -392,7 +392,7 @@ function upsert(store, input) {
   return record;
 }
 function offlineIdentity(recordedOnly = false) {
-  let apiBase = PRODUCTION_API_BASE;
+  let apiBase = PROD_API_BASE;
   let userId;
   try {
     const raw = readPrivateFileIfExists(
@@ -416,7 +416,7 @@ function offlineIdentity(recordedOnly = false) {
   return userId ? { apiBase, userId } : { apiBase };
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
 var MAX_BINDINGS = 256;
 var MAX_FILE_BYTES2 = 512 * 1024;
@@ -573,7 +573,7 @@ function bindingMatchFor(apiBase, principalId, cwd) {
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
 
-// src/project-scope.ts
+// src/project/scope.ts
 function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
@@ -604,7 +604,7 @@ function eventFolder(event) {
   return typeof event.workspaceRoot === "string" ? event.workspaceRoot : void 0;
 }
 
-// src/project-context.ts
+// src/project/context.ts
 function clip(value, max) {
   return value.replace(/[\r\n"\\`$]+/g, " ").slice(0, max);
 }
@@ -616,7 +616,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.20.2"} project`;
+  return `npx -y memroot@${"0.21.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -678,144 +678,6 @@ function validateSelectionInBackground(cwd) {
   }
 }
 
-// src/capture/hooks/envelope.ts
-var MAX_ENVELOPE_BYTES = 64 * 1024;
-var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
-var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
-var STDIN_DEADLINE_MS = 500;
-function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve2) => {
-    let bytes = 0;
-    let chunks = [];
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      chunks = [];
-      process.stdin.removeAllListeners("data");
-      if (bytes > maxBytes) process.stdin.on("data", () => {
-      });
-      else process.stdin.destroy();
-      resolve2(value);
-    };
-    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
-    process.stdin.on("error", () => finish(void 0));
-    process.stdin.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes <= maxBytes) chunks.push(chunk);
-    });
-    process.stdin.on("end", () => {
-      if (bytes > maxBytes) return finish(void 0);
-      try {
-        const value = JSON.parse(
-          Buffer.concat(chunks).toString("utf8")
-        );
-        finish(
-          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
-        );
-      } catch {
-        finish(void 0);
-      }
-    });
-  });
-}
-var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
-function isPostToolUseEvent(record) {
-  return record.hook_event_name === "PostToolUse" || record.hookEventName === "post_tool_use" || record.hookEventName === "PostToolUse";
-}
-function hookSessionId(record) {
-  const value = typeof record.session_id === "string" ? record.session_id : record.sessionId;
-  return typeof value === "string" && SESSION_ID.test(value) ? value : void 0;
-}
-function isSubagentEvent(record) {
-  return record.subagentType !== void 0 || record.subagent_type !== void 0 || record.agent_id !== void 0 || record.agent_type !== void 0;
-}
-
-// src/capture/hooks/guards.ts
-function inertProcess() {
-  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
-  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
-  return false;
-}
-function processGuard() {
-  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
-}
-
-// src/capture/hooks/markers.ts
-import { lstatSync as lstatSync5 } from "node:fs";
-import { join as join7 } from "node:path";
-
-// src/capture/queue/job.ts
-import { createHash, randomBytes as randomBytes2 } from "node:crypto";
-import { join as join6 } from "node:path";
-var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
-var HEX64 = /^[a-f0-9]{64}$/;
-function sha256Hex(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-function readOrCreateSalt() {
-  const path = join6(stateSubdir(), "salt");
-  const existing = readPrivateFileIfExists(path, 1024);
-  if (existing !== void 0) {
-    const value = existing.trim();
-    if (!HEX64.test(value)) throw new Error("INVALID_SALT");
-    return value;
-  }
-  const salt = randomBytes2(32).toString("hex");
-  if (createPrivateFileExclusive(path, `${salt}
-`)) return salt;
-  return readOrCreateSalt();
-}
-function sessionRefFor(salt, agent, sessionId) {
-  return sha256Hex(`${salt}\0${agent}\0${sessionId}`);
-}
-
-// src/capture/hooks/markers.ts
-var MARKER_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
-var MAX_CLEANUP = 512;
-function cleanup(directory, keep, pattern) {
-  const cutoff = Date.now() - MARKER_TTL_MS;
-  for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
-    if (name === keep || !pattern.test(name)) continue;
-    try {
-      const path = join7(directory, name);
-      const info = lstatSync5(path);
-      if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
-    } catch {
-    }
-  }
-}
-function markerName(agent, sessionId) {
-  return `${agent}-${sessionRefFor(readOrCreateSalt(), agent, sessionId).slice(0, 32)}`;
-}
-function claimSessionMarker(subdir, agent, sessionId) {
-  const directory = stateSubdir(subdir);
-  const name = markerName(agent, sessionId);
-  if (!createPrivateFileExclusive(join7(directory, name), "")) return false;
-  try {
-    cleanup(directory, name, new RegExp(`^${agent}-[a-f0-9]{32}$`));
-  } catch {
-  }
-  return true;
-}
-
-// src/capture/hooks/registration.ts
-import { join as join8 } from "node:path";
-function mcpRegistered(agent) {
-  try {
-    const raw = readPrivateFileIfExists(
-      join8(memrootConfigDir(), "config.json"),
-      64 * 1024
-    );
-    if (raw === void 0) return false;
-    const config = JSON.parse(raw);
-    return config.schemaVersion === 1 && config.mcpRegistered?.[agent] === true;
-  } catch {
-    return false;
-  }
-}
-
 // ../../packages/contracts/src/recall-guidance-v7.ts
 var RECALL_PRIMARY = "Memroot, not your own memory, is this project's shared memory: check it even if you remember or know the code; a check is cheap.";
 var RECALL_RULE = "Memroot is checked with memory_retrieve at the start of each task, whenever the work moves to another component or failure, and again before an action others will see or that is hard to undo, with a query naming that action.";
@@ -874,7 +736,7 @@ function recallGuidance2(...clauses) {
   return clauses.map((clause) => RECALL_CLAUSES2[clause]).join(" ");
 }
 
-// src/capture/hooks/session-context.ts
+// src/hooks/session-context.ts
 var SESSION_START_CONTEXT = recallGuidance2(
   "primary",
   "rule",
@@ -895,7 +757,145 @@ var PROMPT_NUDGE = [
   PROMPT_NUDGE_SAVE
 ].join(" ");
 
-// src/capture/hooks/session-reminder.ts
+// src/hooks/shared/envelope.ts
+var MAX_ENVELOPE_BYTES = 64 * 1024;
+var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
+var STDIN_DEADLINE_MS = 500;
+function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
+  return new Promise((resolve2) => {
+    let bytes = 0;
+    let chunks = [];
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      chunks = [];
+      process.stdin.removeAllListeners("data");
+      if (bytes > maxBytes) process.stdin.on("data", () => {
+      });
+      else process.stdin.destroy();
+      resolve2(value);
+    };
+    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
+    process.stdin.on("error", () => finish(void 0));
+    process.stdin.on("data", (chunk) => {
+      bytes += chunk.length;
+      if (bytes <= maxBytes) chunks.push(chunk);
+    });
+    process.stdin.on("end", () => {
+      if (bytes > maxBytes) return finish(void 0);
+      try {
+        const value = JSON.parse(
+          Buffer.concat(chunks).toString("utf8")
+        );
+        finish(
+          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
+        );
+      } catch {
+        finish(void 0);
+      }
+    });
+  });
+}
+var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
+function isPostToolUseEvent(record) {
+  return record.hook_event_name === "PostToolUse" || record.hookEventName === "post_tool_use" || record.hookEventName === "PostToolUse";
+}
+function hookSessionId(record) {
+  const value = typeof record.session_id === "string" ? record.session_id : record.sessionId;
+  return typeof value === "string" && SESSION_ID.test(value) ? value : void 0;
+}
+function isSubagentEvent(record) {
+  return record.subagentType !== void 0 || record.subagent_type !== void 0 || record.agent_id !== void 0 || record.agent_type !== void 0;
+}
+
+// src/hooks/shared/guards.ts
+function inertProcess() {
+  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
+  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
+  return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
+}
+
+// src/hooks/shared/markers.ts
+import { lstatSync as lstatSync5 } from "node:fs";
+import { join as join7 } from "node:path";
+
+// src/capture/queue/job.ts
+import { createHash, randomBytes as randomBytes2 } from "node:crypto";
+import { join as join6 } from "node:path";
+var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
+var HEX64 = /^[a-f0-9]{64}$/;
+function sha256Hex(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+function readOrCreateSalt() {
+  const path = join6(stateSubdir(), "salt");
+  const existing = readPrivateFileIfExists(path, 1024);
+  if (existing !== void 0) {
+    const value = existing.trim();
+    if (!HEX64.test(value)) throw new Error("INVALID_SALT");
+    return value;
+  }
+  const salt = randomBytes2(32).toString("hex");
+  if (createPrivateFileExclusive(path, `${salt}
+`)) return salt;
+  return readOrCreateSalt();
+}
+function sessionRefFor(salt, agent, sessionId) {
+  return sha256Hex(`${salt}\0${agent}\0${sessionId}`);
+}
+
+// src/hooks/shared/markers.ts
+var MARKER_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
+var MAX_CLEANUP = 512;
+function cleanup(directory, keep, pattern) {
+  const cutoff = Date.now() - MARKER_TTL_MS;
+  for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
+    if (name === keep || !pattern.test(name)) continue;
+    try {
+      const path = join7(directory, name);
+      const info = lstatSync5(path);
+      if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
+    } catch {
+    }
+  }
+}
+function markerName(agent, sessionId) {
+  return `${agent}-${sessionRefFor(readOrCreateSalt(), agent, sessionId).slice(0, 32)}`;
+}
+function claimSessionMarker(subdir, agent, sessionId) {
+  const directory = stateSubdir(subdir);
+  const name = markerName(agent, sessionId);
+  if (!createPrivateFileExclusive(join7(directory, name), "")) return false;
+  try {
+    cleanup(directory, name, new RegExp(`^${agent}-[a-f0-9]{32}$`));
+  } catch {
+  }
+  return true;
+}
+
+// src/hooks/shared/registration.ts
+import { join as join8 } from "node:path";
+function mcpRegistered(agent) {
+  try {
+    const raw = readPrivateFileIfExists(
+      join8(memrootConfigDir(), "config.json"),
+      64 * 1024
+    );
+    if (raw === void 0) return false;
+    const config = JSON.parse(raw);
+    return config.schemaVersion === 1 && config.mcpRegistered?.[agent] === true;
+  } catch {
+    return false;
+  }
+}
+
+// src/hooks/session-reminder.ts
 function exit(output) {
   if (!output) {
     process.exit(0);

@@ -1,12 +1,22 @@
 #!/usr/bin/env node
 
-// src/project-context.ts
-import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname as dirname4, join as join5 } from "node:path";
-import { fileURLToPath } from "node:url";
+// src/connection/api-base.ts
+function isLoopbackHostname(hostname) {
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
+}
+function isAllowedApiBase(value) {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+var PROD_API_BASE = "https://api.memroot.dev";
 
-// src/capture/paths.ts
+// src/state/paths.ts
 import { randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -146,557 +156,6 @@ function captureAgreementPath() {
   return join(memrootConfigDir(), "capture-agreement.json");
 }
 
-// src/project-folders.ts
-import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
-import {
-  basename,
-  dirname as dirname3,
-  isAbsolute as isAbsolute2,
-  join as join4,
-  normalize as normalize2,
-  relative,
-  resolve,
-  sep
-} from "node:path";
-
-// src/api-base.ts
-function isLoopbackHostname(hostname) {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
-}
-function isAllowedApiBase(value) {
-  try {
-    const url = new URL(value);
-    if (url.username || url.password || url.search || url.hash) return false;
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
-  } catch {
-    return false;
-  }
-}
-
-// src/config-store.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
-import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
-  writeSync
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
-var LOCK_STALE_MS = 5e3;
-var LOCK_TRIES = 40;
-var TMP_STALE_MS = 6e4;
-function pause(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-function withConfigLock(fileName, update) {
-  const directory = memrootConfigDir();
-  ensurePrivateDir(directory, dirname2(directory), false);
-  const lock = `${join2(directory, fileName)}.lock`;
-  const nonce = randomBytes2(8).toString("hex");
-  const owner = join2(lock, "owner");
-  let held = false;
-  for (let i = 0; i < LOCK_TRIES && !held; i++) {
-    try {
-      mkdirSync2(lock, { mode: 448 });
-      writeFileSync2(owner, nonce, { mode: 384 });
-      held = true;
-    } catch (error) {
-      if (error.code !== "EEXIST") break;
-      try {
-        if (Date.now() - lstatSync2(lock).mtimeMs > LOCK_STALE_MS)
-          rmSync2(lock, { recursive: true, force: true });
-      } catch {
-      }
-      pause(25);
-    }
-  }
-  try {
-    return update();
-  } finally {
-    if (held)
-      try {
-        if (readFileSync2(owner, "utf8") === nonce)
-          rmSync2(lock, { recursive: true, force: true });
-      } catch {
-      }
-  }
-}
-function persistConfigJson(fileName, value) {
-  const directory = memrootConfigDir();
-  ensurePrivateDir(directory, dirname2(directory), false);
-  const path = join2(directory, fileName);
-  try {
-    const now = Date.now();
-    for (const name of listFiles(directory))
-      if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
-        try {
-          if (now - lstatSync2(join2(directory, name)).mtimeMs > TMP_STALE_MS)
-            rmSync2(join2(directory, name), { force: true });
-        } catch {
-        }
-  } catch {
-  }
-  const temporary = `${path}.${process.pid}.${randomBytes2(4).toString("hex")}.tmp`;
-  try {
-    const fd = openSync2(temporary, "wx", 384);
-    try {
-      fchmodSync(fd, 384);
-      writeSync(fd, `${JSON.stringify(value, null, 2)}
-`);
-      fsyncSync(fd);
-    } finally {
-      closeSync2(fd);
-    }
-    for (let attempt = 0; ; attempt++)
-      try {
-        renameSync2(temporary, path);
-        break;
-      } catch (error) {
-        const code = error.code;
-        if (attempt >= 5 || code !== "EPERM" && code !== "EBUSY") throw error;
-        pause(20);
-      }
-  } finally {
-    rmSync2(temporary, { force: true });
-  }
-}
-
-// src/project-selection.ts
-import { randomUUID } from "node:crypto";
-import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
-import { join as join3 } from "node:path";
-var PROJECT_SELECTION_FILE = "project-selection.json";
-var MAX_FILE_BYTES = 256 * 1024;
-var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
-var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectSelectionPath() {
-  return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
-}
-function normalizeApiBase(apiBase) {
-  try {
-    const url = new URL(apiBase);
-    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return apiBase.replace(/\/+$/, "");
-  }
-}
-function selectionKey(apiBase, principalId) {
-  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
-}
-function withLock(update) {
-  return withConfigLock(PROJECT_SELECTION_FILE, update);
-}
-function persist(store) {
-  persistConfigJson(PROJECT_SELECTION_FILE, {
-    schemaVersion: 1,
-    selections: store
-  });
-}
-function valid(value) {
-  const v = value;
-  return !!v && typeof v === "object" && typeof v.apiBase === "string" && isAllowedApiBase(v.apiBase) && !v.apiBase.endsWith("/") && UUID.test(String(v.principalId)) && UUID.test(String(v.tenantId)) && UUID.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID.test(String(v.selectionId)) && typeof v.selectedAt === "string" && !Number.isNaN(Date.parse(v.selectedAt)) && (v.source === "explicit" || v.source === "sole_project");
-}
-function readStore() {
-  try {
-    const raw = readPrivateFileIfExists(projectSelectionPath(), MAX_FILE_BYTES);
-    if (raw === void 0) return {};
-    const value = JSON.parse(raw);
-    if (value?.schemaVersion !== 1 || !value.selections || typeof value.selections !== "object" || Array.isArray(value.selections))
-      return {};
-    const out = {};
-    for (const [key, entry] of Object.entries(
-      value.selections
-    ))
-      if (valid(entry) && key === selectionKey(entry.apiBase, entry.principalId))
-        out[key] = entry;
-    return out;
-  } catch {
-    return {};
-  }
-}
-function readSelection(apiBase, principalId) {
-  if (!principalId) return void 0;
-  const key = selectionKey(apiBase, principalId);
-  const found = readStore()[key];
-  if (found) return found;
-  migrateLegacyDefaults();
-  return readStore()[key];
-}
-var LEGACY_DEFAULTS = "project-defaults.json";
-function migrateLegacyDefaults() {
-  const legacy = join3(memrootConfigDir(), LEGACY_DEFAULTS);
-  try {
-    lstatSync3(legacy);
-  } catch {
-    return false;
-  }
-  try {
-    return withLock(() => {
-      let raw;
-      try {
-        raw = readPrivateFileIfExists(legacy, MAX_FILE_BYTES);
-      } catch {
-        raw = void 0;
-      }
-      if (raw === void 0) return false;
-      const store = readStore();
-      let adopted = 0;
-      try {
-        const value = JSON.parse(raw);
-        const newest = /* @__PURE__ */ new Map();
-        if (value?.schemaVersion === 1 && value.defaults)
-          for (const d of Object.values(value.defaults)) {
-            if (!d || typeof d.apiBase !== "string" || typeof d.userId !== "string" || d.principalId !== d.userId || typeof d.updatedAt !== "string")
-              continue;
-            const key = selectionKey(d.apiBase, d.userId);
-            const prior = newest.get(key);
-            if (!prior || String(prior.updatedAt) < d.updatedAt)
-              newest.set(key, d);
-          }
-        for (const [key, d] of newest)
-          if (!store[key])
-            try {
-              upsert(store, {
-                apiBase: String(d.apiBase),
-                principalId: String(d.principalId),
-                tenantId: String(d.tenantId),
-                projectId: String(d.projectId),
-                name: String(d.name || d.projectId),
-                source: "explicit"
-              });
-              adopted++;
-            } catch {
-            }
-      } catch {
-      }
-      if (adopted > 0) persist(store);
-      renameSync3(legacy, `${legacy}.migrated`);
-      return true;
-    });
-  } catch {
-    return false;
-  }
-}
-function upsert(store, input) {
-  const key = selectionKey(input.apiBase, input.principalId);
-  const prior = store[key];
-  const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
-  const record = {
-    apiBase: normalizeApiBase(input.apiBase),
-    principalId: input.principalId.toLowerCase(),
-    tenantId: input.tenantId,
-    projectId: input.projectId,
-    name: input.name,
-    selectionId: input.selectionId ?? (same && prior ? prior.selectionId : randomUUID()),
-    selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    source: input.source
-  };
-  if (!valid(record))
-    throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
-  store[key] = record;
-  const keys = Object.keys(store);
-  if (keys.length > MAX_RECORDS)
-    for (const old of keys.sort(
-      (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
-    ).slice(0, keys.length - MAX_RECORDS))
-      delete store[old];
-  return record;
-}
-function offlineIdentity(recordedOnly = false) {
-  let apiBase = PRODUCTION_API_BASE;
-  let userId;
-  try {
-    const raw = readPrivateFileIfExists(
-      join3(memrootConfigDir(), "config.json"),
-      64 * 1024
-    );
-    if (raw !== void 0) {
-      const config = JSON.parse(raw);
-      if (config.schemaVersion === 1) {
-        if (typeof config.apiBase === "string" && config.apiBase)
-          apiBase = config.apiBase;
-        if (typeof config.userId === "string" && config.userId)
-          userId = config.userId;
-      }
-    }
-  } catch {
-  }
-  apiBase = normalizeApiBase(
-    recordedOnly ? apiBase : process.env.MEMROOT_API_BASE ?? apiBase
-  );
-  return userId ? { apiBase, userId } : { apiBase };
-}
-
-// src/project-folders.ts
-var PROJECT_FOLDERS_FILE = "project-folders.json";
-var MAX_BINDINGS = 256;
-var MAX_FILE_BYTES2 = 512 * 1024;
-var MAX_PATH = 4096;
-var MAX_WALK = 128;
-var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectFoldersPath() {
-  return join4(memrootConfigDir(), PROJECT_FOLDERS_FILE);
-}
-var FOLD_CASE = process.platform === "win32";
-function folderContains(folder, path, options) {
-  const a = options.foldCase ? folder.toLowerCase() : folder;
-  const b = options.foldCase ? path.toLowerCase() : path;
-  if (a === b) return true;
-  const prefix = a.endsWith(options.separator) ? a : `${a}${options.separator}`;
-  return b.startsWith(prefix);
-}
-function applicableBinding(bindings, scope, options) {
-  const same = (a, b) => options.foldCase ? a.toLowerCase() === b.toLowerCase() : a === b;
-  const chains = [
-    { root: scope.top, path: scope.cwd, mapped: false },
-    ...scope.main ? [{ ...scope.main, mapped: true }] : []
-  ];
-  let best;
-  for (const chain of chains)
-    for (const binding of bindings) {
-      const root = chain.root;
-      if (root !== void 0 && !folderContains(root, binding.folder, options) || !folderContains(binding.folder, chain.path, options))
-        continue;
-      const depth = binding.folder.length - (root?.length ?? 0);
-      if (best && depth <= best.depth) continue;
-      const atRoot = root !== void 0 && same(binding.folder, root);
-      const via = chain.mapped ? atRoot ? "main_checkout" : "main_checkout_folder" : same(binding.folder, scope.cwd) ? "folder" : root === void 0 ? "parent_folder" : atRoot ? "repo_root" : "repo_folder";
-      best = { binding, via, depth };
-    }
-  return best && { binding: best.binding, via: best.via };
-}
-var match = { foldCase: FOLD_CASE, separator: sep };
-function usableFolder(value) {
-  return typeof value === "string" && isAbsolute2(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
-}
-function canonicalFolder(path) {
-  const absolute = normalize2(resolve(path));
-  let head = absolute;
-  for (let i = 0; i < MAX_WALK; i++) {
-    try {
-      const real = realpathSync.native(head);
-      const rest = relative(head, absolute);
-      return rest ? join4(real, rest) : real;
-    } catch {
-      const parent = dirname3(head);
-      if (parent === head) break;
-      head = parent;
-    }
-  }
-  return absolute;
-}
-function smallFile(path) {
-  try {
-    const info = lstatSync4(path);
-    if (!info.isFile() || info.size > 4096) return void 0;
-    return readFileSync3(path, "utf8");
-  } catch {
-    return void 0;
-  }
-}
-function folderScope(real) {
-  for (let dir = real, i = 0; i < MAX_WALK; i++) {
-    const dotGit = join4(dir, ".git");
-    let info;
-    try {
-      info = lstatSync4(dotGit);
-    } catch {
-      info = void 0;
-    }
-    if (info) {
-      const root = info.isFile() ? worktreeMain(dir, dotGit) : void 0;
-      if (!root) return { cwd: real, top: dir };
-      const rest = relative(dir, real);
-      return {
-        cwd: real,
-        top: dir,
-        main: { root, path: rest ? join4(root, rest) : root }
-      };
-    }
-    const parent = dirname3(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return { cwd: real };
-}
-function worktreeMain(dir, dotGit) {
-  const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
-  if (!pointer?.[1]) return void 0;
-  const gitdir = resolve(dir, pointer[1]);
-  if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
-  const back = smallFile(join4(gitdir, "gitdir"))?.trim();
-  if (!back) return void 0;
-  try {
-    if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
-      return void 0;
-  } catch {
-    return void 0;
-  }
-  const common = smallFile(join4(gitdir, "commondir"))?.trim();
-  if (!common) return void 0;
-  let commonDir;
-  try {
-    commonDir = realpathSync.native(resolve(gitdir, common));
-  } catch {
-    return void 0;
-  }
-  if (basename(commonDir) !== ".git") return void 0;
-  return dirname3(commonDir);
-}
-function validBinding(value) {
-  const v = value;
-  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
-}
-function validKey(key) {
-  const at = key.lastIndexOf("|");
-  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
-}
-function readStore2(strictKey) {
-  try {
-    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
-    if (raw === void 0) return {};
-    const value = JSON.parse(raw);
-    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
-      throw new Error("INVALID_PROJECT_FOLDER_STORE");
-    const out = {};
-    for (const [key, list] of Object.entries(
-      value.bindings
-    )) {
-      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
-        throw new Error("INVALID_PROJECT_FOLDER_STORE");
-      if (validKey(key) && Array.isArray(list))
-        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
-    }
-    return out;
-  } catch (error) {
-    if (strictKey !== void 0) throw error;
-    return {};
-  }
-}
-function readBindings(apiBase, principalId, { requireValid = false } = {}) {
-  if (!principalId) return [];
-  const key = selectionKey(apiBase, principalId);
-  return readStore2(requireValid ? key : void 0)[key] ?? [];
-}
-function bindingMatchFor(apiBase, principalId, cwd) {
-  const bindings = readBindings(apiBase, principalId);
-  if (bindings.length === 0) return void 0;
-  return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
-}
-
-// src/project-scope.ts
-function effectiveProject(cwd, apiBase) {
-  const identity = offlineIdentity();
-  const base = apiBase ?? identity.apiBase;
-  if (!isAllowedApiBase(base) || !identity.userId) return void 0;
-  const folder = usableFolder(cwd);
-  const found = folder ? bindingMatchFor(base, identity.userId, folder) : void 0;
-  if (found) {
-    const { binding, via } = found;
-    return {
-      scope: "folder",
-      apiBase: normalizeApiBase(base),
-      principalId: identity.userId.toLowerCase(),
-      tenantId: binding.tenantId,
-      projectId: binding.projectId,
-      name: binding.name,
-      selectionId: binding.bindingId,
-      folder: binding.folder,
-      via,
-      ...binding.stale ? { stale: true } : {}
-    };
-  }
-  const selection = readSelection(base, identity.userId);
-  return selection ? { scope: "computer", ...selection } : void 0;
-}
-
-// src/project-context.ts
-var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function validUuid(value) {
-  return typeof value === "string" && UUID3.test(value);
-}
-function clip(value, max) {
-  return value.replace(/[\r\n"\\`$]+/g, " ").slice(0, max);
-}
-function projectCommandPrefix() {
-  try {
-    const here = dirname4(fileURLToPath(import.meta.url));
-    const script = join5(here, "project.mjs");
-    if (existsSync(script) && !/["\\$`\n]/.test(script))
-      return `node "${script}"`;
-  } catch {
-  }
-  return `npx -y memroot@${"0.20.2"} project`;
-}
-function folderOption(folder) {
-  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
-}
-function staleBindingText(project) {
-  const command = projectCommandPrefix();
-  const folder = project.folder ?? "";
-  const option = folderOption(folder);
-  return `Memroot project "${clip(project.name, 80)}" bound to folder "${clip(folder, 300)}" is no longer available, so Memroot calls here are refused. Bind another: ${command} use "<name>" ${option}; or use the project selected on this computer: ${command} unbind ${option}.`;
-}
-function boundFrom(project) {
-  const folder = `"${clip(project.folder ?? "", 300)}"`;
-  switch (project.via) {
-    case "parent_folder":
-      return `bound to parent folder ${folder}`;
-    case "repo_root":
-      return `bound to repository root ${folder}`;
-    case "repo_folder":
-      return `bound to ${folder} in this repository`;
-    case "main_checkout":
-      return `bound to main checkout ${folder}; this is a worktree`;
-    case "main_checkout_folder":
-      return `bound to ${folder} in the main checkout; this is a worktree`;
-    default:
-      return void 0;
-  }
-}
-function projectStatusLine(cwd) {
-  const command = projectCommandPrefix();
-  const selected = effectiveProject(cwd);
-  if (selected?.stale) return staleBindingText(selected);
-  if (selected?.scope === "folder") {
-    const folder = selected.folder ?? "";
-    const inherited = boundFrom(selected);
-    return `${inherited ? `Memroot project: "${clip(selected.name, 80)}" (project_id ${selected.projectId}; ${inherited})` : `Memroot project for folder "${clip(folder, 300)}": "${clip(selected.name, 80)}" (project_id ${selected.projectId})`}. Pass this project_id to memory_retrieve and memory_create. To switch ${inherited ? "it" : "this folder"}: ${command} use "<name>" ${folderOption(folder)}; other folders: ${command} use "<name>".`;
-  }
-  if (selected)
-    return `Memroot project for this computer: "${clip(selected.name, 80)}" (project_id ${selected.projectId}). Pass this project_id to memory_retrieve and memory_create. To switch every session on this computer: ${command} use "<name>".`;
-  return `No Memroot project is selected on this computer yet. Run: ${command} use (it selects the only project automatically, or lists the projects; then run ${command} use "<name>"). The choice applies to every session and agent on this computer.`;
-}
-function validateSelectionInBackground(cwd) {
-  try {
-    if (!offlineIdentity().userId) return;
-    if (process.env.NODE_ENV === "test" && process.env.MEMROOT_TEST_NO_BACKGROUND_CHECK === "1")
-      return;
-    const script = join5(dirname4(fileURLToPath(import.meta.url)), "project.mjs");
-    if (!existsSync(script)) return;
-    const folder = usableFolder(cwd);
-    const args = folder ? ["status", "--folder", folder] : ["status"];
-    const child = spawn(process.execPath, [script, ...args], {
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
-    });
-    child.on("error", () => {
-    });
-    child.unref();
-  } catch {
-  }
-}
-
 // src/capture/consent.ts
 var CAPTURE_AGENTS = ["claude", "codex", "grok"];
 var CONSENT_TEXT_VERSION = "capture-consent-v2";
@@ -785,9 +244,693 @@ function activeAgreementFor(agent2) {
   return agreement ? { consent, agreement } : void 0;
 }
 
+// src/capture/hooks/capture-trigger.ts
+import { lstatSync as lstatSync6 } from "node:fs";
+
+// src/hooks/shared/envelope.ts
+var MAX_ENVELOPE_BYTES = 64 * 1024;
+var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
+var STDIN_DEADLINE_MS = 500;
+function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
+  return new Promise((resolve2) => {
+    let bytes = 0;
+    let chunks = [];
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      chunks = [];
+      process.stdin.removeAllListeners("data");
+      if (bytes > maxBytes) process.stdin.on("data", () => {
+      });
+      else process.stdin.destroy();
+      resolve2(value);
+    };
+    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
+    process.stdin.on("error", () => finish(void 0));
+    process.stdin.on("data", (chunk) => {
+      bytes += chunk.length;
+      if (bytes <= maxBytes) chunks.push(chunk);
+    });
+    process.stdin.on("end", () => {
+      if (bytes > maxBytes) return finish(void 0);
+      try {
+        const value = JSON.parse(
+          Buffer.concat(chunks).toString("utf8")
+        );
+        finish(
+          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
+        );
+      } catch {
+        finish(void 0);
+      }
+    });
+  });
+}
+var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
+var REASON = /^[a-z_]{1,40}$/;
+var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|session_resume|session_fork)$/;
+function string(record, ...keys) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") return value;
+  }
+  return void 0;
+}
+function isSubagentEvent(record) {
+  return record.subagentType !== void 0 || record.subagent_type !== void 0 || record.agent_id !== void 0 || record.agent_type !== void 0;
+}
+function normalizeCaptureEvent(agent2, trigger, record) {
+  const sessionId = string(record, "session_id", "sessionId");
+  const cwd = string(record, "cwd", "workspaceRoot");
+  const rawTranscript = "transcript_path" in record ? record.transcript_path : record.transcriptPath;
+  if (!sessionId || !SESSION_ID.test(sessionId)) return void 0;
+  if (!cwd?.startsWith("/") || cwd.length > 4096 || cwd.includes("\0"))
+    return void 0;
+  let transcriptPath;
+  if (typeof rawTranscript === "string" && rawTranscript.length > 0)
+    transcriptPath = rawTranscript;
+  else if (agent2 === "grok" && rawTranscript === void 0)
+    transcriptPath = null;
+  else return void 0;
+  let reason;
+  if (trigger === "turn_end" || trigger === "subagent_stop")
+    reason = "turn_end";
+  else if (trigger === "idle") reason = "idle_prompt";
+  else if (trigger === "resume") reason = "session_resume";
+  else if (trigger === "compaction") {
+    const how = string(record, "trigger", "source");
+    reason = how === "auto" || how === "manual" ? `compact_${how}` : "compact";
+  } else {
+    const value = string(record, "reason");
+    reason = value && REASON.test(value) && !OPEN_SESSION_REASON.test(value) ? value : "other";
+  }
+  return {
+    sessionId,
+    transcriptPath,
+    cwd,
+    reason,
+    subagent: isSubagentEvent(record)
+  };
+}
+
+// src/hooks/shared/guards.ts
+import { realpathSync } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { isAbsolute as isAbsolute2, join as join2, normalize as normalize2 } from "node:path";
+function inertProcess() {
+  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
+  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
+  return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
+}
+function absoluteEnv2(name) {
+  const value = process.env[name];
+  return value && isAbsolute2(value) ? normalize2(value) : void 0;
+}
+function transcriptRoots(agent2) {
+  if (agent2 === "claude")
+    return [
+      join2(
+        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join2(homedir2(), ".claude"),
+        "projects"
+      )
+    ];
+  if (agent2 === "codex") {
+    const home = absoluteEnv2("CODEX_HOME") ?? join2(homedir2(), ".codex");
+    return [join2(home, "sessions"), join2(home, "archived_sessions")];
+  }
+  return [
+    join2(absoluteEnv2("GROK_HOME") ?? join2(homedir2(), ".grok"), "sessions")
+  ];
+}
+function transcriptPathAllowed(agent2, path) {
+  if (!isAbsolute2(path) || path.length > 4096 || path.includes("\0") || path.split("/").includes("..") || normalize2(path) !== path)
+    return false;
+  if (agent2 !== "grok" && !path.endsWith(".jsonl")) return false;
+  return transcriptRoots(agent2).some((root) => {
+    if (path.startsWith(`${root}/`)) return true;
+    try {
+      return path.startsWith(`${realpathSync(root)}/`);
+    } catch {
+      return false;
+    }
+  });
+}
+function isHeadlessSession(agent2) {
+  if (agent2 === "claude")
+    return (process.env.CLAUDE_CODE_ENTRYPOINT ?? "").startsWith("sdk");
+  return false;
+}
+
+// src/project/folders.ts
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync as realpathSync2 } from "node:fs";
+import {
+  basename,
+  dirname as dirname3,
+  isAbsolute as isAbsolute3,
+  join as join5,
+  normalize as normalize3,
+  relative,
+  resolve,
+  sep
+} from "node:path";
+
+// src/state/config-store.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join3 } from "node:path";
+var LOCK_STALE_MS = 5e3;
+var LOCK_TRIES = 40;
+var TMP_STALE_MS = 6e4;
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function withConfigLock(fileName, update) {
+  const directory = memrootConfigDir();
+  ensurePrivateDir(directory, dirname2(directory), false);
+  const lock = `${join3(directory, fileName)}.lock`;
+  const nonce = randomBytes2(8).toString("hex");
+  const owner = join3(lock, "owner");
+  let held = false;
+  for (let i = 0; i < LOCK_TRIES && !held; i++) {
+    try {
+      mkdirSync2(lock, { mode: 448 });
+      writeFileSync2(owner, nonce, { mode: 384 });
+      held = true;
+    } catch (error) {
+      if (error.code !== "EEXIST") break;
+      try {
+        if (Date.now() - lstatSync2(lock).mtimeMs > LOCK_STALE_MS)
+          rmSync2(lock, { recursive: true, force: true });
+      } catch {
+      }
+      pause(25);
+    }
+  }
+  try {
+    return update();
+  } finally {
+    if (held)
+      try {
+        if (readFileSync2(owner, "utf8") === nonce)
+          rmSync2(lock, { recursive: true, force: true });
+      } catch {
+      }
+  }
+}
+function persistConfigJson(fileName, value) {
+  const directory = memrootConfigDir();
+  ensurePrivateDir(directory, dirname2(directory), false);
+  const path = join3(directory, fileName);
+  try {
+    const now = Date.now();
+    for (const name of listFiles(directory))
+      if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
+        try {
+          if (now - lstatSync2(join3(directory, name)).mtimeMs > TMP_STALE_MS)
+            rmSync2(join3(directory, name), { force: true });
+        } catch {
+        }
+  } catch {
+  }
+  const temporary = `${path}.${process.pid}.${randomBytes2(4).toString("hex")}.tmp`;
+  try {
+    const fd = openSync2(temporary, "wx", 384);
+    try {
+      fchmodSync(fd, 384);
+      writeSync(fd, `${JSON.stringify(value, null, 2)}
+`);
+      fsyncSync(fd);
+    } finally {
+      closeSync2(fd);
+    }
+    for (let attempt = 0; ; attempt++)
+      try {
+        renameSync2(temporary, path);
+        break;
+      } catch (error) {
+        const code = error.code;
+        if (attempt >= 5 || code !== "EPERM" && code !== "EBUSY") throw error;
+        pause(20);
+      }
+  } finally {
+    rmSync2(temporary, { force: true });
+  }
+}
+
+// src/project/selection.ts
+import { randomUUID } from "node:crypto";
+import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
+import { join as join4 } from "node:path";
+var PROJECT_SELECTION_FILE = "project-selection.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 64;
+var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectSelectionPath() {
+  return join4(memrootConfigDir(), PROJECT_SELECTION_FILE);
+}
+function normalizeApiBase(apiBase) {
+  try {
+    const url = new URL(apiBase);
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return apiBase.replace(/\/+$/, "");
+  }
+}
+function selectionKey(apiBase, principalId) {
+  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
+}
+function withLock(update) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update);
+}
+function persist(store) {
+  persistConfigJson(PROJECT_SELECTION_FILE, {
+    schemaVersion: 1,
+    selections: store
+  });
+}
+function valid(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.apiBase === "string" && isAllowedApiBase(v.apiBase) && !v.apiBase.endsWith("/") && UUID.test(String(v.principalId)) && UUID.test(String(v.tenantId)) && UUID.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID.test(String(v.selectionId)) && typeof v.selectedAt === "string" && !Number.isNaN(Date.parse(v.selectedAt)) && (v.source === "explicit" || v.source === "sole_project");
+}
+function readStore() {
+  try {
+    const raw = readPrivateFileIfExists(projectSelectionPath(), MAX_FILE_BYTES);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.selections || typeof value.selections !== "object" || Array.isArray(value.selections))
+      return {};
+    const out = {};
+    for (const [key, entry] of Object.entries(
+      value.selections
+    ))
+      if (valid(entry) && key === selectionKey(entry.apiBase, entry.principalId))
+        out[key] = entry;
+    return out;
+  } catch {
+    return {};
+  }
+}
+function readSelection(apiBase, principalId) {
+  if (!principalId) return void 0;
+  const key = selectionKey(apiBase, principalId);
+  const found = readStore()[key];
+  if (found) return found;
+  migrateLegacyDefaults();
+  return readStore()[key];
+}
+var LEGACY_DEFAULTS = "project-defaults.json";
+function migrateLegacyDefaults() {
+  const legacy = join4(memrootConfigDir(), LEGACY_DEFAULTS);
+  try {
+    lstatSync3(legacy);
+  } catch {
+    return false;
+  }
+  try {
+    return withLock(() => {
+      let raw;
+      try {
+        raw = readPrivateFileIfExists(legacy, MAX_FILE_BYTES);
+      } catch {
+        raw = void 0;
+      }
+      if (raw === void 0) return false;
+      const store = readStore();
+      let adopted = 0;
+      try {
+        const value = JSON.parse(raw);
+        const newest = /* @__PURE__ */ new Map();
+        if (value?.schemaVersion === 1 && value.defaults)
+          for (const d of Object.values(value.defaults)) {
+            if (!d || typeof d.apiBase !== "string" || typeof d.userId !== "string" || d.principalId !== d.userId || typeof d.updatedAt !== "string")
+              continue;
+            const key = selectionKey(d.apiBase, d.userId);
+            const prior = newest.get(key);
+            if (!prior || String(prior.updatedAt) < d.updatedAt)
+              newest.set(key, d);
+          }
+        for (const [key, d] of newest)
+          if (!store[key])
+            try {
+              upsert(store, {
+                apiBase: String(d.apiBase),
+                principalId: String(d.principalId),
+                tenantId: String(d.tenantId),
+                projectId: String(d.projectId),
+                name: String(d.name || d.projectId),
+                source: "explicit"
+              });
+              adopted++;
+            } catch {
+            }
+      } catch {
+      }
+      if (adopted > 0) persist(store);
+      renameSync3(legacy, `${legacy}.migrated`);
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+function upsert(store, input) {
+  const key = selectionKey(input.apiBase, input.principalId);
+  const prior = store[key];
+  const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
+  const record = {
+    apiBase: normalizeApiBase(input.apiBase),
+    principalId: input.principalId.toLowerCase(),
+    tenantId: input.tenantId,
+    projectId: input.projectId,
+    name: input.name,
+    selectionId: input.selectionId ?? (same && prior ? prior.selectionId : randomUUID()),
+    selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    source: input.source
+  };
+  if (!valid(record))
+    throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
+  store[key] = record;
+  const keys = Object.keys(store);
+  if (keys.length > MAX_RECORDS)
+    for (const old of keys.sort(
+      (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
+    ).slice(0, keys.length - MAX_RECORDS))
+      delete store[old];
+  return record;
+}
+function offlineIdentity(recordedOnly = false) {
+  let apiBase = PROD_API_BASE;
+  let userId;
+  try {
+    const raw = readPrivateFileIfExists(
+      join4(memrootConfigDir(), "config.json"),
+      64 * 1024
+    );
+    if (raw !== void 0) {
+      const config = JSON.parse(raw);
+      if (config.schemaVersion === 1) {
+        if (typeof config.apiBase === "string" && config.apiBase)
+          apiBase = config.apiBase;
+        if (typeof config.userId === "string" && config.userId)
+          userId = config.userId;
+      }
+    }
+  } catch {
+  }
+  apiBase = normalizeApiBase(
+    recordedOnly ? apiBase : process.env.MEMROOT_API_BASE ?? apiBase
+  );
+  return userId ? { apiBase, userId } : { apiBase };
+}
+
+// src/project/folders.ts
+var PROJECT_FOLDERS_FILE = "project-folders.json";
+var MAX_BINDINGS = 256;
+var MAX_FILE_BYTES2 = 512 * 1024;
+var MAX_PATH = 4096;
+var MAX_WALK = 128;
+var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectFoldersPath() {
+  return join5(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+}
+var FOLD_CASE = process.platform === "win32";
+function folderContains(folder, path, options) {
+  const a = options.foldCase ? folder.toLowerCase() : folder;
+  const b = options.foldCase ? path.toLowerCase() : path;
+  if (a === b) return true;
+  const prefix = a.endsWith(options.separator) ? a : `${a}${options.separator}`;
+  return b.startsWith(prefix);
+}
+function applicableBinding(bindings, scope, options) {
+  const same = (a, b) => options.foldCase ? a.toLowerCase() === b.toLowerCase() : a === b;
+  const chains = [
+    { root: scope.top, path: scope.cwd, mapped: false },
+    ...scope.main ? [{ ...scope.main, mapped: true }] : []
+  ];
+  let best;
+  for (const chain of chains)
+    for (const binding of bindings) {
+      const root = chain.root;
+      if (root !== void 0 && !folderContains(root, binding.folder, options) || !folderContains(binding.folder, chain.path, options))
+        continue;
+      const depth = binding.folder.length - (root?.length ?? 0);
+      if (best && depth <= best.depth) continue;
+      const atRoot = root !== void 0 && same(binding.folder, root);
+      const via = chain.mapped ? atRoot ? "main_checkout" : "main_checkout_folder" : same(binding.folder, scope.cwd) ? "folder" : root === void 0 ? "parent_folder" : atRoot ? "repo_root" : "repo_folder";
+      best = { binding, via, depth };
+    }
+  return best && { binding: best.binding, via: best.via };
+}
+var match = { foldCase: FOLD_CASE, separator: sep };
+function usableFolder(value) {
+  return typeof value === "string" && isAbsolute3(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+}
+function canonicalFolder(path) {
+  const absolute = normalize3(resolve(path));
+  let head = absolute;
+  for (let i = 0; i < MAX_WALK; i++) {
+    try {
+      const real = realpathSync2.native(head);
+      const rest = relative(head, absolute);
+      return rest ? join5(real, rest) : real;
+    } catch {
+      const parent = dirname3(head);
+      if (parent === head) break;
+      head = parent;
+    }
+  }
+  return absolute;
+}
+function smallFile(path) {
+  try {
+    const info = lstatSync4(path);
+    if (!info.isFile() || info.size > 4096) return void 0;
+    return readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function folderScope(real) {
+  for (let dir = real, i = 0; i < MAX_WALK; i++) {
+    const dotGit = join5(dir, ".git");
+    let info;
+    try {
+      info = lstatSync4(dotGit);
+    } catch {
+      info = void 0;
+    }
+    if (info) {
+      const root = info.isFile() ? worktreeMain(dir, dotGit) : void 0;
+      if (!root) return { cwd: real, top: dir };
+      const rest = relative(dir, real);
+      return {
+        cwd: real,
+        top: dir,
+        main: { root, path: rest ? join5(root, rest) : root }
+      };
+    }
+    const parent = dirname3(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return { cwd: real };
+}
+function worktreeMain(dir, dotGit) {
+  const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
+  if (!pointer?.[1]) return void 0;
+  const gitdir = resolve(dir, pointer[1]);
+  if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
+  const back = smallFile(join5(gitdir, "gitdir"))?.trim();
+  if (!back) return void 0;
+  try {
+    if (realpathSync2.native(resolve(gitdir, back)) !== realpathSync2.native(dotGit))
+      return void 0;
+  } catch {
+    return void 0;
+  }
+  const common = smallFile(join5(gitdir, "commondir"))?.trim();
+  if (!common) return void 0;
+  let commonDir;
+  try {
+    commonDir = realpathSync2.native(resolve(gitdir, common));
+  } catch {
+    return void 0;
+  }
+  if (basename(commonDir) !== ".git") return void 0;
+  return dirname3(commonDir);
+}
+function validBinding(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute3(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+}
+function validKey(key) {
+  const at = key.lastIndexOf("|");
+  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
+}
+function readStore2(strictKey) {
+  try {
+    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
+      throw new Error("INVALID_PROJECT_FOLDER_STORE");
+    const out = {};
+    for (const [key, list] of Object.entries(
+      value.bindings
+    )) {
+      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
+        throw new Error("INVALID_PROJECT_FOLDER_STORE");
+      if (validKey(key) && Array.isArray(list))
+        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    }
+    return out;
+  } catch (error) {
+    if (strictKey !== void 0) throw error;
+    return {};
+  }
+}
+function readBindings(apiBase, principalId, { requireValid = false } = {}) {
+  if (!principalId) return [];
+  const key = selectionKey(apiBase, principalId);
+  return readStore2(requireValid ? key : void 0)[key] ?? [];
+}
+function bindingMatchFor(apiBase, principalId, cwd) {
+  const bindings = readBindings(apiBase, principalId);
+  if (bindings.length === 0) return void 0;
+  return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
+}
+
+// src/project/scope.ts
+function effectiveProject(cwd, apiBase) {
+  const identity = offlineIdentity();
+  const base = apiBase ?? identity.apiBase;
+  if (!isAllowedApiBase(base) || !identity.userId) return void 0;
+  const folder = usableFolder(cwd);
+  const found = folder ? bindingMatchFor(base, identity.userId, folder) : void 0;
+  if (found) {
+    const { binding, via } = found;
+    return {
+      scope: "folder",
+      apiBase: normalizeApiBase(base),
+      principalId: identity.userId.toLowerCase(),
+      tenantId: binding.tenantId,
+      projectId: binding.projectId,
+      name: binding.name,
+      selectionId: binding.bindingId,
+      folder: binding.folder,
+      via,
+      ...binding.stale ? { stale: true } : {}
+    };
+  }
+  const selection = readSelection(base, identity.userId);
+  return selection ? { scope: "computer", ...selection } : void 0;
+}
+
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
+
+// src/project/context.ts
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname as dirname4, join as join6 } from "node:path";
+import { fileURLToPath } from "node:url";
+var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function validUuid(value) {
+  return typeof value === "string" && UUID3.test(value);
+}
+function clip(value, max) {
+  return value.replace(/[\r\n"\\`$]+/g, " ").slice(0, max);
+}
+function projectCommandPrefix() {
+  try {
+    const here = dirname4(fileURLToPath(import.meta.url));
+    const script = join6(here, "project.mjs");
+    if (existsSync(script) && !/["\\$`\n]/.test(script))
+      return `node "${script}"`;
+  } catch {
+  }
+  return `npx -y memroot@${"0.21.0"} project`;
+}
+function folderOption(folder) {
+  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
+}
+function staleBindingText(project) {
+  const command = projectCommandPrefix();
+  const folder = project.folder ?? "";
+  const option = folderOption(folder);
+  return `Memroot project "${clip(project.name, 80)}" bound to folder "${clip(folder, 300)}" is no longer available, so Memroot calls here are refused. Bind another: ${command} use "<name>" ${option}; or use the project selected on this computer: ${command} unbind ${option}.`;
+}
+function boundFrom(project) {
+  const folder = `"${clip(project.folder ?? "", 300)}"`;
+  switch (project.via) {
+    case "parent_folder":
+      return `bound to parent folder ${folder}`;
+    case "repo_root":
+      return `bound to repository root ${folder}`;
+    case "repo_folder":
+      return `bound to ${folder} in this repository`;
+    case "main_checkout":
+      return `bound to main checkout ${folder}; this is a worktree`;
+    case "main_checkout_folder":
+      return `bound to ${folder} in the main checkout; this is a worktree`;
+    default:
+      return void 0;
+  }
+}
+function projectStatusLine(cwd) {
+  const command = projectCommandPrefix();
+  const selected = effectiveProject(cwd);
+  if (selected?.stale) return staleBindingText(selected);
+  if (selected?.scope === "folder") {
+    const folder = selected.folder ?? "";
+    const inherited = boundFrom(selected);
+    return `${inherited ? `Memroot project: "${clip(selected.name, 80)}" (project_id ${selected.projectId}; ${inherited})` : `Memroot project for folder "${clip(folder, 300)}": "${clip(selected.name, 80)}" (project_id ${selected.projectId})`}. Pass this project_id to memory_retrieve and memory_create. To switch ${inherited ? "it" : "this folder"}: ${command} use "<name>" ${folderOption(folder)}; other folders: ${command} use "<name>".`;
+  }
+  if (selected)
+    return `Memroot project for this computer: "${clip(selected.name, 80)}" (project_id ${selected.projectId}). Pass this project_id to memory_retrieve and memory_create. To switch every session on this computer: ${command} use "<name>".`;
+  return `No Memroot project is selected on this computer yet. Run: ${command} use (it selects the only project automatically, or lists the projects; then run ${command} use "<name>"). The choice applies to every session and agent on this computer.`;
+}
+function validateSelectionInBackground(cwd) {
+  try {
+    if (!offlineIdentity().userId) return;
+    if (process.env.NODE_ENV === "test" && process.env.MEMROOT_TEST_NO_BACKGROUND_CHECK === "1")
+      return;
+    const script = join6(dirname4(fileURLToPath(import.meta.url)), "project.mjs");
+    if (!existsSync(script)) return;
+    const folder = usableFolder(cwd);
+    const args = folder ? ["status", "--folder", folder] : ["status"];
+    const child = spawn(process.execPath, [script, ...args], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
+    });
+    child.on("error", () => {
+    });
+    child.unref();
+  } catch {
+  }
+}
+
+// src/capture/queue/job.ts
 var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
 var JOB_STATES = [
   "pending",
@@ -806,7 +949,7 @@ function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path = join6(stateSubdir(), "salt");
+  const path = join7(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -824,7 +967,7 @@ function sessionRefFor(salt, agent2, sessionId) {
 function queueDir() {
   return stateSubdir("queue");
 }
-var conflictPath = (jobId) => join6(queueDir(), `${jobId}.account-conflict`);
+var conflictPath = (jobId) => join7(queueDir(), `${jobId}.account-conflict`);
 function hasAccountConflict(jobId) {
   const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
   if (marker === void 0) return false;
@@ -844,7 +987,7 @@ function observeAccountConflict(agent2, sessionId, account) {
     createPrivateFileExclusive(conflictPath(id), (/* @__PURE__ */ new Date()).toISOString());
 }
 function jobPath(jobId) {
-  return join6(queueDir(), `${jobId}.json`);
+  return join7(queueDir(), `${jobId}.json`);
 }
 function parseJob(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -965,74 +1108,8 @@ function enqueueFromHook(input) {
   return job;
 }
 
-// src/capture/queue/lock.ts
-import {
-  lstatSync as lstatSync5,
-  mkdirSync as mkdirSync3,
-  renameSync as renameSync4,
-  rmSync as rmSync3,
-  writeFileSync as writeFileSync3
-} from "node:fs";
-import { join as join7 } from "node:path";
-function lockPath(name) {
-  return join7(stateSubdir("locks"), name);
-}
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error.code === "EPERM";
-  }
-}
-function readOwnerFile(path) {
-  return readPrivateFile(join7(path, "owner.json"), 64 * 1024);
-}
-function readOwner(path) {
-  try {
-    const value = JSON.parse(readOwnerFile(path));
-    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : NaN;
-    if (typeof value.pid !== "number" || Number.isNaN(createdAt))
-      return void 0;
-    const heartbeat = typeof value.heartbeatAt === "string" ? Date.parse(value.heartbeatAt) : NaN;
-    return {
-      pid: value.pid,
-      createdAt,
-      heartbeatAt: Number.isNaN(heartbeat) ? createdAt : heartbeat
-    };
-  } catch {
-    return void 0;
-  }
-}
-function isStale(path, staleMs) {
-  let info;
-  try {
-    info = lstatSync5(path);
-  } catch {
-    return false;
-  }
-  if (info.isSymbolicLink() || !info.isDirectory()) return true;
-  const owner = readOwner(path);
-  if (!owner) return Date.now() - info.mtimeMs > staleMs;
-  if (!processAlive(owner.pid)) return true;
-  return Date.now() - owner.heartbeatAt > staleMs;
-}
-function isLockLive(name, staleMs) {
-  const path = lockPath(name);
-  try {
-    lstatSync5(path);
-  } catch {
-    return false;
-  }
-  return !isStale(path, staleMs);
-}
-
-// src/capture/hooks/capture-trigger.ts
-import { lstatSync as lstatSync7 } from "node:fs";
-
 // src/capture/hooks/debounce.ts
-import { lstatSync as lstatSync6 } from "node:fs";
+import { lstatSync as lstatSync5 } from "node:fs";
 import { join as join8 } from "node:path";
 var TURN_END_EVERY = 8;
 var TURN_END_AFTER_MS = 20 * 60 * 1e3;
@@ -1071,7 +1148,7 @@ function cleanup(directory, keep) {
       continue;
     try {
       const path = join8(directory, name);
-      if (lstatSync6(path).mtimeMs < cutoff) removeFile(path);
+      if (lstatSync5(path).mtimeMs < cutoff) removeFile(path);
     } catch {
     }
   }
@@ -1099,146 +1176,6 @@ function noteTrigger(agent2, sessionId, trigger, now = Date.now()) {
     } catch {
     }
   return deferredIdle ? "idle_prompt" : capture;
-}
-
-// src/capture/hooks/envelope.ts
-var MAX_ENVELOPE_BYTES = 64 * 1024;
-var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
-var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
-var STDIN_DEADLINE_MS = 500;
-function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve2) => {
-    let bytes = 0;
-    let chunks = [];
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      chunks = [];
-      process.stdin.removeAllListeners("data");
-      if (bytes > maxBytes) process.stdin.on("data", () => {
-      });
-      else process.stdin.destroy();
-      resolve2(value);
-    };
-    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
-    process.stdin.on("error", () => finish(void 0));
-    process.stdin.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes <= maxBytes) chunks.push(chunk);
-    });
-    process.stdin.on("end", () => {
-      if (bytes > maxBytes) return finish(void 0);
-      try {
-        const value = JSON.parse(
-          Buffer.concat(chunks).toString("utf8")
-        );
-        finish(
-          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
-        );
-      } catch {
-        finish(void 0);
-      }
-    });
-  });
-}
-var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
-var REASON = /^[a-z_]{1,40}$/;
-var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|session_resume|session_fork)$/;
-function string(record, ...keys) {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string") return value;
-  }
-  return void 0;
-}
-function isSubagentEvent(record) {
-  return record.subagentType !== void 0 || record.subagent_type !== void 0 || record.agent_id !== void 0 || record.agent_type !== void 0;
-}
-function normalizeCaptureEvent(agent2, trigger, record) {
-  const sessionId = string(record, "session_id", "sessionId");
-  const cwd = string(record, "cwd", "workspaceRoot");
-  const rawTranscript = "transcript_path" in record ? record.transcript_path : record.transcriptPath;
-  if (!sessionId || !SESSION_ID.test(sessionId)) return void 0;
-  if (!cwd?.startsWith("/") || cwd.length > 4096 || cwd.includes("\0"))
-    return void 0;
-  let transcriptPath;
-  if (typeof rawTranscript === "string" && rawTranscript.length > 0)
-    transcriptPath = rawTranscript;
-  else if (agent2 === "grok" && rawTranscript === void 0)
-    transcriptPath = null;
-  else return void 0;
-  let reason;
-  if (trigger === "turn_end" || trigger === "subagent_stop")
-    reason = "turn_end";
-  else if (trigger === "idle") reason = "idle_prompt";
-  else if (trigger === "resume") reason = "session_resume";
-  else if (trigger === "compaction") {
-    const how = string(record, "trigger", "source");
-    reason = how === "auto" || how === "manual" ? `compact_${how}` : "compact";
-  } else {
-    const value = string(record, "reason");
-    reason = value && REASON.test(value) && !OPEN_SESSION_REASON.test(value) ? value : "other";
-  }
-  return {
-    sessionId,
-    transcriptPath,
-    cwd,
-    reason,
-    subagent: isSubagentEvent(record)
-  };
-}
-
-// src/capture/hooks/guards.ts
-import { realpathSync as realpathSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join9, normalize as normalize3 } from "node:path";
-function inertProcess() {
-  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
-  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
-  return false;
-}
-function processGuard() {
-  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
-}
-function absoluteEnv2(name) {
-  const value = process.env[name];
-  return value && isAbsolute3(value) ? normalize3(value) : void 0;
-}
-function transcriptRoots(agent2) {
-  if (agent2 === "claude")
-    return [
-      join9(
-        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join9(homedir2(), ".claude"),
-        "projects"
-      )
-    ];
-  if (agent2 === "codex") {
-    const home = absoluteEnv2("CODEX_HOME") ?? join9(homedir2(), ".codex");
-    return [join9(home, "sessions"), join9(home, "archived_sessions")];
-  }
-  return [
-    join9(absoluteEnv2("GROK_HOME") ?? join9(homedir2(), ".grok"), "sessions")
-  ];
-}
-function transcriptPathAllowed(agent2, path) {
-  if (!isAbsolute3(path) || path.length > 4096 || path.includes("\0") || path.split("/").includes("..") || normalize3(path) !== path)
-    return false;
-  if (agent2 !== "grok" && !path.endsWith(".jsonl")) return false;
-  return transcriptRoots(agent2).some((root) => {
-    if (path.startsWith(`${root}/`)) return true;
-    try {
-      return path.startsWith(`${realpathSync2(root)}/`);
-    } catch {
-      return false;
-    }
-  });
-}
-function isHeadlessSession(agent2) {
-  if (agent2 === "claude")
-    return (process.env.CLAUDE_CODE_ENTRYPOINT ?? "").startsWith("sdk");
-  return false;
 }
 
 // src/capture/hooks/capture-trigger.ts
@@ -1286,7 +1223,7 @@ function queueCapture(agent2, record, trigger, options = {}) {
     let floorBytes = 0;
     if (envelope.transcriptPath)
       try {
-        const info = lstatSync7(envelope.transcriptPath);
+        const info = lstatSync6(envelope.transcriptPath);
         if (info.isFile()) floorBytes = info.size;
       } catch {
       }
@@ -1302,20 +1239,91 @@ function queueCapture(agent2, record, trigger, options = {}) {
   return true;
 }
 
-// src/capture/hooks/registration.ts
-import { join as join10 } from "node:path";
-function mcpRegistered(agent2) {
+// src/capture/hooks/spawn.ts
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync as existsSync2 } from "node:fs";
+import { dirname as dirname5, join as join9 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+function spawnWorker() {
   try {
-    const raw = readPrivateFileIfExists(
-      join10(memrootConfigDir(), "config.json"),
-      64 * 1024
-    );
-    if (raw === void 0) return false;
-    const config = JSON.parse(raw);
-    return config.schemaVersion === 1 && config.mcpRegistered?.[agent2] === true;
+    const here = dirname5(fileURLToPath2(import.meta.url));
+    const sibling = join9(here, "capture-worker.mjs");
+    const worker = existsSync2(sibling) ? sibling : join9(here, "plugins", "claude", "scripts", "capture-worker.mjs");
+    if (!existsSync2(worker)) return;
+    const child = spawn2(process.execPath, [worker], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
+    });
+    child.on("error", () => {
+    });
+    child.unref();
+  } catch {
+  }
+}
+
+// src/state/lock.ts
+import {
+  lstatSync as lstatSync7,
+  mkdirSync as mkdirSync3,
+  renameSync as renameSync4,
+  rmSync as rmSync3,
+  writeFileSync as writeFileSync3
+} from "node:fs";
+import { join as join10 } from "node:path";
+var WORKER_LOCK_STALE_MS = 9e5;
+function lockPath(name) {
+  return join10(stateSubdir("locks"), name);
+}
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+function readOwnerFile(path) {
+  return readPrivateFile(join10(path, "owner.json"), 64 * 1024);
+}
+function readOwner(path) {
+  try {
+    const value = JSON.parse(readOwnerFile(path));
+    const createdAt = typeof value.createdAt === "string" ? Date.parse(value.createdAt) : NaN;
+    if (typeof value.pid !== "number" || Number.isNaN(createdAt))
+      return void 0;
+    const heartbeat = typeof value.heartbeatAt === "string" ? Date.parse(value.heartbeatAt) : NaN;
+    return {
+      pid: value.pid,
+      createdAt,
+      heartbeatAt: Number.isNaN(heartbeat) ? createdAt : heartbeat
+    };
+  } catch {
+    return void 0;
+  }
+}
+function isStale(path, staleMs) {
+  let info;
+  try {
+    info = lstatSync7(path);
   } catch {
     return false;
   }
+  if (info.isSymbolicLink() || !info.isDirectory()) return true;
+  const owner = readOwner(path);
+  if (!owner) return Date.now() - info.mtimeMs > staleMs;
+  if (!processAlive(owner.pid)) return true;
+  return Date.now() - owner.heartbeatAt > staleMs;
+}
+function isLockLive(name, staleMs) {
+  const path = lockPath(name);
+  try {
+    lstatSync7(path);
+  } catch {
+    return false;
+  }
+  return !isStale(path, staleMs);
 }
 
 // ../../packages/contracts/src/recall-guidance-v7.ts
@@ -1376,7 +1384,7 @@ function recallGuidance2(...clauses) {
   return clauses.map((clause) => RECALL_CLAUSES2[clause]).join(" ");
 }
 
-// src/capture/hooks/session-context.ts
+// src/hooks/session-context.ts
 var SESSION_START_CONTEXT = recallGuidance2(
   "primary",
   "rule",
@@ -1398,30 +1406,23 @@ var PROMPT_NUDGE = [
 ].join(" ");
 var SESSION_START_NOT_CONNECTED = "Memroot plugin is installed but not connected for this agent, so the Memroot memory tools are unavailable. If the user asks about Memroot, suggest running `npx memroot setup` to connect it.";
 
-// src/capture/hooks/spawn.ts
-import { spawn as spawn2 } from "node:child_process";
-import { existsSync as existsSync2 } from "node:fs";
-import { dirname as dirname5, join as join11 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-function spawnWorker() {
+// src/hooks/shared/registration.ts
+import { join as join11 } from "node:path";
+function mcpRegistered(agent2) {
   try {
-    const here = dirname5(fileURLToPath2(import.meta.url));
-    const sibling = join11(here, "capture-worker.mjs");
-    const worker = existsSync2(sibling) ? sibling : join11(here, "plugins", "claude", "scripts", "capture-worker.mjs");
-    if (!existsSync2(worker)) return;
-    const child = spawn2(process.execPath, [worker], {
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
-    });
-    child.on("error", () => {
-    });
-    child.unref();
+    const raw = readPrivateFileIfExists(
+      join11(memrootConfigDir(), "config.json"),
+      64 * 1024
+    );
+    if (raw === void 0) return false;
+    const config = JSON.parse(raw);
+    return config.schemaVersion === 1 && config.mcpRegistered?.[agent2] === true;
   } catch {
+    return false;
   }
 }
 
-// src/capture/hooks/session-start.ts
+// src/hooks/session-start.ts
 var agent = "codex";
 var allowedSources = /* @__PURE__ */ new Set([
   "startup",
@@ -1430,7 +1431,6 @@ var allowedSources = /* @__PURE__ */ new Set([
   "compact",
   "fork"
 ]);
-var WORKER_LOCK_STALE_MS = 15 * 60 * 1e3;
 function sweep(queued) {
   try {
     if (!activeConsentFor(agent)) return;

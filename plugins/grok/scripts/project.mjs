@@ -1,8 +1,17 @@
 #!/usr/bin/env node
+var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __commonJS = (cb, mod) => function __require() {
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
+};
 var __export = (target, all) => {
   for (var name in all)
     __defProp(target, name, { get: all[name], enumerable: true });
@@ -16,8 +25,555 @@ var __copyProps = (to, from, except, desc) => {
   return to;
 };
 var __reExport = (target, mod, secondTarget) => (__copyProps(target, mod, "default"), secondTarget && __copyProps(secondTarget, mod, "default"));
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 
-// src/project-command.ts
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/debug.js
+var require_debug = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/debug.js"(exports, module) {
+    "use strict";
+    var debug = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
+    };
+    module.exports = debug;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/constants.js
+var require_constants = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/constants.js"(exports, module) {
+    "use strict";
+    var SEMVER_SPEC_VERSION = "2.0.0";
+    var MAX_LENGTH = 256;
+    var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || /* istanbul ignore next */
+    9007199254740991;
+    var MAX_SAFE_COMPONENT_LENGTH = 16;
+    var MAX_SAFE_BUILD_LENGTH = MAX_LENGTH - 6;
+    var WHITESPACE_CHARACTERS = [
+      "	",
+      "\n",
+      "\v",
+      "\f",
+      "\r",
+      " ",
+      "\xA0",
+      "\u1680",
+      "\u2000",
+      "\u2001",
+      "\u2002",
+      "\u2003",
+      "\u2004",
+      "\u2005",
+      "\u2006",
+      "\u2007",
+      "\u2008",
+      "\u2009",
+      "\u200A",
+      "\u2028",
+      "\u2029",
+      "\u202F",
+      "\u205F",
+      "\u3000",
+      "\uFEFF"
+    ];
+    var RELEASE_TYPES = [
+      "major",
+      "premajor",
+      "minor",
+      "preminor",
+      "patch",
+      "prepatch",
+      "prerelease"
+    ];
+    module.exports = {
+      MAX_LENGTH,
+      MAX_SAFE_COMPONENT_LENGTH,
+      MAX_SAFE_BUILD_LENGTH,
+      MAX_SAFE_INTEGER,
+      WHITESPACE_CHARACTERS,
+      RELEASE_TYPES,
+      SEMVER_SPEC_VERSION,
+      FLAG_INCLUDE_PRERELEASE: 1,
+      FLAG_LOOSE: 2
+    };
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/re.js
+var require_re = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/re.js"(exports, module) {
+    "use strict";
+    var {
+      MAX_SAFE_COMPONENT_LENGTH,
+      MAX_SAFE_BUILD_LENGTH,
+      MAX_LENGTH
+    } = require_constants();
+    var debug = require_debug();
+    exports = module.exports = {};
+    var re = exports.re = [];
+    var safeRe = exports.safeRe = [];
+    var src = exports.src = [];
+    var safeSrc = exports.safeSrc = [];
+    var t2 = exports.t = {};
+    var R2 = 0;
+    var LETTERDASHNUMBER = "[a-zA-Z0-9-]";
+    var safeRegexReplacements = [
+      ["\\s", 1],
+      ["\\d", MAX_LENGTH],
+      [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH]
+    ];
+    var makeSafeRegex = (value) => {
+      for (const [token, max] of safeRegexReplacements) {
+        value = value.split(`${token}*`).join(`${token}{0,${max}}`).split(`${token}+`).join(`${token}{1,${max}}`);
+      }
+      return value;
+    };
+    var createToken = (name, value, isGlobal) => {
+      const safe = makeSafeRegex(value);
+      const index = R2++;
+      debug(name, index, value);
+      t2[name] = index;
+      src[index] = value;
+      safeSrc[index] = safe;
+      re[index] = new RegExp(value, isGlobal ? "g" : void 0);
+      safeRe[index] = new RegExp(safe, isGlobal ? "g" : void 0);
+    };
+    createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
+    createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
+    createToken("NONNUMERICIDENTIFIER", `\\d*[a-zA-Z-]${LETTERDASHNUMBER}*`);
+    createToken("MAINVERSION", `(${src[t2.NUMERICIDENTIFIER]})\\.(${src[t2.NUMERICIDENTIFIER]})\\.(${src[t2.NUMERICIDENTIFIER]})`);
+    createToken("MAINVERSIONLOOSE", `(${src[t2.NUMERICIDENTIFIERLOOSE]})\\.(${src[t2.NUMERICIDENTIFIERLOOSE]})\\.(${src[t2.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASEIDENTIFIER", `(?:${src[t2.NONNUMERICIDENTIFIER]}|${src[t2.NUMERICIDENTIFIER]})`);
+    createToken("PRERELEASEIDENTIFIERLOOSE", `(?:${src[t2.NONNUMERICIDENTIFIER]}|${src[t2.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASE", `(?:-(${src[t2.PRERELEASEIDENTIFIER]}(?:\\.${src[t2.PRERELEASEIDENTIFIER]})*))`);
+    createToken("PRERELEASELOOSE", `(?:-?(${src[t2.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t2.PRERELEASEIDENTIFIERLOOSE]})*))`);
+    createToken("BUILDIDENTIFIER", `${LETTERDASHNUMBER}+`);
+    createToken("BUILD", `(?:\\+(${src[t2.BUILDIDENTIFIER]}(?:\\.${src[t2.BUILDIDENTIFIER]})*))`);
+    createToken("FULLPLAIN", `v?${src[t2.MAINVERSION]}${src[t2.PRERELEASE]}?${src[t2.BUILD]}?`);
+    createToken("FULL", `^${src[t2.FULLPLAIN]}$`);
+    createToken("LOOSEPLAIN", `[v=\\s]*${src[t2.MAINVERSIONLOOSE]}${src[t2.PRERELEASELOOSE]}?${src[t2.BUILD]}?`);
+    createToken("LOOSE", `^${src[t2.LOOSEPLAIN]}$`);
+    createToken("GTLT", "((?:<|>)?=?)");
+    createToken("XRANGEIDENTIFIERLOOSE", `${src[t2.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
+    createToken("XRANGEIDENTIFIER", `${src[t2.NUMERICIDENTIFIER]}|x|X|\\*`);
+    createToken("XRANGEPLAIN", `[v=\\s]*(${src[t2.XRANGEIDENTIFIER]})(?:\\.(${src[t2.XRANGEIDENTIFIER]})(?:\\.(${src[t2.XRANGEIDENTIFIER]})(?:${src[t2.PRERELEASE]})?${src[t2.BUILD]}?)?)?`);
+    createToken("XRANGEPLAINLOOSE", `[v=\\s]*(${src[t2.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t2.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t2.XRANGEIDENTIFIERLOOSE]})(?:${src[t2.PRERELEASELOOSE]})?${src[t2.BUILD]}?)?)?`);
+    createToken("XRANGE", `^${src[t2.GTLT]}\\s*${src[t2.XRANGEPLAIN]}$`);
+    createToken("XRANGELOOSE", `^${src[t2.GTLT]}\\s*${src[t2.XRANGEPLAINLOOSE]}$`);
+    createToken("COERCEPLAIN", `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?`);
+    createToken("COERCE", `${src[t2.COERCEPLAIN]}(?:$|[^\\d])`);
+    createToken("COERCEFULL", src[t2.COERCEPLAIN] + `(?:${src[t2.PRERELEASE]})?(?:${src[t2.BUILD]})?(?:$|[^\\d])`);
+    createToken("COERCERTL", src[t2.COERCE], true);
+    createToken("COERCERTLFULL", src[t2.COERCEFULL], true);
+    createToken("LONETILDE", "(?:~>?)");
+    createToken("TILDETRIM", `(\\s*)${src[t2.LONETILDE]}\\s+`, true);
+    exports.tildeTrimReplace = "$1~";
+    createToken("TILDE", `^${src[t2.LONETILDE]}${src[t2.XRANGEPLAIN]}$`);
+    createToken("TILDELOOSE", `^${src[t2.LONETILDE]}${src[t2.XRANGEPLAINLOOSE]}$`);
+    createToken("LONECARET", "(?:\\^)");
+    createToken("CARETTRIM", `(\\s*)${src[t2.LONECARET]}\\s+`, true);
+    exports.caretTrimReplace = "$1^";
+    createToken("CARET", `^${src[t2.LONECARET]}${src[t2.XRANGEPLAIN]}$`);
+    createToken("CARETLOOSE", `^${src[t2.LONECARET]}${src[t2.XRANGEPLAINLOOSE]}$`);
+    createToken("COMPARATORLOOSE", `^${src[t2.GTLT]}\\s*(${src[t2.LOOSEPLAIN]})$|^$`);
+    createToken("COMPARATOR", `^${src[t2.GTLT]}\\s*(${src[t2.FULLPLAIN]})$|^$`);
+    createToken("COMPARATORTRIM", `(\\s*)${src[t2.GTLT]}\\s*(${src[t2.LOOSEPLAIN]}|${src[t2.XRANGEPLAIN]})`, true);
+    exports.comparatorTrimReplace = "$1$2$3";
+    createToken("HYPHENRANGE", `^\\s*(${src[t2.XRANGEPLAIN]})\\s+-\\s+(${src[t2.XRANGEPLAIN]})\\s*$`);
+    createToken("HYPHENRANGELOOSE", `^\\s*(${src[t2.XRANGEPLAINLOOSE]})\\s+-\\s+(${src[t2.XRANGEPLAINLOOSE]})\\s*$`);
+    createToken("STAR", "(<|>)?=?\\s*\\*");
+    createToken("GTE0", "^\\s*>=\\s*0\\.0\\.0\\s*$");
+    createToken("GTE0PRE", "^\\s*>=\\s*0\\.0\\.0-0\\s*$");
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/parse-options.js
+var require_parse_options = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/parse-options.js"(exports, module) {
+    "use strict";
+    var looseOption = Object.freeze({ loose: true });
+    var emptyOpts = Object.freeze({});
+    var parseOptions = (options) => {
+      if (!options) {
+        return emptyOpts;
+      }
+      if (typeof options !== "object") {
+        return looseOption;
+      }
+      return options;
+    };
+    module.exports = parseOptions;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/identifiers.js
+var require_identifiers = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/identifiers.js"(exports, module) {
+    "use strict";
+    var numeric = /^[0-9]+$/;
+    var compareIdentifiers = (a2, b) => {
+      if (typeof a2 === "number" && typeof b === "number") {
+        return a2 === b ? 0 : a2 < b ? -1 : 1;
+      }
+      const anum = numeric.test(a2);
+      const bnum = numeric.test(b);
+      if (anum && bnum) {
+        a2 = +a2;
+        b = +b;
+      }
+      return a2 === b ? 0 : anum && !bnum ? -1 : bnum && !anum ? 1 : a2 < b ? -1 : 1;
+    };
+    var rcompareIdentifiers = (a2, b) => compareIdentifiers(b, a2);
+    module.exports = {
+      compareIdentifiers,
+      rcompareIdentifiers
+    };
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/classes/semver.js
+var require_semver = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/classes/semver.js"(exports, module) {
+    "use strict";
+    var debug = require_debug();
+    var { MAX_LENGTH, MAX_SAFE_INTEGER } = require_constants();
+    var { safeRe: re, t: t2 } = require_re();
+    var parseOptions = require_parse_options();
+    var { compareIdentifiers } = require_identifiers();
+    var isPrereleaseIdentifier = (prerelease, identifier) => {
+      const identifiers = identifier.split(".");
+      if (identifiers.length > prerelease.length) {
+        return false;
+      }
+      for (let i2 = 0; i2 < identifiers.length; i2++) {
+        if (compareIdentifiers(prerelease[i2], identifiers[i2]) !== 0) {
+          return false;
+        }
+      }
+      return true;
+    };
+    var SemVer = class _SemVer {
+      constructor(version2, options) {
+        options = parseOptions(options);
+        if (version2 instanceof _SemVer) {
+          if (version2.loose === !!options.loose && version2.includePrerelease === !!options.includePrerelease) {
+            return version2;
+          } else {
+            version2 = version2.version;
+          }
+        } else if (typeof version2 !== "string") {
+          throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version2}".`);
+        }
+        if (version2.length > MAX_LENGTH) {
+          throw new TypeError(
+            `version is longer than ${MAX_LENGTH} characters`
+          );
+        }
+        debug("SemVer", version2, options);
+        this.options = options;
+        this.loose = !!options.loose;
+        this.includePrerelease = !!options.includePrerelease;
+        const m = version2.trim().match(options.loose ? re[t2.LOOSE] : re[t2.FULL]);
+        if (!m) {
+          throw new TypeError(`Invalid Version: ${version2}`);
+        }
+        this.raw = version2;
+        this.major = +m[1];
+        this.minor = +m[2];
+        this.patch = +m[3];
+        if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
+          throw new TypeError("Invalid major version");
+        }
+        if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
+          throw new TypeError("Invalid minor version");
+        }
+        if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
+          throw new TypeError("Invalid patch version");
+        }
+        if (!m[4]) {
+          this.prerelease = [];
+        } else {
+          this.prerelease = m[4].split(".").map((id) => {
+            if (/^[0-9]+$/.test(id)) {
+              const num = +id;
+              if (num >= 0 && num < MAX_SAFE_INTEGER) {
+                return num;
+              }
+            }
+            return id;
+          });
+        }
+        this.build = m[5] ? m[5].split(".") : [];
+        this.format();
+      }
+      format() {
+        this.version = `${this.major}.${this.minor}.${this.patch}`;
+        if (this.prerelease.length) {
+          this.version += `-${this.prerelease.join(".")}`;
+        }
+        return this.version;
+      }
+      toString() {
+        return this.version;
+      }
+      compare(other) {
+        debug("SemVer.compare", this.version, this.options, other);
+        if (!(other instanceof _SemVer)) {
+          if (typeof other === "string" && other === this.version) {
+            return 0;
+          }
+          other = new _SemVer(other, this.options);
+        }
+        if (other.version === this.version) {
+          return 0;
+        }
+        return this.compareMain(other) || this.comparePre(other);
+      }
+      compareMain(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        if (this.major < other.major) {
+          return -1;
+        }
+        if (this.major > other.major) {
+          return 1;
+        }
+        if (this.minor < other.minor) {
+          return -1;
+        }
+        if (this.minor > other.minor) {
+          return 1;
+        }
+        if (this.patch < other.patch) {
+          return -1;
+        }
+        if (this.patch > other.patch) {
+          return 1;
+        }
+        return 0;
+      }
+      comparePre(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        if (this.prerelease.length && !other.prerelease.length) {
+          return -1;
+        } else if (!this.prerelease.length && other.prerelease.length) {
+          return 1;
+        } else if (!this.prerelease.length && !other.prerelease.length) {
+          return 0;
+        }
+        let i2 = 0;
+        do {
+          const a2 = this.prerelease[i2];
+          const b = other.prerelease[i2];
+          debug("prerelease compare", i2, a2, b);
+          if (a2 === void 0 && b === void 0) {
+            return 0;
+          } else if (b === void 0) {
+            return 1;
+          } else if (a2 === void 0) {
+            return -1;
+          } else if (a2 === b) {
+            continue;
+          } else {
+            return compareIdentifiers(a2, b);
+          }
+        } while (++i2);
+      }
+      compareBuild(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        let i2 = 0;
+        do {
+          const a2 = this.build[i2];
+          const b = other.build[i2];
+          debug("build compare", i2, a2, b);
+          if (a2 === void 0 && b === void 0) {
+            return 0;
+          } else if (b === void 0) {
+            return 1;
+          } else if (a2 === void 0) {
+            return -1;
+          } else if (a2 === b) {
+            continue;
+          } else {
+            return compareIdentifiers(a2, b);
+          }
+        } while (++i2);
+      }
+      // preminor will bump the version up to the next minor release, and immediately
+      // down to pre-release. premajor and prepatch work the same way.
+      inc(release, identifier, identifierBase) {
+        if (release.startsWith("pre")) {
+          if (!identifier && identifierBase === false) {
+            throw new Error("invalid increment argument: identifier is empty");
+          }
+          if (identifier) {
+            const match2 = `-${identifier}`.match(this.options.loose ? re[t2.PRERELEASELOOSE] : re[t2.PRERELEASE]);
+            if (!match2 || match2[1] !== identifier) {
+              throw new Error(`invalid identifier: ${identifier}`);
+            }
+          }
+        }
+        switch (release) {
+          case "premajor":
+            this.prerelease.length = 0;
+            this.patch = 0;
+            this.minor = 0;
+            this.major++;
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "preminor":
+            this.prerelease.length = 0;
+            this.patch = 0;
+            this.minor++;
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "prepatch":
+            this.prerelease.length = 0;
+            this.inc("patch", identifier, identifierBase);
+            this.inc("pre", identifier, identifierBase);
+            break;
+          // If the input is a non-prerelease version, this acts the same as
+          // prepatch.
+          case "prerelease":
+            if (this.prerelease.length === 0) {
+              this.inc("patch", identifier, identifierBase);
+            }
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "release":
+            if (this.prerelease.length === 0) {
+              throw new Error(`version ${this.raw} is not a prerelease`);
+            }
+            this.prerelease.length = 0;
+            break;
+          case "major":
+            if (this.minor !== 0 || this.patch !== 0 || this.prerelease.length === 0) {
+              this.major++;
+            }
+            this.minor = 0;
+            this.patch = 0;
+            this.prerelease = [];
+            break;
+          case "minor":
+            if (this.patch !== 0 || this.prerelease.length === 0) {
+              this.minor++;
+            }
+            this.patch = 0;
+            this.prerelease = [];
+            break;
+          case "patch":
+            if (this.prerelease.length === 0) {
+              this.patch++;
+            }
+            this.prerelease = [];
+            break;
+          // This probably shouldn't be used publicly.
+          // 1.0.0 'pre' would become 1.0.0-0 which is the wrong direction.
+          case "pre": {
+            const base = Number(identifierBase) ? 1 : 0;
+            if (this.prerelease.length === 0) {
+              this.prerelease = [base];
+            } else {
+              let i2 = this.prerelease.length;
+              while (--i2 >= 0) {
+                if (typeof this.prerelease[i2] === "number") {
+                  this.prerelease[i2]++;
+                  i2 = -2;
+                }
+              }
+              if (i2 === -1) {
+                if (identifier === this.prerelease.join(".") && identifierBase === false) {
+                  throw new Error("invalid increment argument: identifier already exists");
+                }
+                this.prerelease.push(base);
+              }
+            }
+            if (identifier) {
+              let prerelease = [identifier, base];
+              if (identifierBase === false) {
+                prerelease = [identifier];
+              }
+              if (isPrereleaseIdentifier(this.prerelease, identifier)) {
+                const prereleaseBase = this.prerelease[identifier.split(".").length];
+                if (isNaN(prereleaseBase)) {
+                  this.prerelease = prerelease;
+                }
+              } else {
+                this.prerelease = prerelease;
+              }
+            }
+            break;
+          }
+          default:
+            throw new Error(`invalid increment argument: ${release}`);
+        }
+        this.raw = this.format();
+        if (this.build.length) {
+          this.raw += `+${this.build.join(".")}`;
+        }
+        return this;
+      }
+    };
+    module.exports = SemVer;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/compare.js
+var require_compare = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/compare.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var compare2 = (a2, b, loose) => new SemVer(a2, loose).compare(new SemVer(b, loose));
+    module.exports = compare2;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/parse.js
+var require_parse = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/parse.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var parse2 = (version2, options, throwErrors = false) => {
+      if (version2 instanceof SemVer) {
+        return version2;
+      }
+      try {
+        return new SemVer(version2, options);
+      } catch (er) {
+        if (!throwErrors) {
+          return null;
+        }
+        throw er;
+      }
+    };
+    module.exports = parse2;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/valid.js
+var require_valid = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/valid.js"(exports, module) {
+    "use strict";
+    var parse2 = require_parse();
+    var valid3 = (version2, options) => {
+      const v = parse2(version2, options);
+      return v ? v.version : null;
+    };
+    module.exports = valid3;
+  }
+});
+
+// src/project/command.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { existsSync as existsSync3, lstatSync as lstatSync7, rmSync as rmSync5, statSync } from "node:fs";
 import { join as join13, normalize as normalize3, resolve as resolve2 } from "node:path";
@@ -98,14 +654,855 @@ var HAS_INVISIBLE_NAME_FORMATTING = new RegExp(
   "u"
 );
 
-// src/auth.ts
+// src/connection/api-base.ts
+function isLoopbackHostname(hostname) {
+  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
+}
+function isAllowedApiBase(value) {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash) return false;
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+var PROD_API_BASE = "https://api.memroot.dev";
+var DEV_API_BASE = "http://localhost:8787";
+function resolveApiBase(options, config) {
+  const base = options.apiBase ?? process.env.MEMROOT_API_BASE ?? (options.env ? options.env === "dev" ? DEV_API_BASE : PROD_API_BASE : void 0) ?? config.apiBase ?? PROD_API_BASE;
+  const normalized = base.replace(/\/+$/, "");
+  if (!isAllowedApiBase(normalized))
+    throw new Error(
+      "INSECURE_API_BASE: The API base must use https, or http only on a loopback address for local development."
+    );
+  return normalized;
+}
+
+// src/state/paths.ts
+import { randomBytes } from "node:crypto";
+import {
+  chmodSync,
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, join, normalize } from "node:path";
+var UnsafePathError = class extends Error {
+  constructor(code = "UNSAFE_PATH") {
+    super(`${code}: refusing an unexpected file type or symbolic link.`);
+    this.code = code;
+  }
+  code;
+};
+function absoluteEnv(name) {
+  const value = process.env[name];
+  if (!value) return void 0;
+  if (!isAbsolute(value))
+    throw new Error(`INVALID_STATE_DIRECTORY: ${name} must be absolute.`);
+  return normalize(value);
+}
+function stateBoundary() {
+  const explicit = absoluteEnv("MEMROOT_STATE_DIR");
+  if (explicit) return { boundary: explicit, dir: explicit };
+  const base = absoluteEnv("XDG_STATE_HOME") ?? join(homedir(), ".local", "state");
+  return { boundary: base, dir: join(base, "memroot", "capture") };
+}
+function stateDir() {
+  return stateBoundary().dir;
+}
+function memrootConfigDir() {
+  const override = process.env.MEMROOT_TEST_CONFIG_DIR;
+  if (process.env.NODE_ENV === "test" && override && isAbsolute(override))
+    return normalize(override);
+  return join(homedir(), ".memroot");
+}
+function consentPath() {
+  return join(memrootConfigDir(), "capture.json");
+}
+function assertRealDirectory(path) {
+  const info = lstatSync(path);
+  if (info.isSymbolicLink() || !info.isDirectory()) throw new UnsafePathError();
+}
+function ensurePrivateDir(path, boundary, checkRoot = false) {
+  const target = normalize(path);
+  const root = normalize(boundary);
+  if (target !== root && !target.startsWith(`${root}/`))
+    throw new UnsafePathError();
+  mkdirSync(target, { recursive: true, mode: 448 });
+  let current = target;
+  for (; ; ) {
+    if (current === root) {
+      if (checkRoot) assertRealDirectory(current);
+      break;
+    }
+    assertRealDirectory(current);
+    current = dirname(current);
+  }
+  const info = lstatSync(target);
+  if ((info.mode & 511) !== 448) chmodSync(target, 448);
+}
+function stateSubdir(...parts) {
+  const { boundary, dir } = stateBoundary();
+  const path = join(dir, ...parts);
+  ensurePrivateDir(path, boundary, boundary === dir);
+  return path;
+}
+function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
+  return readPrivateBytes(path, maxBytes).bytes.toString("utf8");
+}
+function readPrivateBytes(path, maxBytes = 16 * 1024 * 1024) {
+  const fd = openSync(
+    path,
+    constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0)
+  );
+  try {
+    const info = fstatSync(fd);
+    if (!info.isFile()) throw new UnsafePathError();
+    if (info.size > maxBytes) throw new UnsafePathError("FILE_TOO_LARGE");
+    return { bytes: readFileSync(fd), mode: info.mode & 511 };
+  } finally {
+    closeSync(fd);
+  }
+}
+function readPrivateFileIfExists(path, maxBytes) {
+  try {
+    return readPrivateFile(path, maxBytes);
+  } catch (error) {
+    if (error.code === "ENOENT") return void 0;
+    if (error.code === "ELOOP")
+      throw new UnsafePathError();
+    throw error;
+  }
+}
+function writePrivateFileAtomic(path, content, mode) {
+  const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+  try {
+    writeFileSync(temporary, content, { flag: "wx", mode: 384 });
+    if (mode !== void 0) chmodSync(temporary, mode);
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+function removeFile(path) {
+  rmSync(path, { force: true });
+}
+function listFiles(path) {
+  try {
+    assertRealDirectory(path);
+    return readdirSync(path).sort();
+  } catch (error) {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  }
+}
+function captureAgreementPath() {
+  return join(memrootConfigDir(), "capture-agreement.json");
+}
+
+// src/capture/consent.ts
+var CAPTURE_AGENTS = ["claude", "codex", "grok"];
+var CONSENT_TEXT_VERSION = "capture-consent-v2";
+var MAX_ITEMS_PER_CAPTURE_LIMIT = 50;
+var MAX_ITEMS_PER_24H_LIMIT = 2500;
+var PREVIOUS_MAX_ITEMS_PER_24H_LIMIT = 500;
+var KEYS = [
+  "schemaVersion",
+  "enabled",
+  "enabledAt",
+  "consentTextVersion",
+  "apiBase",
+  "agents",
+  "crossAgentExtraction",
+  "includeHeadlessSessions",
+  "maxItemsPerSession",
+  "maxItemsPerDay",
+  "models"
+];
+var MODEL = /^[A-Za-z0-9._:/@+-]{1,128}$/;
+function isInt(value, min, max) {
+  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+}
+function parseConsent(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return void 0;
+  const record = value;
+  const keys = Object.keys(record);
+  if (keys.some((key) => !KEYS.includes(key)) || keys.length !== KEYS.length)
+    return void 0;
+  const agents2 = record.agents;
+  const models = record.models;
+  if (record.schemaVersion !== 1 || typeof record.enabled !== "boolean" || typeof record.enabledAt !== "string" || Number.isNaN(Date.parse(record.enabledAt)) || record.consentTextVersion !== CONSENT_TEXT_VERSION || typeof record.apiBase !== "string" || !isAllowedApiBase(record.apiBase) || record.apiBase.endsWith("/") || !Array.isArray(agents2) || agents2.length === 0 || agents2.length > CAPTURE_AGENTS.length || new Set(agents2).size !== agents2.length || agents2.some((agent) => !CAPTURE_AGENTS.includes(agent)) || typeof record.crossAgentExtraction !== "boolean" || typeof record.includeHeadlessSessions !== "boolean" || !isInt(record.maxItemsPerSession, 1, 5) || !isInt(record.maxItemsPerDay, 1, 20) || !models || typeof models !== "object" || Array.isArray(models))
+    return void 0;
+  const modelRecord = models;
+  const modelKeys = Object.keys(modelRecord);
+  if (modelKeys.length !== CAPTURE_AGENTS.length || modelKeys.some((key) => !CAPTURE_AGENTS.includes(key)) || Object.values(modelRecord).some(
+    (model) => model !== null && (typeof model !== "string" || !MODEL.test(model))
+  ))
+    return void 0;
+  return record;
+}
+function readConsent() {
+  let raw;
+  try {
+    raw = readPrivateFileIfExists(consentPath(), 64 * 1024);
+  } catch {
+    return { kind: "invalid" };
+  }
+  if (raw === void 0) return { kind: "absent" };
+  try {
+    const consent = parseConsent(JSON.parse(raw));
+    return consent ? { kind: "ok", consent } : { kind: "invalid" };
+  } catch {
+    return { kind: "invalid" };
+  }
+}
+function activeConsentFor(agent) {
+  const read = readConsent();
+  if (read.kind !== "ok") return void 0;
+  return read.consent.enabled && read.consent.agents.includes(agent) ? read.consent : void 0;
+}
+var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v6";
+var PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
+function currentAgreement(consent) {
+  if (!consent.enabled) return void 0;
+  try {
+    const raw = readPrivateFileIfExists(captureAgreementPath(), 4 * 1024);
+    if (raw === void 0) return void 0;
+    const value = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION && value.consentTextVersion !== PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(
+      value.maxItemsPerDay,
+      1,
+      value.consentTextVersion === CAPTURE_AGREEMENT_TEXT_VERSION ? MAX_ITEMS_PER_24H_LIMIT : PREVIOUS_MAX_ITEMS_PER_24H_LIMIT
+    ))
+      return void 0;
+    return value;
+  } catch {
+    return void 0;
+  }
+}
+function activeAgreementFor(agent) {
+  const consent = activeConsentFor(agent);
+  if (!consent) return void 0;
+  const agreement = currentAgreement(consent);
+  return agreement ? { consent, agreement } : void 0;
+}
+
+// src/capture/hooks/spawn.ts
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname as dirname2, join as join2 } from "node:path";
+import { fileURLToPath } from "node:url";
+function spawnWorker() {
+  try {
+    const here = dirname2(fileURLToPath(import.meta.url));
+    const sibling = join2(here, "capture-worker.mjs");
+    const worker = existsSync(sibling) ? sibling : join2(here, "plugins", "claude", "scripts", "capture-worker.mjs");
+    if (!existsSync(worker)) return;
+    const child = spawn(process.execPath, [worker], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
+    });
+    child.on("error", () => {
+    });
+    child.unref();
+  } catch {
+  }
+}
+
+// src/capture/queue/job.ts
+import { join as join7 } from "node:path";
+
+// src/project/context.ts
+import { existsSync as existsSync2 } from "node:fs";
+import { dirname as dirname5, join as join6 } from "node:path";
+import { fileURLToPath as fileURLToPath2 } from "node:url";
+
+// src/project/folders.ts
+import { randomUUID as randomUUID2 } from "node:crypto";
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+import {
+  basename,
+  dirname as dirname4,
+  isAbsolute as isAbsolute2,
+  join as join5,
+  normalize as normalize2,
+  relative,
+  resolve,
+  sep
+} from "node:path";
+
+// src/state/config-store.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname3, join as join3 } from "node:path";
+var LOCK_STALE_MS = 5e3;
+var LOCK_TRIES = 40;
+var TMP_STALE_MS = 6e4;
+function pause(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+function withConfigLock(fileName, update2) {
+  const directory = memrootConfigDir();
+  ensurePrivateDir(directory, dirname3(directory), false);
+  const lock = `${join3(directory, fileName)}.lock`;
+  const nonce = randomBytes2(8).toString("hex");
+  const owner = join3(lock, "owner");
+  let held2 = false;
+  for (let i2 = 0; i2 < LOCK_TRIES && !held2; i2++) {
+    try {
+      mkdirSync2(lock, { mode: 448 });
+      writeFileSync2(owner, nonce, { mode: 384 });
+      held2 = true;
+    } catch (error) {
+      if (error.code !== "EEXIST") break;
+      try {
+        if (Date.now() - lstatSync2(lock).mtimeMs > LOCK_STALE_MS)
+          rmSync2(lock, { recursive: true, force: true });
+      } catch {
+      }
+      pause(25);
+    }
+  }
+  try {
+    return update2();
+  } finally {
+    if (held2)
+      try {
+        if (readFileSync2(owner, "utf8") === nonce)
+          rmSync2(lock, { recursive: true, force: true });
+      } catch {
+      }
+  }
+}
+function persistConfigJson(fileName, value) {
+  const directory = memrootConfigDir();
+  ensurePrivateDir(directory, dirname3(directory), false);
+  const path = join3(directory, fileName);
+  try {
+    const now = Date.now();
+    for (const name of listFiles(directory))
+      if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
+        try {
+          if (now - lstatSync2(join3(directory, name)).mtimeMs > TMP_STALE_MS)
+            rmSync2(join3(directory, name), { force: true });
+        } catch {
+        }
+  } catch {
+  }
+  const temporary = `${path}.${process.pid}.${randomBytes2(4).toString("hex")}.tmp`;
+  try {
+    const fd = openSync2(temporary, "wx", 384);
+    try {
+      fchmodSync(fd, 384);
+      writeSync(fd, `${JSON.stringify(value, null, 2)}
+`);
+      fsyncSync(fd);
+    } finally {
+      closeSync2(fd);
+    }
+    for (let attempt = 0; ; attempt++)
+      try {
+        renameSync2(temporary, path);
+        break;
+      } catch (error) {
+        const code = error.code;
+        if (attempt >= 5 || code !== "EPERM" && code !== "EBUSY") throw error;
+        pause(20);
+      }
+  } finally {
+    rmSync2(temporary, { force: true });
+  }
+}
+
+// src/project/selection.ts
+import { randomUUID } from "node:crypto";
+import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
+import { join as join4 } from "node:path";
+var PROJECT_SELECTION_FILE = "project-selection.json";
+var MAX_FILE_BYTES = 256 * 1024;
+var MAX_RECORDS = 64;
+var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectSelectionPath() {
+  return join4(memrootConfigDir(), PROJECT_SELECTION_FILE);
+}
+function normalizeApiBase(apiBase) {
+  try {
+    const url = new URL(apiBase);
+    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return apiBase.replace(/\/+$/, "");
+  }
+}
+function selectionKey(apiBase, principalId) {
+  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
+}
+function withLock(update2) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update2);
+}
+function persist(store) {
+  persistConfigJson(PROJECT_SELECTION_FILE, {
+    schemaVersion: 1,
+    selections: store
+  });
+}
+function valid(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.apiBase === "string" && isAllowedApiBase(v.apiBase) && !v.apiBase.endsWith("/") && UUID.test(String(v.principalId)) && UUID.test(String(v.tenantId)) && UUID.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID.test(String(v.selectionId)) && typeof v.selectedAt === "string" && !Number.isNaN(Date.parse(v.selectedAt)) && (v.source === "explicit" || v.source === "sole_project");
+}
+function readStore() {
+  try {
+    const raw = readPrivateFileIfExists(projectSelectionPath(), MAX_FILE_BYTES);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.selections || typeof value.selections !== "object" || Array.isArray(value.selections))
+      return {};
+    const out = {};
+    for (const [key, entry] of Object.entries(
+      value.selections
+    ))
+      if (valid(entry) && key === selectionKey(entry.apiBase, entry.principalId))
+        out[key] = entry;
+    return out;
+  } catch {
+    return {};
+  }
+}
+function readSelection(apiBase, principalId) {
+  if (!principalId) return void 0;
+  const key = selectionKey(apiBase, principalId);
+  const found = readStore()[key];
+  if (found) return found;
+  migrateLegacyDefaults();
+  return readStore()[key];
+}
+var LEGACY_DEFAULTS = "project-defaults.json";
+function migrateLegacyDefaults() {
+  const legacy = join4(memrootConfigDir(), LEGACY_DEFAULTS);
+  try {
+    lstatSync3(legacy);
+  } catch {
+    return false;
+  }
+  try {
+    return withLock(() => {
+      let raw;
+      try {
+        raw = readPrivateFileIfExists(legacy, MAX_FILE_BYTES);
+      } catch {
+        raw = void 0;
+      }
+      if (raw === void 0) return false;
+      const store = readStore();
+      let adopted = 0;
+      try {
+        const value = JSON.parse(raw);
+        const newest = /* @__PURE__ */ new Map();
+        if (value?.schemaVersion === 1 && value.defaults)
+          for (const d of Object.values(value.defaults)) {
+            if (!d || typeof d.apiBase !== "string" || typeof d.userId !== "string" || d.principalId !== d.userId || typeof d.updatedAt !== "string")
+              continue;
+            const key = selectionKey(d.apiBase, d.userId);
+            const prior = newest.get(key);
+            if (!prior || String(prior.updatedAt) < d.updatedAt)
+              newest.set(key, d);
+          }
+        for (const [key, d] of newest)
+          if (!store[key])
+            try {
+              upsert(store, {
+                apiBase: String(d.apiBase),
+                principalId: String(d.principalId),
+                tenantId: String(d.tenantId),
+                projectId: String(d.projectId),
+                name: String(d.name || d.projectId),
+                source: "explicit"
+              });
+              adopted++;
+            } catch {
+            }
+      } catch {
+      }
+      if (adopted > 0) persist(store);
+      renameSync3(legacy, `${legacy}.migrated`);
+      return true;
+    });
+  } catch {
+    return false;
+  }
+}
+function upsert(store, input) {
+  const key = selectionKey(input.apiBase, input.principalId);
+  const prior = store[key];
+  const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
+  const record = {
+    apiBase: normalizeApiBase(input.apiBase),
+    principalId: input.principalId.toLowerCase(),
+    tenantId: input.tenantId,
+    projectId: input.projectId,
+    name: input.name,
+    selectionId: input.selectionId ?? (same && prior ? prior.selectionId : randomUUID()),
+    selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    source: input.source
+  };
+  if (!valid(record))
+    throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
+  store[key] = record;
+  const keys = Object.keys(store);
+  if (keys.length > MAX_RECORDS)
+    for (const old of keys.sort(
+      (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
+    ).slice(0, keys.length - MAX_RECORDS))
+      delete store[old];
+  return record;
+}
+function writeSelection(input) {
+  return withLock(() => {
+    const store = readStore();
+    const record = upsert(store, input);
+    persist(store);
+    return record;
+  });
+}
+function clearSelection(apiBase, principalId, onlyProjectId) {
+  withLock(() => {
+    const store = readStore();
+    const key = selectionKey(apiBase, principalId);
+    const prior = store[key];
+    if (!prior) return;
+    if (onlyProjectId !== void 0 && prior.projectId !== onlyProjectId)
+      return;
+    delete store[key];
+    persist(store);
+  });
+}
+
+// src/project/folders.ts
+var PROJECT_FOLDERS_FILE = "project-folders.json";
+var MAX_BINDINGS = 256;
+var MAX_FILE_BYTES2 = 512 * 1024;
+var MAX_ACCOUNTS = 64;
+var MAX_PATH = 4096;
+var MAX_WALK = 128;
+var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function projectFoldersPath() {
+  return join5(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+}
+var FOLD_CASE = process.platform === "win32";
+function folderContains(folder, path, options) {
+  const a2 = options.foldCase ? folder.toLowerCase() : folder;
+  const b = options.foldCase ? path.toLowerCase() : path;
+  if (a2 === b) return true;
+  const prefix = a2.endsWith(options.separator) ? a2 : `${a2}${options.separator}`;
+  return b.startsWith(prefix);
+}
+function applicableBinding(bindings, scope, options) {
+  const same = (a2, b) => options.foldCase ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
+  const chains = [
+    { root: scope.top, path: scope.cwd, mapped: false },
+    ...scope.main ? [{ ...scope.main, mapped: true }] : []
+  ];
+  let best;
+  for (const chain of chains)
+    for (const binding of bindings) {
+      const root = chain.root;
+      if (root !== void 0 && !folderContains(root, binding.folder, options) || !folderContains(binding.folder, chain.path, options))
+        continue;
+      const depth = binding.folder.length - (root?.length ?? 0);
+      if (best && depth <= best.depth) continue;
+      const atRoot = root !== void 0 && same(binding.folder, root);
+      const via = chain.mapped ? atRoot ? "main_checkout" : "main_checkout_folder" : same(binding.folder, scope.cwd) ? "folder" : root === void 0 ? "parent_folder" : atRoot ? "repo_root" : "repo_folder";
+      best = { binding, via, depth };
+    }
+  return best && { binding: best.binding, via: best.via };
+}
+var match = { foldCase: FOLD_CASE, separator: sep };
+function canonicalFolder(path) {
+  const absolute = normalize2(resolve(path));
+  let head = absolute;
+  for (let i2 = 0; i2 < MAX_WALK; i2++) {
+    try {
+      const real = realpathSync.native(head);
+      const rest = relative(head, absolute);
+      return rest ? join5(real, rest) : real;
+    } catch {
+      const parent = dirname4(head);
+      if (parent === head) break;
+      head = parent;
+    }
+  }
+  return absolute;
+}
+function smallFile(path) {
+  try {
+    const info = lstatSync4(path);
+    if (!info.isFile() || info.size > 4096) return void 0;
+    return readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function folderScope(real) {
+  for (let dir = real, i2 = 0; i2 < MAX_WALK; i2++) {
+    const dotGit = join5(dir, ".git");
+    let info;
+    try {
+      info = lstatSync4(dotGit);
+    } catch {
+      info = void 0;
+    }
+    if (info) {
+      const root = info.isFile() ? worktreeMain(dir, dotGit) : void 0;
+      if (!root) return { cwd: real, top: dir };
+      const rest = relative(dir, real);
+      return {
+        cwd: real,
+        top: dir,
+        main: { root, path: rest ? join5(root, rest) : root }
+      };
+    }
+    const parent = dirname4(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return { cwd: real };
+}
+function worktreeMain(dir, dotGit) {
+  const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
+  if (!pointer?.[1]) return void 0;
+  const gitdir = resolve(dir, pointer[1]);
+  if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
+  const back = smallFile(join5(gitdir, "gitdir"))?.trim();
+  if (!back) return void 0;
+  try {
+    if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+      return void 0;
+  } catch {
+    return void 0;
+  }
+  const common = smallFile(join5(gitdir, "commondir"))?.trim();
+  if (!common) return void 0;
+  let commonDir;
+  try {
+    commonDir = realpathSync.native(resolve(gitdir, common));
+  } catch {
+    return void 0;
+  }
+  if (basename(commonDir) !== ".git") return void 0;
+  return dirname4(commonDir);
+}
+function bindingFolder(path) {
+  const scope = folderScope(canonicalFolder(path));
+  const folder = scope.main?.path ?? scope.cwd;
+  const root = scope.main?.root ?? scope.top;
+  return {
+    folder,
+    mapped: !!scope.main,
+    covers: !root ? "folder" : sameFolder(folder, root) ? "repository" : "subtree"
+  };
+}
+function validBinding(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+}
+function validKey(key) {
+  const at = key.lastIndexOf("|");
+  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
+}
+function readStore2(strictKey) {
+  try {
+    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
+    if (raw === void 0) return {};
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
+      throw new Error("INVALID_PROJECT_FOLDER_STORE");
+    const out = {};
+    for (const [key, list] of Object.entries(
+      value.bindings
+    )) {
+      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
+        throw new Error("INVALID_PROJECT_FOLDER_STORE");
+      if (validKey(key) && Array.isArray(list))
+        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
+    }
+    return out;
+  } catch (error) {
+    if (strictKey !== void 0) throw error;
+    return {};
+  }
+}
+function update(change) {
+  return withConfigLock(PROJECT_FOLDERS_FILE, () => {
+    const store = readStore2();
+    const result = change(store);
+    for (const key of Object.keys(store))
+      if (store[key]?.length === 0) delete store[key];
+    const keys = Object.keys(store);
+    for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ACCOUNTS)))
+      delete store[key];
+    persistConfigJson(PROJECT_FOLDERS_FILE, {
+      schemaVersion: 1,
+      bindings: store
+    });
+    return result;
+  });
+}
+var sameFolder = (a2, b) => FOLD_CASE ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
+function readBindings(apiBase, principalId, { requireValid = false } = {}) {
+  if (!principalId) return [];
+  const key = selectionKey(apiBase, principalId);
+  return readStore2(requireValid ? key : void 0)[key] ?? [];
+}
+function bindingMatchFor(apiBase, principalId, cwd) {
+  const bindings = readBindings(apiBase, principalId);
+  if (bindings.length === 0) return void 0;
+  return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
+}
+function bindingFor(apiBase, principalId, cwd) {
+  return bindingMatchFor(apiBase, principalId, cwd)?.binding;
+}
+function bindFolder(input) {
+  return update((store) => {
+    const key = selectionKey(input.apiBase, input.principalId);
+    const list = store[key] ?? [];
+    const prior = list.find((b) => sameFolder(b.folder, input.folder));
+    const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
+    const binding = {
+      folder: input.folder,
+      tenantId: input.tenantId,
+      projectId: input.projectId,
+      name: input.name,
+      bindingId: same && prior ? prior.bindingId : randomUUID2(),
+      boundAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (!validBinding(binding))
+      throw new Error("PROJECT_FOLDER_INVALID: Refusing an invalid binding.");
+    const rest = list.filter((b) => b !== prior);
+    if (rest.length >= MAX_BINDINGS)
+      throw new Error(
+        `PROJECT_FOLDER_LIMIT: At most ${MAX_BINDINGS} folders can be bound; remove one with unbind --folder.`
+      );
+    store[key] = [...rest, binding];
+    return binding;
+  });
+}
+function unbindFolder(apiBase, principalId, folder) {
+  return update((store) => {
+    const key = selectionKey(apiBase, principalId);
+    const list = store[key] ?? [];
+    const found = list.find((b) => sameFolder(b.folder, folder));
+    if (found) store[key] = list.filter((b) => b !== found);
+    return found;
+  });
+}
+function refreshBindings(apiBase, principalId, tenantId, projects) {
+  const key = selectionKey(apiBase, principalId);
+  const changes = (list) => list.map((b) => {
+    const live = projects.find((p) => p.project_id === b.projectId);
+    if (!live) return b.stale ? b : { ...b, stale: true };
+    const name = live.name ?? b.name;
+    if (!b.stale && name === b.name && b.tenantId === tenantId) return b;
+    const { stale: _stale, ...rest } = b;
+    return { ...rest, name, tenantId };
+  });
+  const before = readStore2()[key] ?? [];
+  if (changes(before).every(
+    (b, i2) => b.stale === before[i2]?.stale && b.name === before[i2]?.name && b.tenantId === before[i2]?.tenantId
+  ))
+    return;
+  update((store) => {
+    if (store[key]) store[key] = changes(store[key]);
+  });
+}
+function folderMissing(folder) {
+  try {
+    return !lstatSync4(folder).isDirectory();
+  } catch {
+    return true;
+  }
+}
+
+// src/project/context.ts
+var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function validUuid(value) {
+  return typeof value === "string" && UUID3.test(value);
+}
+function projectCommandPrefix() {
+  try {
+    const here = dirname5(fileURLToPath2(import.meta.url));
+    const script = join6(here, "project.mjs");
+    if (existsSync2(script) && !/["\\$`\n]/.test(script))
+      return `node "${script}"`;
+  } catch {
+  }
+  return `npx -y memroot@${"0.21.0"} project`;
+}
+function folderOption(folder) {
+  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
+}
+function legacySessionRecordsDir() {
+  return join6(stateDir(), "project-sessions");
+}
+
+// src/capture/queue/job.ts
+var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
+var JOB_ID = /^(claude|codex|grok)-[a-f0-9]{32}$/;
+function queueDir() {
+  return stateSubdir("queue");
+}
+var conflictPath = (jobId) => join7(queueDir(), `${jobId}.account-conflict`);
+function hasAccountConflict(jobId) {
+  const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
+  if (marker === void 0) return false;
+  const at = Date.parse(marker);
+  if (Number.isFinite(at) && Date.now() - at > JOB_TTL_MS) {
+    removeFile(conflictPath(jobId));
+    return false;
+  }
+  return true;
+}
+function listJobIds() {
+  const names = listFiles(queueDir());
+  for (const name of names) {
+    const id = name.slice(0, -".account-conflict".length);
+    if (name.endsWith(".account-conflict") && JOB_ID.test(id))
+      hasAccountConflict(id);
+  }
+  return names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
+}
+
+// src/connection/auth.ts
+import { spawn as spawn2 } from "node:child_process";
 import { createHash, randomBytes as randomBytes4 } from "node:crypto";
 import { mkdtempSync, rmSync as rmSync4, writeFileSync as writeFileSync4 } from "node:fs";
 import { createServer, request as httpRequest2 } from "node:http";
 import { request as httpsRequest2 } from "node:https";
 import { tmpdir } from "node:os";
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 
 // ../../node_modules/.pnpm/@clack+core@1.6.0/node_modules/@clack/core/dist/index.mjs
 import { stdout, stdin } from "node:process";
@@ -903,142 +2300,1066 @@ var SELECT_INSTRUCTIONS = [
 ];
 var i = `${styleText2("gray", S_BAR)}  `;
 
-// ../../node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/stringify.js
-var HAS_WELLFORMED = !!"".isWellFormed;
-
-// src/capture/paths.ts
-import { randomBytes } from "node:crypto";
-import {
-  chmodSync,
-  closeSync,
-  constants,
-  fstatSync,
-  lstatSync,
-  mkdirSync,
-  openSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  writeFileSync
-} from "node:fs";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, normalize } from "node:path";
-var UnsafePathError = class extends Error {
-  constructor(code = "UNSAFE_PATH") {
-    super(`${code}: refusing an unexpected file type or symbolic link.`);
-    this.code = code;
+// ../../node_modules/.pnpm/oauth4webapi@3.8.8/node_modules/oauth4webapi/build/index.js
+var USER_AGENT;
+if (typeof navigator === "undefined" || !navigator.userAgent?.startsWith?.("Mozilla/5.0 ")) {
+  const NAME = "oauth4webapi";
+  const VERSION = "v3.8.8";
+  USER_AGENT = `${NAME}/${VERSION}`;
+}
+function looseInstanceOf(input, expected) {
+  if (input == null) {
+    return false;
   }
-  code;
-};
-function absoluteEnv(name) {
-  const value = process.env[name];
-  if (!value) return void 0;
-  if (!isAbsolute(value))
-    throw new Error(`INVALID_STATE_DIRECTORY: ${name} must be absolute.`);
-  return normalize(value);
+  try {
+    return input instanceof expected || Object.getPrototypeOf(input)[Symbol.toStringTag] === expected.prototype[Symbol.toStringTag];
+  } catch {
+    return false;
+  }
 }
-function stateBoundary() {
-  const explicit = absoluteEnv("MEMROOT_STATE_DIR");
-  if (explicit) return { boundary: explicit, dir: explicit };
-  const base = absoluteEnv("XDG_STATE_HOME") ?? join(homedir(), ".local", "state");
-  return { boundary: base, dir: join(base, "memroot", "capture") };
+var ERR_INVALID_ARG_VALUE = "ERR_INVALID_ARG_VALUE";
+var ERR_INVALID_ARG_TYPE = "ERR_INVALID_ARG_TYPE";
+function CodedTypeError(message, code, cause) {
+  const err = new TypeError(message, { cause });
+  Object.assign(err, { code });
+  return err;
 }
-function stateDir() {
-  return stateBoundary().dir;
+var allowInsecureRequests = /* @__PURE__ */ Symbol();
+var clockSkew = /* @__PURE__ */ Symbol();
+var clockTolerance = /* @__PURE__ */ Symbol();
+var customFetch = /* @__PURE__ */ Symbol();
+var jweDecrypt = /* @__PURE__ */ Symbol();
+var encoder = new TextEncoder();
+var decoder = new TextDecoder();
+function buf(input) {
+  if (typeof input === "string") {
+    return encoder.encode(input);
+  }
+  return decoder.decode(input);
 }
-function memrootConfigDir() {
-  const override = process.env.MEMROOT_TEST_CONFIG_DIR;
-  if (process.env.NODE_ENV === "test" && override && isAbsolute(override))
-    return normalize(override);
-  return join(homedir(), ".memroot");
-}
-function consentPath() {
-  return join(memrootConfigDir(), "capture.json");
-}
-function assertRealDirectory(path) {
-  const info = lstatSync(path);
-  if (info.isSymbolicLink() || !info.isDirectory()) throw new UnsafePathError();
-}
-function ensurePrivateDir(path, boundary, checkRoot = false) {
-  const target = normalize(path);
-  const root = normalize(boundary);
-  if (target !== root && !target.startsWith(`${root}/`))
-    throw new UnsafePathError();
-  mkdirSync(target, { recursive: true, mode: 448 });
-  let current = target;
-  for (; ; ) {
-    if (current === root) {
-      if (checkRoot) assertRealDirectory(current);
-      break;
+var encodeBase64Url;
+if (Uint8Array.prototype.toBase64) {
+  encodeBase64Url = (input) => {
+    if (input instanceof ArrayBuffer) {
+      input = new Uint8Array(input);
     }
-    assertRealDirectory(current);
-    current = dirname(current);
+    return input.toBase64({ alphabet: "base64url", omitPadding: true });
+  };
+} else {
+  const CHUNK_SIZE = 32768;
+  encodeBase64Url = (input) => {
+    if (input instanceof ArrayBuffer) {
+      input = new Uint8Array(input);
+    }
+    const arr = [];
+    for (let i2 = 0; i2 < input.byteLength; i2 += CHUNK_SIZE) {
+      arr.push(String.fromCharCode.apply(null, input.subarray(i2, i2 + CHUNK_SIZE)));
+    }
+    return btoa(arr.join("")).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  };
+}
+var decodeBase64Url;
+if (Uint8Array.fromBase64) {
+  decodeBase64Url = (input) => {
+    try {
+      return Uint8Array.fromBase64(input, { alphabet: "base64url" });
+    } catch (cause) {
+      throw CodedTypeError("The input to be decoded is not correctly encoded.", ERR_INVALID_ARG_VALUE, cause);
+    }
+  };
+} else {
+  decodeBase64Url = (input) => {
+    try {
+      const binary = atob(input.replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, ""));
+      const bytes = new Uint8Array(binary.length);
+      for (let i2 = 0; i2 < binary.length; i2++) {
+        bytes[i2] = binary.charCodeAt(i2);
+      }
+      return bytes;
+    } catch (cause) {
+      throw CodedTypeError("The input to be decoded is not correctly encoded.", ERR_INVALID_ARG_VALUE, cause);
+    }
+  };
+}
+function b64u(input) {
+  if (typeof input === "string") {
+    return decodeBase64Url(input);
   }
-  const info = lstatSync(target);
-  if ((info.mode & 511) !== 448) chmodSync(target, 448);
+  return encodeBase64Url(input);
 }
-function stateSubdir(...parts) {
-  const { boundary, dir } = stateBoundary();
-  const path = join(dir, ...parts);
-  ensurePrivateDir(path, boundary, boundary === dir);
-  return path;
+var UnsupportedOperationError = class extends Error {
+  code;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    this.code = UNSUPPORTED_OPERATION;
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+var OperationProcessingError = class extends Error {
+  code;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    if (options?.code) {
+      this.code = options?.code;
+    }
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+function OPE(message, code, cause) {
+  return new OperationProcessingError(message, { code, cause });
 }
-function readPrivateFile(path, maxBytes = 16 * 1024 * 1024) {
-  return readPrivateBytes(path, maxBytes).bytes.toString("utf8");
+function isJsonObject(input) {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) {
+    return false;
+  }
+  return true;
 }
-function readPrivateBytes(path, maxBytes = 16 * 1024 * 1024) {
-  const fd = openSync(
-    path,
-    constants.O_RDONLY | constants.O_NOFOLLOW | (constants.O_NONBLOCK ?? 0)
-  );
+function prepareHeaders(input) {
+  if (looseInstanceOf(input, Headers)) {
+    input = Object.fromEntries(input.entries());
+  }
+  const headers = new Headers(input ?? {});
+  if (USER_AGENT && !headers.has("user-agent")) {
+    headers.set("user-agent", USER_AGENT);
+  }
+  if (headers.has("authorization")) {
+    throw CodedTypeError('"options.headers" must not include the "authorization" header name', ERR_INVALID_ARG_VALUE);
+  }
+  return headers;
+}
+function signal(url, value) {
+  if (value !== void 0) {
+    if (typeof value === "function") {
+      value = value(url.href);
+    }
+    if (!(value instanceof AbortSignal)) {
+      throw CodedTypeError('"options.signal" must return or be an instance of AbortSignal', ERR_INVALID_ARG_TYPE);
+    }
+    return value;
+  }
+  return void 0;
+}
+function replaceDoubleSlash(pathname) {
+  if (pathname.includes("//")) {
+    return pathname.replace("//", "/");
+  }
+  return pathname;
+}
+function prependWellKnown(url, wellKnown, allowTerminatingSlash = false) {
+  if (url.pathname === "/") {
+    url.pathname = wellKnown;
+  } else {
+    url.pathname = replaceDoubleSlash(`${wellKnown}/${allowTerminatingSlash ? url.pathname : url.pathname.replace(/(\/)$/, "")}`);
+  }
+  return url;
+}
+function appendWellKnown(url, wellKnown) {
+  url.pathname = replaceDoubleSlash(`${url.pathname}/${wellKnown}`);
+  return url;
+}
+async function performDiscovery(input, urlName, transform, options) {
+  if (!(input instanceof URL)) {
+    throw CodedTypeError(`"${urlName}" must be an instance of URL`, ERR_INVALID_ARG_TYPE);
+  }
+  checkProtocol(input, options?.[allowInsecureRequests] !== true);
+  const url = transform(new URL(input.href));
+  const headers = prepareHeaders(options?.headers);
+  headers.set("accept", "application/json");
+  return (options?.[customFetch] || fetch)(url.href, {
+    body: void 0,
+    headers: Object.fromEntries(headers.entries()),
+    method: "GET",
+    redirect: "manual",
+    signal: signal(url, options?.signal)
+  });
+}
+async function discoveryRequest(issuerIdentifier, options) {
+  return performDiscovery(issuerIdentifier, "issuerIdentifier", (url) => {
+    switch (options?.algorithm) {
+      case void 0:
+      case "oidc":
+        appendWellKnown(url, ".well-known/openid-configuration");
+        break;
+      case "oauth2":
+        prependWellKnown(url, ".well-known/oauth-authorization-server");
+        break;
+      default:
+        throw CodedTypeError('"options.algorithm" must be "oidc" (default), or "oauth2"', ERR_INVALID_ARG_VALUE);
+    }
+    return url;
+  }, options);
+}
+function assertNumber(input, allow0, it, code, cause) {
   try {
-    const info = fstatSync(fd);
-    if (!info.isFile()) throw new UnsafePathError();
-    if (info.size > maxBytes) throw new UnsafePathError("FILE_TOO_LARGE");
-    return { bytes: readFileSync(fd), mode: info.mode & 511 };
-  } finally {
-    closeSync(fd);
+    if (typeof input !== "number" || !Number.isFinite(input)) {
+      throw CodedTypeError(`${it} must be a number`, ERR_INVALID_ARG_TYPE, cause);
+    }
+    if (input > 0)
+      return;
+    if (allow0) {
+      if (input !== 0) {
+        throw CodedTypeError(`${it} must be a non-negative number`, ERR_INVALID_ARG_VALUE, cause);
+      }
+      return;
+    }
+    throw CodedTypeError(`${it} must be a positive number`, ERR_INVALID_ARG_VALUE, cause);
+  } catch (err) {
+    if (code) {
+      throw OPE(err.message, code, cause);
+    }
+    throw err;
   }
 }
-function readPrivateFileIfExists(path, maxBytes) {
+function assertString(input, it, code, cause) {
   try {
-    return readPrivateFile(path, maxBytes);
-  } catch (error) {
-    if (error.code === "ENOENT") return void 0;
-    if (error.code === "ELOOP")
-      throw new UnsafePathError();
-    throw error;
+    if (typeof input !== "string") {
+      throw CodedTypeError(`${it} must be a string`, ERR_INVALID_ARG_TYPE, cause);
+    }
+    if (input.length === 0) {
+      throw CodedTypeError(`${it} must not be empty`, ERR_INVALID_ARG_VALUE, cause);
+    }
+  } catch (err) {
+    if (code) {
+      throw OPE(err.message, code, cause);
+    }
+    throw err;
   }
 }
-function writePrivateFileAtomic(path, content, mode) {
-  const temporary = `${path}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
+async function processDiscoveryResponse(expectedIssuerIdentifier, response) {
+  const expected = expectedIssuerIdentifier;
+  if (!(expected instanceof URL) && expected !== _nodiscoverycheck) {
+    throw CodedTypeError('"expectedIssuerIdentifier" must be an instance of URL', ERR_INVALID_ARG_TYPE);
+  }
+  if (!looseInstanceOf(response, Response)) {
+    throw CodedTypeError('"response" must be an instance of Response', ERR_INVALID_ARG_TYPE);
+  }
+  if (response.status !== 200) {
+    throw OPE('"response" is not a conform Authorization Server Metadata response (unexpected HTTP status code)', RESPONSE_IS_NOT_CONFORM, response);
+  }
+  assertReadableResponse(response);
+  const json = await getResponseJsonBody(response);
+  assertString(json.issuer, '"response" body "issuer" property', INVALID_RESPONSE, { body: json });
+  if (expected !== _nodiscoverycheck && new URL(json.issuer).href !== expected.href) {
+    throw OPE('"response" body "issuer" property does not match the expected value', JSON_ATTRIBUTE_COMPARISON, { expected: expected.href, body: json, attribute: "issuer" });
+  }
+  return json;
+}
+function assertApplicationJson(response) {
+  assertContentType(response, "application/json");
+}
+function notJson(response, ...types) {
+  let msg = '"response" content-type must be ';
+  if (types.length > 2) {
+    const last = types.pop();
+    msg += `${types.join(", ")}, or ${last}`;
+  } else if (types.length === 2) {
+    msg += `${types[0]} or ${types[1]}`;
+  } else {
+    msg += types[0];
+  }
+  return OPE(msg, RESPONSE_IS_NOT_JSON, response);
+}
+function assertContentType(response, contentType) {
+  if (getContentType(response) !== contentType) {
+    throw notJson(response, contentType);
+  }
+}
+function getClockSkew(client) {
+  const skew = client?.[clockSkew];
+  return typeof skew === "number" && Number.isFinite(skew) ? skew : 0;
+}
+function getClockTolerance(client) {
+  const tolerance = client?.[clockTolerance];
+  return typeof tolerance === "number" && Number.isFinite(tolerance) && Math.sign(tolerance) !== -1 ? tolerance : 30;
+}
+function epochTime() {
+  return Math.floor(Date.now() / 1e3);
+}
+function assertAs(as) {
+  if (typeof as !== "object" || as === null) {
+    throw CodedTypeError('"as" must be an object', ERR_INVALID_ARG_TYPE);
+  }
+  assertString(as.issuer, '"as.issuer"');
+}
+function assertClient(client) {
+  if (typeof client !== "object" || client === null) {
+    throw CodedTypeError('"client" must be an object', ERR_INVALID_ARG_TYPE);
+  }
+  assertString(client.client_id, '"client.client_id"');
+}
+function None() {
+  return (_as, client, body, _headers) => {
+    body.set("client_id", client.client_id);
+  };
+}
+var URLParse = URL.parse ? (url, base) => URL.parse(url, base) : (url, base) => {
   try {
-    writeFileSync(temporary, content, { flag: "wx", mode: 384 });
-    if (mode !== void 0) chmodSync(temporary, mode);
-    renameSync(temporary, path);
-  } finally {
-    rmSync(temporary, { force: true });
+    return new URL(url, base);
+  } catch {
+    return null;
+  }
+};
+function checkProtocol(url, enforceHttps) {
+  if (enforceHttps && url.protocol !== "https:") {
+    throw OPE("only requests to HTTPS are allowed", HTTP_REQUEST_FORBIDDEN, url);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw OPE("only HTTP and HTTPS requests are allowed", REQUEST_PROTOCOL_FORBIDDEN, url);
   }
 }
-function removeFile(path) {
-  rmSync(path, { force: true });
+function validateEndpoint(value, endpoint, useMtlsAlias, enforceHttps) {
+  let url;
+  if (typeof value !== "string" || !(url = URLParse(value))) {
+    throw OPE(`authorization server metadata does not contain a valid ${useMtlsAlias ? `"as.mtls_endpoint_aliases.${endpoint}"` : `"as.${endpoint}"`}`, value === void 0 ? MISSING_SERVER_METADATA : INVALID_SERVER_METADATA, { attribute: useMtlsAlias ? `mtls_endpoint_aliases.${endpoint}` : endpoint });
+  }
+  checkProtocol(url, enforceHttps);
+  return url;
 }
-function listFiles(path) {
+function resolveEndpoint(as, endpoint, useMtlsAlias, enforceHttps) {
+  if (useMtlsAlias && as.mtls_endpoint_aliases && endpoint in as.mtls_endpoint_aliases) {
+    return validateEndpoint(as.mtls_endpoint_aliases[endpoint], endpoint, useMtlsAlias, enforceHttps);
+  }
+  return validateEndpoint(as[endpoint], endpoint, useMtlsAlias, enforceHttps);
+}
+var ResponseBodyError = class extends Error {
+  cause;
+  code;
+  error;
+  status;
+  error_description;
+  response;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    this.code = RESPONSE_BODY_ERROR;
+    this.cause = options.cause;
+    this.error = options.cause.error;
+    this.status = options.response.status;
+    this.error_description = options.cause.error_description;
+    Object.defineProperty(this, "response", { enumerable: false, value: options.response });
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+var AuthorizationResponseError = class extends Error {
+  cause;
+  code;
+  error;
+  error_description;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    this.code = AUTHORIZATION_RESPONSE_ERROR;
+    this.cause = options.cause;
+    this.error = options.cause.get("error");
+    this.error_description = options.cause.get("error_description") ?? void 0;
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+var WWWAuthenticateChallengeError = class extends Error {
+  cause;
+  code;
+  response;
+  status;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    this.code = WWW_AUTHENTICATE_CHALLENGE;
+    this.cause = options.cause;
+    this.status = options.response.status;
+    this.response = options.response;
+    Object.defineProperty(this, "response", { enumerable: false });
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+var tokenMatch = "[a-zA-Z0-9!#$%&\\'\\*\\+\\-\\.\\^_`\\|~]+";
+var token68Match = "[a-zA-Z0-9\\-\\._\\~\\+\\/]+={0,2}";
+var quotedMatch = '"((?:[^"\\\\]|\\\\[\\s\\S])*)"';
+var quotedParamMatcher = "(" + tokenMatch + ")\\s*=\\s*" + quotedMatch;
+var paramMatcher = "(" + tokenMatch + ")\\s*=\\s*(" + tokenMatch + ")";
+var schemeRE = new RegExp("^[,\\s]*(" + tokenMatch + ")");
+var quotedParamRE = new RegExp("^[,\\s]*" + quotedParamMatcher + "[,\\s]*(.*)");
+var unquotedParamRE = new RegExp("^[,\\s]*" + paramMatcher + "[,\\s]*(.*)");
+var token68ParamRE = new RegExp("^(" + token68Match + ")(?:$|[,\\s])(.*)");
+function parseWwwAuthenticateChallenges(response) {
+  if (!looseInstanceOf(response, Response)) {
+    throw CodedTypeError('"response" must be an instance of Response', ERR_INVALID_ARG_TYPE);
+  }
+  const header = response.headers.get("www-authenticate");
+  if (header === null) {
+    return void 0;
+  }
+  const challenges = [];
+  let rest = header;
+  while (rest) {
+    let match2 = rest.match(schemeRE);
+    const scheme = match2?.["1"].toLowerCase();
+    if (!scheme) {
+      return void 0;
+    }
+    const afterScheme = rest.substring(match2[0].length);
+    if (afterScheme && !afterScheme.match(/^[\s,]/)) {
+      return void 0;
+    }
+    const spaceMatch = afterScheme.match(/^\s+(.*)$/);
+    const hasParameters = !!spaceMatch;
+    rest = spaceMatch ? spaceMatch[1] : void 0;
+    const parameters = {};
+    let token68;
+    if (hasParameters) {
+      while (rest) {
+        let key;
+        let value;
+        if (match2 = rest.match(quotedParamRE)) {
+          ;
+          [, key, value, rest] = match2;
+          if (value.includes("\\")) {
+            value = value.replace(/\\([\s\S])/g, "$1");
+          }
+          parameters[key.toLowerCase()] = value;
+          continue;
+        }
+        if (match2 = rest.match(unquotedParamRE)) {
+          ;
+          [, key, value, rest] = match2;
+          parameters[key.toLowerCase()] = value;
+          continue;
+        }
+        if (match2 = rest.match(token68ParamRE)) {
+          if (Object.keys(parameters).length) {
+            break;
+          }
+          ;
+          [, token68, rest] = match2;
+          break;
+        }
+        return void 0;
+      }
+    } else {
+      rest = afterScheme || void 0;
+    }
+    const challenge = { scheme, parameters };
+    if (token68) {
+      challenge.token68 = token68;
+    }
+    challenges.push(challenge);
+  }
+  if (!challenges.length) {
+    return void 0;
+  }
+  return challenges;
+}
+async function parseOAuthResponseErrorBody(response) {
+  if (response.status > 399 && response.status < 500) {
+    assertReadableResponse(response);
+    assertApplicationJson(response);
+    try {
+      const json = await response.clone().json();
+      if (isJsonObject(json) && typeof json.error === "string" && json.error.length) {
+        return json;
+      }
+    } catch {
+    }
+  }
+  return void 0;
+}
+async function checkOAuthBodyError(response, expected, label2) {
+  if (response.status !== expected) {
+    checkAuthenticationChallenges(response);
+    let err;
+    if (err = await parseOAuthResponseErrorBody(response)) {
+      await response.body?.cancel();
+      throw new ResponseBodyError("server responded with an error in the response body", {
+        cause: err,
+        response
+      });
+    }
+    throw OPE(`"response" is not a conform ${label2} response (unexpected HTTP status code)`, RESPONSE_IS_NOT_CONFORM, response);
+  }
+}
+function assertDPoP(option) {
+  if (!branded.has(option)) {
+    throw CodedTypeError('"options.DPoP" is not a valid DPoPHandle', ERR_INVALID_ARG_VALUE);
+  }
+}
+function getContentType(input) {
+  return input.headers.get("content-type")?.split(";")[0];
+}
+async function authenticatedRequest(as, client, clientAuthentication, url, body, headers, options) {
+  await clientAuthentication(as, client, body, headers);
+  headers.set("content-type", "application/x-www-form-urlencoded;charset=UTF-8");
+  return (options?.[customFetch] || fetch)(url.href, {
+    body,
+    headers: Object.fromEntries(headers.entries()),
+    method: "POST",
+    redirect: "manual",
+    signal: signal(url, options?.signal)
+  });
+}
+async function tokenEndpointRequest(as, client, clientAuthentication, grantType, parameters, options) {
+  const url = resolveEndpoint(as, "token_endpoint", client.use_mtls_endpoint_aliases, options?.[allowInsecureRequests] !== true);
+  parameters.set("grant_type", grantType);
+  const headers = prepareHeaders(options?.headers);
+  headers.set("accept", "application/json");
+  if (options?.DPoP !== void 0) {
+    assertDPoP(options.DPoP);
+    await options.DPoP.addProof(url, headers, "POST");
+  }
+  const response = await authenticatedRequest(as, client, clientAuthentication, url, parameters, headers, options);
+  options?.DPoP?.cacheNonce(response, url);
+  return response;
+}
+async function refreshTokenGrantRequest(as, client, clientAuthentication, refreshToken, options) {
+  assertAs(as);
+  assertClient(client);
+  assertString(refreshToken, '"refreshToken"');
+  const parameters = new URLSearchParams(options?.additionalParameters);
+  parameters.set("refresh_token", refreshToken);
+  return tokenEndpointRequest(as, client, clientAuthentication, "refresh_token", parameters, options);
+}
+var idTokenClaims = /* @__PURE__ */ new WeakMap();
+var jwtRefs = /* @__PURE__ */ new WeakMap();
+function getValidatedIdTokenClaims(ref) {
+  if (!ref.id_token) {
+    return void 0;
+  }
+  const claims = idTokenClaims.get(ref);
+  if (!claims) {
+    throw CodedTypeError('"ref" was already garbage collected or did not resolve from the proper sources', ERR_INVALID_ARG_VALUE);
+  }
+  return claims;
+}
+async function processGenericAccessTokenResponse(as, client, response, additionalRequiredIdTokenClaims, decryptFn, recognizedTokenTypes) {
+  assertAs(as);
+  assertClient(client);
+  if (!looseInstanceOf(response, Response)) {
+    throw CodedTypeError('"response" must be an instance of Response', ERR_INVALID_ARG_TYPE);
+  }
+  await checkOAuthBodyError(response, 200, "Token Endpoint");
+  assertReadableResponse(response);
+  const json = await getResponseJsonBody(response);
+  assertString(json.access_token, '"response" body "access_token" property', INVALID_RESPONSE, {
+    body: json
+  });
+  assertString(json.token_type, '"response" body "token_type" property', INVALID_RESPONSE, {
+    body: json
+  });
+  json.token_type = json.token_type.toLowerCase();
+  if (json.expires_in !== void 0) {
+    let expiresIn = typeof json.expires_in !== "number" ? parseFloat(json.expires_in) : json.expires_in;
+    assertNumber(expiresIn, true, '"response" body "expires_in" property', INVALID_RESPONSE, {
+      body: json
+    });
+    json.expires_in = expiresIn;
+  }
+  if (json.refresh_token !== void 0) {
+    assertString(json.refresh_token, '"response" body "refresh_token" property', INVALID_RESPONSE, {
+      body: json
+    });
+  }
+  if (json.scope !== void 0 && typeof json.scope !== "string") {
+    throw OPE('"response" body "scope" property must be a string', INVALID_RESPONSE, { body: json });
+  }
+  if (json.id_token !== void 0) {
+    assertString(json.id_token, '"response" body "id_token" property', INVALID_RESPONSE, {
+      body: json
+    });
+    const requiredClaims = [];
+    if (client.require_auth_time === true) {
+      requiredClaims.push("auth_time");
+    }
+    if (client.default_max_age !== void 0) {
+      assertNumber(client.default_max_age, true, '"client.default_max_age"');
+      requiredClaims.push("auth_time");
+    }
+    if (additionalRequiredIdTokenClaims?.length) {
+      requiredClaims.push(...additionalRequiredIdTokenClaims);
+    }
+    const { claims, jwt } = await validateIdTokenClaims(as, client, json.id_token, requiredClaims, decryptFn);
+    validateIdTokenAuthorizedParty(client, claims);
+    validateIdTokenAuthTimeClaim(claims);
+    jwtRefs.set(response, jwt);
+    idTokenClaims.set(json, claims);
+  }
+  if (recognizedTokenTypes?.[json.token_type] !== void 0) {
+    recognizedTokenTypes[json.token_type](response, json);
+  } else if (json.token_type !== "dpop" && json.token_type !== "bearer") {
+    throw new UnsupportedOperationError("unsupported `token_type` value", { cause: { body: json } });
+  }
+  return json;
+}
+function checkAuthenticationChallenges(response) {
+  let challenges;
+  if (challenges = parseWwwAuthenticateChallenges(response)) {
+    throw new WWWAuthenticateChallengeError("server responded with a challenge in the WWW-Authenticate HTTP Header", { cause: challenges, response });
+  }
+}
+async function processRefreshTokenResponse(as, client, response, options) {
+  return processGenericAccessTokenResponse(as, client, response, void 0, options?.[jweDecrypt], options?.recognizedTokenTypes);
+}
+function validateAudience(expected, result) {
+  if (Array.isArray(result.claims.aud)) {
+    if (!result.claims.aud.includes(expected)) {
+      throw OPE('unexpected JWT "aud" (audience) claim value', JWT_CLAIM_COMPARISON, {
+        expected,
+        claims: result.claims,
+        claim: "aud"
+      });
+    }
+  } else if (result.claims.aud !== expected) {
+    throw OPE('unexpected JWT "aud" (audience) claim value', JWT_CLAIM_COMPARISON, {
+      expected,
+      claims: result.claims,
+      claim: "aud"
+    });
+  }
+  return result;
+}
+function validateIssuer(as, result) {
+  const expected = as[_expectedIssuer]?.(result) ?? as.issuer;
+  if (result.claims.iss !== expected) {
+    throw OPE('unexpected JWT "iss" (issuer) claim value', JWT_CLAIM_COMPARISON, {
+      expected,
+      claims: result.claims,
+      claim: "iss"
+    });
+  }
+  return result;
+}
+var branded = /* @__PURE__ */ new WeakSet();
+function brand(searchParams) {
+  branded.add(searchParams);
+  return searchParams;
+}
+var nopkce = /* @__PURE__ */ Symbol();
+async function authorizationCodeGrantRequest(as, client, clientAuthentication, callbackParameters, redirectUri, codeVerifier, options) {
+  assertAs(as);
+  assertClient(client);
+  if (!branded.has(callbackParameters)) {
+    throw CodedTypeError('"callbackParameters" must be an instance of URLSearchParams obtained from "validateAuthResponse()", or "validateJwtAuthResponse()', ERR_INVALID_ARG_VALUE);
+  }
+  assertString(redirectUri, '"redirectUri"');
+  const code = getURLSearchParameter(callbackParameters, "code");
+  if (!code) {
+    throw OPE('no authorization code in "callbackParameters"', INVALID_RESPONSE);
+  }
+  const parameters = new URLSearchParams(options?.additionalParameters);
+  parameters.set("redirect_uri", redirectUri);
+  parameters.set("code", code);
+  if (codeVerifier !== nopkce) {
+    assertString(codeVerifier, '"codeVerifier"');
+    parameters.set("code_verifier", codeVerifier);
+  }
+  return tokenEndpointRequest(as, client, clientAuthentication, "authorization_code", parameters, options);
+}
+var jwtClaimNames = {
+  aud: "audience",
+  c_hash: "code hash",
+  client_id: "client id",
+  exp: "expiration time",
+  iat: "issued at",
+  iss: "issuer",
+  jti: "jwt id",
+  nonce: "nonce",
+  s_hash: "state hash",
+  sub: "subject",
+  ath: "access token hash",
+  htm: "http method",
+  htu: "http uri",
+  cnf: "confirmation",
+  auth_time: "authentication time"
+};
+function validatePresence(required, result) {
+  for (const claim of required) {
+    if (result.claims[claim] === void 0) {
+      throw OPE(`JWT "${claim}" (${jwtClaimNames[claim]}) claim missing`, INVALID_RESPONSE, {
+        claims: result.claims
+      });
+    }
+  }
+  return result;
+}
+function validateStringClaim(claim, result) {
+  if (typeof result.claims[claim] !== "string") {
+    throw OPE(`unexpected JWT "${claim}" (${jwtClaimNames[claim]}) claim type`, INVALID_RESPONSE, {
+      claims: result.claims
+    });
+  }
+  return result;
+}
+function validateIdTokenClaims(as, client, idToken, requiredClaims, decryptFn) {
+  return validateJwt(idToken, checkSigningAlgorithm.bind(void 0, client.id_token_signed_response_alg, as.id_token_signing_alg_values_supported, "RS256"), getClockSkew(client), getClockTolerance(client), decryptFn).then(validatePresence.bind(void 0, ["aud", "exp", "iat", "iss", "sub", ...requiredClaims])).then(validateIssuer.bind(void 0, as)).then(validateAudience.bind(void 0, client.client_id)).then(validateStringClaim.bind(void 0, "sub"));
+}
+function resolveIdTokenMaxAge(client, maxAge) {
+  if (maxAge === skipAuthTimeCheck) {
+    return maxAge;
+  }
+  const fromClient = maxAge === void 0;
+  if (fromClient) {
+    maxAge = client.default_max_age;
+  }
+  if (maxAge === void 0) {
+    return skipAuthTimeCheck;
+  }
+  assertNumber(maxAge, true, fromClient ? '"client.default_max_age"' : '"maxAge" argument');
+  return maxAge;
+}
+function validateIdTokenAuthTimeClaim(claims) {
+  if (claims.auth_time !== void 0) {
+    assertNumber(claims.auth_time, true, 'ID Token "auth_time" (authentication time)', INVALID_RESPONSE, { claims });
+  }
+}
+function validateIdTokenAuthTime(client, claims, maxAge) {
+  if (maxAge === skipAuthTimeCheck) {
+    return;
+  }
+  const now = epochTime() + getClockSkew(client);
+  const tolerance = getClockTolerance(client);
+  if (claims.auth_time + maxAge < now - tolerance) {
+    throw OPE("too much time has elapsed since the last End-User authentication", JWT_TIMESTAMP_CHECK, { claims, now, tolerance, claim: "auth_time" });
+  }
+}
+function validateIdTokenNonce(claims, expectedNonce) {
+  const expected = expectedNonce === expectNoNonce ? void 0 : expectedNonce;
+  if (claims.nonce !== expected) {
+    throw OPE('unexpected ID Token "nonce" claim value', JWT_CLAIM_COMPARISON, {
+      expected,
+      claims,
+      claim: "nonce"
+    });
+  }
+}
+function validateIdTokenAuthorizedParty(client, claims) {
+  if (Array.isArray(claims.aud) && claims.aud.length !== 1) {
+    if (claims.azp === void 0) {
+      throw OPE('ID Token "aud" (audience) claim includes additional untrusted audiences', JWT_CLAIM_COMPARISON, { claims, claim: "aud" });
+    }
+    if (claims.azp !== client.client_id) {
+      throw OPE('unexpected ID Token "azp" (authorized party) claim value', JWT_CLAIM_COMPARISON, {
+        expected: client.client_id,
+        claims,
+        claim: "azp"
+      });
+    }
+  }
+}
+var expectNoNonce = /* @__PURE__ */ Symbol();
+var skipAuthTimeCheck = /* @__PURE__ */ Symbol();
+async function processAuthorizationCodeResponse(as, client, response, options) {
+  if (typeof options?.expectedNonce === "string" || typeof options?.maxAge === "number" || options?.requireIdToken) {
+    return processAuthorizationCodeOpenIDResponse(as, client, response, options.expectedNonce, options.maxAge, options[jweDecrypt], options.recognizedTokenTypes);
+  }
+  return processAuthorizationCodeOAuth2Response(as, client, response, options?.maxAge, options?.[jweDecrypt], options?.recognizedTokenTypes);
+}
+async function processAuthorizationCodeOpenIDResponse(as, client, response, expectedNonce, maxAge, decryptFn, recognizedTokenTypes) {
+  const additionalRequiredClaims = [];
+  switch (expectedNonce) {
+    case void 0:
+      expectedNonce = expectNoNonce;
+      break;
+    case expectNoNonce:
+      break;
+    default:
+      assertString(expectedNonce, '"expectedNonce" argument');
+      additionalRequiredClaims.push("nonce");
+  }
+  maxAge = resolveIdTokenMaxAge(client, maxAge);
+  if (maxAge !== skipAuthTimeCheck) {
+    additionalRequiredClaims.push("auth_time");
+  }
+  const result = await processGenericAccessTokenResponse(as, client, response, additionalRequiredClaims, decryptFn, recognizedTokenTypes);
+  assertString(result.id_token, '"response" body "id_token" property', INVALID_RESPONSE, {
+    body: result
+  });
+  const claims = getValidatedIdTokenClaims(result);
+  validateIdTokenAuthTime(client, claims, maxAge);
+  validateIdTokenNonce(claims, expectedNonce);
+  return result;
+}
+async function processAuthorizationCodeOAuth2Response(as, client, response, maxAge, decryptFn, recognizedTokenTypes) {
+  const result = await processGenericAccessTokenResponse(as, client, response, void 0, decryptFn, recognizedTokenTypes);
+  const claims = getValidatedIdTokenClaims(result);
+  if (claims) {
+    validateIdTokenAuthTime(client, claims, resolveIdTokenMaxAge(client, maxAge));
+    validateIdTokenNonce(claims, expectNoNonce);
+  }
+  return result;
+}
+var WWW_AUTHENTICATE_CHALLENGE = "OAUTH_WWW_AUTHENTICATE_CHALLENGE";
+var RESPONSE_BODY_ERROR = "OAUTH_RESPONSE_BODY_ERROR";
+var UNSUPPORTED_OPERATION = "OAUTH_UNSUPPORTED_OPERATION";
+var AUTHORIZATION_RESPONSE_ERROR = "OAUTH_AUTHORIZATION_RESPONSE_ERROR";
+var PARSE_ERROR = "OAUTH_PARSE_ERROR";
+var INVALID_RESPONSE = "OAUTH_INVALID_RESPONSE";
+var RESPONSE_IS_NOT_JSON = "OAUTH_RESPONSE_IS_NOT_JSON";
+var RESPONSE_IS_NOT_CONFORM = "OAUTH_RESPONSE_IS_NOT_CONFORM";
+var HTTP_REQUEST_FORBIDDEN = "OAUTH_HTTP_REQUEST_FORBIDDEN";
+var REQUEST_PROTOCOL_FORBIDDEN = "OAUTH_REQUEST_PROTOCOL_FORBIDDEN";
+var JWT_TIMESTAMP_CHECK = "OAUTH_JWT_TIMESTAMP_CHECK_FAILED";
+var JWT_CLAIM_COMPARISON = "OAUTH_JWT_CLAIM_COMPARISON_FAILED";
+var JSON_ATTRIBUTE_COMPARISON = "OAUTH_JSON_ATTRIBUTE_COMPARISON_FAILED";
+var MISSING_SERVER_METADATA = "OAUTH_MISSING_SERVER_METADATA";
+var INVALID_SERVER_METADATA = "OAUTH_INVALID_SERVER_METADATA";
+async function revocationRequest(as, client, clientAuthentication, token, options) {
+  assertAs(as);
+  assertClient(client);
+  assertString(token, '"token"');
+  const url = resolveEndpoint(as, "revocation_endpoint", client.use_mtls_endpoint_aliases, options?.[allowInsecureRequests] !== true);
+  const body = new URLSearchParams(options?.additionalParameters);
+  body.set("token", token);
+  const headers = prepareHeaders(options?.headers);
+  headers.delete("accept");
+  return authenticatedRequest(as, client, clientAuthentication, url, body, headers, options);
+}
+async function processRevocationResponse(response) {
+  if (!looseInstanceOf(response, Response)) {
+    throw CodedTypeError('"response" must be an instance of Response', ERR_INVALID_ARG_TYPE);
+  }
+  await checkOAuthBodyError(response, 200, "Revocation Endpoint");
+  return void 0;
+}
+function assertReadableResponse(response) {
+  if (response.bodyUsed) {
+    throw CodedTypeError('"response" body has been used already', ERR_INVALID_ARG_VALUE);
+  }
+}
+async function validateJwt(jws, checkAlg, clockSkew2, clockTolerance2, decryptJwt) {
+  let { 0: protectedHeader, 1: payload, length } = jws.split(".");
+  if (length === 5) {
+    if (decryptJwt !== void 0) {
+      jws = await decryptJwt(jws);
+      ({ 0: protectedHeader, 1: payload, length } = jws.split("."));
+    } else {
+      throw new UnsupportedOperationError("JWE decryption is not configured", { cause: jws });
+    }
+  }
+  if (length !== 3) {
+    throw OPE("Invalid JWT", INVALID_RESPONSE, jws);
+  }
+  let header;
   try {
-    assertRealDirectory(path);
-    return readdirSync(path).sort();
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
+    header = JSON.parse(buf(b64u(protectedHeader)));
+  } catch (cause) {
+    throw OPE("failed to parse JWT Header body as base64url encoded JSON", PARSE_ERROR, cause);
   }
+  if (!isJsonObject(header)) {
+    throw OPE("JWT Header must be a top level object", INVALID_RESPONSE, jws);
+  }
+  checkAlg(header);
+  if (header.crit !== void 0) {
+    throw new UnsupportedOperationError('no JWT "crit" header parameter extensions are supported', {
+      cause: { header }
+    });
+  }
+  let claims;
+  try {
+    claims = JSON.parse(buf(b64u(payload)));
+  } catch (cause) {
+    throw OPE("failed to parse JWT Payload body as base64url encoded JSON", PARSE_ERROR, cause);
+  }
+  if (!isJsonObject(claims)) {
+    throw OPE("JWT Payload must be a top level object", INVALID_RESPONSE, jws);
+  }
+  const now = epochTime() + clockSkew2;
+  if (claims.exp !== void 0) {
+    if (typeof claims.exp !== "number") {
+      throw OPE('unexpected JWT "exp" (expiration time) claim type', INVALID_RESPONSE, { claims });
+    }
+    if (claims.exp <= now - clockTolerance2) {
+      throw OPE('unexpected JWT "exp" (expiration time) claim value, expiration is past current timestamp', JWT_TIMESTAMP_CHECK, { claims, now, tolerance: clockTolerance2, claim: "exp" });
+    }
+  }
+  if (claims.iat !== void 0) {
+    if (typeof claims.iat !== "number") {
+      throw OPE('unexpected JWT "iat" (issued at) claim type', INVALID_RESPONSE, { claims });
+    }
+  }
+  if (claims.iss !== void 0) {
+    if (typeof claims.iss !== "string") {
+      throw OPE('unexpected JWT "iss" (issuer) claim type', INVALID_RESPONSE, { claims });
+    }
+  }
+  if (claims.nbf !== void 0) {
+    if (typeof claims.nbf !== "number") {
+      throw OPE('unexpected JWT "nbf" (not before) claim type', INVALID_RESPONSE, { claims });
+    }
+    if (claims.nbf > now + clockTolerance2) {
+      throw OPE('unexpected JWT "nbf" (not before) claim value', JWT_TIMESTAMP_CHECK, {
+        claims,
+        now,
+        tolerance: clockTolerance2,
+        claim: "nbf"
+      });
+    }
+  }
+  if (claims.aud !== void 0) {
+    if (typeof claims.aud !== "string" && !Array.isArray(claims.aud)) {
+      throw OPE('unexpected JWT "aud" (audience) claim type', INVALID_RESPONSE, { claims });
+    }
+  }
+  return { header, claims, jwt: jws };
 }
-function captureAgreementPath() {
-  return join(memrootConfigDir(), "capture-agreement.json");
+function checkSigningAlgorithm(client, issuer, fallback2, header) {
+  if (client !== void 0) {
+    if (typeof client === "string" ? header.alg !== client : !client.includes(header.alg)) {
+      throw OPE('unexpected JWT "alg" header parameter', INVALID_RESPONSE, {
+        header,
+        expected: client,
+        reason: "client configuration"
+      });
+    }
+    return;
+  }
+  if (Array.isArray(issuer)) {
+    if (!issuer.includes(header.alg)) {
+      throw OPE('unexpected JWT "alg" header parameter', INVALID_RESPONSE, {
+        header,
+        expected: issuer,
+        reason: "authorization server metadata"
+      });
+    }
+    return;
+  }
+  if (fallback2 !== void 0) {
+    if (typeof fallback2 === "string" ? header.alg !== fallback2 : typeof fallback2 === "function" ? !fallback2(header.alg) : !fallback2.includes(header.alg)) {
+      throw OPE('unexpected JWT "alg" header parameter', INVALID_RESPONSE, {
+        header,
+        expected: fallback2,
+        reason: "default value"
+      });
+    }
+    return;
+  }
+  throw OPE('missing client or server configuration to verify used JWT "alg" header parameter', void 0, { client, issuer, fallback: fallback2 });
 }
+function getURLSearchParameter(parameters, name) {
+  const { 0: value, length } = parameters.getAll(name);
+  if (length > 1) {
+    throw OPE(`"${name}" parameter must be provided only once`, INVALID_RESPONSE);
+  }
+  return value;
+}
+var skipStateCheck = /* @__PURE__ */ Symbol();
+var expectNoState = /* @__PURE__ */ Symbol();
+function validateAuthResponse(as, client, parameters, expectedState) {
+  assertAs(as);
+  assertClient(client);
+  if (parameters instanceof URL) {
+    parameters = parameters.searchParams;
+  }
+  if (!(parameters instanceof URLSearchParams)) {
+    throw CodedTypeError('"parameters" must be an instance of URLSearchParams, or URL', ERR_INVALID_ARG_TYPE);
+  }
+  if (getURLSearchParameter(parameters, "response")) {
+    throw OPE('"parameters" contains a JARM response, use validateJwtAuthResponse() instead of validateAuthResponse()', INVALID_RESPONSE, { parameters });
+  }
+  const iss = getURLSearchParameter(parameters, "iss");
+  const state = getURLSearchParameter(parameters, "state");
+  if (!iss && as.authorization_response_iss_parameter_supported) {
+    throw OPE('response parameter "iss" (issuer) missing', INVALID_RESPONSE, { parameters });
+  }
+  if (iss && iss !== as.issuer) {
+    throw OPE('unexpected "iss" (issuer) response parameter value', INVALID_RESPONSE, {
+      expected: as.issuer,
+      parameters
+    });
+  }
+  switch (expectedState) {
+    case void 0:
+    case expectNoState:
+      if (state !== void 0) {
+        throw OPE('unexpected "state" response parameter encountered', INVALID_RESPONSE, {
+          expected: void 0,
+          parameters
+        });
+      }
+      break;
+    case skipStateCheck:
+      break;
+    default:
+      assertString(expectedState, '"expectedState" argument');
+      if (state !== expectedState) {
+        throw OPE(state === void 0 ? 'response parameter "state" missing' : 'unexpected "state" response parameter value', INVALID_RESPONSE, { expected: expectedState, parameters });
+      }
+  }
+  const error = getURLSearchParameter(parameters, "error");
+  if (error) {
+    throw new AuthorizationResponseError("authorization response from the server is an error", {
+      cause: parameters
+    });
+  }
+  const id_token = getURLSearchParameter(parameters, "id_token");
+  const token = getURLSearchParameter(parameters, "token");
+  if (id_token !== void 0 || token !== void 0) {
+    throw new UnsupportedOperationError("implicit and hybrid flows are not supported");
+  }
+  return brand(new URLSearchParams(parameters));
+}
+async function dynamicClientRegistrationRequest(as, metadata, options) {
+  assertAs(as);
+  const url = resolveEndpoint(as, "registration_endpoint", metadata.use_mtls_endpoint_aliases, options?.[allowInsecureRequests] !== true);
+  const headers = prepareHeaders(options?.headers);
+  headers.set("accept", "application/json");
+  headers.set("content-type", "application/json");
+  const method = "POST";
+  if (options?.DPoP) {
+    assertDPoP(options.DPoP);
+    await options.DPoP.addProof(url, headers, method, options.initialAccessToken);
+  }
+  if (options?.initialAccessToken) {
+    headers.set("authorization", `${headers.has("dpop") ? "DPoP" : "Bearer"} ${options.initialAccessToken}`);
+  }
+  const response = await (options?.[customFetch] || fetch)(url.href, {
+    body: JSON.stringify(metadata),
+    headers: Object.fromEntries(headers.entries()),
+    method,
+    redirect: "manual",
+    signal: signal(url, options?.signal)
+  });
+  options?.DPoP?.cacheNonce(response, url);
+  return response;
+}
+async function processDynamicClientRegistrationResponse(response) {
+  if (!looseInstanceOf(response, Response)) {
+    throw CodedTypeError('"response" must be an instance of Response', ERR_INVALID_ARG_TYPE);
+  }
+  await checkOAuthBodyError(response, 201, "Dynamic Client Registration Endpoint");
+  assertReadableResponse(response);
+  const json = await getResponseJsonBody(response);
+  assertString(json.client_id, '"response" body "client_id" property', INVALID_RESPONSE, {
+    body: json
+  });
+  if (json.client_secret !== void 0) {
+    assertString(json.client_secret, '"response" body "client_secret" property', INVALID_RESPONSE, {
+      body: json
+    });
+  }
+  if (json.client_secret) {
+    assertNumber(json.client_secret_expires_at, true, '"response" body "client_secret_expires_at" property', INVALID_RESPONSE, {
+      body: json
+    });
+  }
+  return json;
+}
+async function getResponseJsonBody(response, check = assertApplicationJson) {
+  let json;
+  try {
+    json = await response.json();
+  } catch (cause) {
+    check(response);
+    throw OPE('failed to parse "response" body as JSON', PARSE_ERROR, cause);
+  }
+  if (!isJsonObject(json)) {
+    throw OPE('"response" body must be a top level object', INVALID_RESPONSE, { body: json });
+  }
+  return json;
+}
+var _nodiscoverycheck = /* @__PURE__ */ Symbol();
+var _expectedIssuer = /* @__PURE__ */ Symbol();
 
-// src/config.ts
-import { randomUUID } from "node:crypto";
+// src/state/config.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
 import {
   chmod,
   lstat as lstat2,
@@ -1047,35 +3368,20 @@ import {
   rm as rm2,
   writeFile as writeFile2
 } from "node:fs/promises";
-import { join as join4 } from "node:path";
+import { join as join10 } from "node:path";
 
-// src/api-base.ts
-function isLoopbackHostname(hostname) {
-  return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
-}
-function isAllowedApiBase(value) {
-  try {
-    const url = new URL(value);
-    if (url.username || url.password || url.search || url.hash) return false;
-    if (url.protocol === "https:") return true;
-    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
-  } catch {
-    return false;
-  }
-}
-
-// src/capture/queue/lock.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
+// src/state/lock.ts
+import { randomBytes as randomBytes3 } from "node:crypto";
 import {
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2
+  lstatSync as lstatSync5,
+  mkdirSync as mkdirSync3,
+  renameSync as renameSync4,
+  rmSync as rmSync3,
+  writeFileSync as writeFileSync3
 } from "node:fs";
-import { join as join2 } from "node:path";
+import { join as join8 } from "node:path";
 function lockPath(name) {
-  return join2(stateSubdir("locks"), name);
+  return join8(stateSubdir("locks"), name);
 }
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -1087,7 +3393,7 @@ function processAlive(pid) {
   }
 }
 function readOwnerFile(path) {
-  return readPrivateFile(join2(path, "owner.json"), 64 * 1024);
+  return readPrivateFile(join8(path, "owner.json"), 64 * 1024);
 }
 function readOwner(path) {
   try {
@@ -1108,7 +3414,7 @@ function readOwner(path) {
 function isStale(path, staleMs) {
   let info;
   try {
-    info = lstatSync2(path);
+    info = lstatSync5(path);
   } catch {
     return false;
   }
@@ -1121,19 +3427,19 @@ function isStale(path, staleMs) {
 var held = /* @__PURE__ */ new Map();
 function tryMkdir(path) {
   try {
-    mkdirSync2(path, { mode: 448 });
+    mkdirSync3(path, { mode: 448 });
   } catch (error) {
     if (error.code === "EEXIST") return false;
     throw error;
   }
-  const token = randomBytes2(8).toString("hex");
-  held.set(path, { ino: lstatSync2(path).ino, token });
+  const token = randomBytes3(8).toString("hex");
+  held.set(path, { ino: lstatSync5(path).ino, token });
   writeOwner(path, (/* @__PURE__ */ new Date()).toISOString(), token);
   return true;
 }
 function writeOwner(path, createdAt, token) {
-  const temporary = join2(path, `owner.${process.pid}.${token}.tmp`);
-  writeFileSync2(
+  const temporary = join8(path, `owner.${process.pid}.${token}.tmp`);
+  writeFileSync3(
     temporary,
     JSON.stringify({
       pid: process.pid,
@@ -1143,7 +3449,7 @@ function writeOwner(path, createdAt, token) {
     }),
     { mode: 384 }
   );
-  renameSync2(temporary, join2(path, "owner.json"));
+  renameSync4(temporary, join8(path, "owner.json"));
 }
 function readToken(path) {
   try {
@@ -1157,7 +3463,7 @@ function stillOurs(path) {
   const mine = held.get(path);
   if (!mine) return false;
   try {
-    return lstatSync2(path).ino === mine.ino && readToken(path) === mine.token;
+    return lstatSync5(path).ino === mine.ino && readToken(path) === mine.token;
   } catch {
     return false;
   }
@@ -1183,20 +3489,20 @@ function heartbeat(name) {
   return true;
 }
 function clearStale(path, staleMs) {
-  const tombstone = `${path}.stale-${process.pid}-${randomBytes2(4).toString("hex")}`;
+  const tombstone = `${path}.stale-${process.pid}-${randomBytes3(4).toString("hex")}`;
   try {
-    renameSync2(path, tombstone);
+    renameSync4(path, tombstone);
   } catch {
     return;
   }
   if (!isStale(tombstone, staleMs)) {
     try {
-      renameSync2(tombstone, path);
+      renameSync4(tombstone, path);
       return;
     } catch {
     }
   }
-  rmSync2(tombstone, { recursive: true, force: true });
+  rmSync3(tombstone, { recursive: true, force: true });
 }
 async function acquireLock(name, options) {
   const path = lockPath(name);
@@ -1209,7 +3515,7 @@ async function acquireLock(name, options) {
       return () => {
         if (released) return;
         released = true;
-        if (stillOurs(path)) rmSync2(path, { recursive: true, force: true });
+        if (stillOurs(path)) rmSync3(path, { recursive: true, force: true });
         held.delete(path);
       };
     }
@@ -1242,7 +3548,7 @@ async function withCredentialLock(name, operation) {
   }
 }
 
-// src/storage.ts
+// src/state/storage.ts
 import {
   lstat,
   mkdir,
@@ -1253,31 +3559,31 @@ import {
   writeFile
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname2, isAbsolute as isAbsolute2, join as join3 } from "node:path";
+import { dirname as dirname6, isAbsolute as isAbsolute3, join as join9 } from "node:path";
 function dataDirectory() {
-  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join3(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join3(homedir2(), ".local", "share");
-  if (!isAbsolute2(base))
+  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join9(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join9(homedir2(), ".local", "share");
+  if (!isAbsolute3(base))
     throw new Error(
       "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
     );
-  return join3(base, "memroot");
+  return join9(base, "memroot");
 }
 async function safeDirectory(path) {
   const boundary = dataDirectory();
   if (path !== boundary && path.startsWith(`${boundary}/`))
-    await safeDirectory(dirname2(path));
+    await safeDirectory(dirname6(path));
   await mkdir(path, { recursive: true, mode: 448 });
   const info = await lstat(path);
   if (!info.isDirectory() || info.isSymbolicLink())
     throw new Error(`UNSAFE_PATH: Expected a real directory at ${path}.`);
 }
 
-// src/config.ts
+// src/state/config.ts
 function configDirectory() {
   return memrootConfigDir();
 }
 function configPath() {
-  return join4(configDirectory(), "config.json");
+  return join10(configDirectory(), "config.json");
 }
 function optionalString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -1393,7 +3699,7 @@ async function writeConfig(config) {
   const directory = configDirectory();
   await safeDirectory(directory);
   const path = configPath();
-  const temporary = `${path}.${randomUUID()}.tmp`;
+  const temporary = `${path}.${randomUUID3()}.tmp`;
   try {
     await writeFile2(temporary, `${JSON.stringify(config, null, 2)}
 `, {
@@ -1407,9 +3713,28 @@ async function writeConfig(config) {
   }
 }
 
-// src/credentials.ts
+// src/commands/global-cli.ts
+var import_compare = __toESM(require_compare(), 1);
+var import_valid = __toESM(require_valid(), 1);
+
+// ../../node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/stringify.js
+var HAS_WELLFORMED = !!"".isWellFormed;
+
+// src/connection/credential-accounts.ts
+var CLI_CLIENT_ID = "memroot-cli";
+function restAccount(apiBase) {
+  return apiBase;
+}
+function captureAccount(apiBase) {
+  return `${apiBase}#mcp`;
+}
+function agyAccount(apiBase) {
+  return `${apiBase}#agy-mcp`;
+}
+
+// src/connection/credentials.ts
 import { spawnSync } from "node:child_process";
-import { lstatSync as lstatSync3 } from "node:fs";
+import { lstatSync as lstatSync6 } from "node:fs";
 import {
   chmod as chmod2,
   lstat as lstat3,
@@ -1418,7 +3743,7 @@ import {
   rm as rm3,
   writeFile as writeFile3
 } from "node:fs/promises";
-import { isAbsolute as isAbsolute3, join as join5 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join11 } from "node:path";
 var SERVICE = "memroot";
 var TOOL_TIMEOUT_MS = 15e3;
 function credentialStoreKind() {
@@ -1463,7 +3788,7 @@ function quote(value) {
   return JSON.stringify(value);
 }
 function testStorePath() {
-  return join5(configDirectory(), "test-credentials.json");
+  return join11(configDirectory(), "test-credentials.json");
 }
 async function readTestStore() {
   try {
@@ -1507,8 +3832,8 @@ function assertMacOSDefaultKeychain(timeoutMs) {
     );
     const match2 = /^"([^"\r\n]+)"$/u.exec(result.stdout.trim());
     const path = match2?.[1];
-    if (result.status !== 0 || !path || !isAbsolute3(path)) throw new Error();
-    const info = lstatSync3(path);
+    if (result.status !== 0 || !path || !isAbsolute4(path)) throw new Error();
+    const info = lstatSync6(path);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error();
   } catch {
     throw new Error(
@@ -1647,673 +3972,7 @@ async function deleteSecret(account, knownPresent = false) {
     throw new Error("AUTH_KEYCHAIN_FAILED: secret-tool clear failed.");
 }
 
-// src/project-context.ts
-import { existsSync } from "node:fs";
-import { dirname as dirname5, join as join9 } from "node:path";
-import { fileURLToPath } from "node:url";
-
-// src/project-folders.ts
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { lstatSync as lstatSync6, readFileSync as readFileSync3, realpathSync } from "node:fs";
-import {
-  basename,
-  dirname as dirname4,
-  isAbsolute as isAbsolute4,
-  join as join8,
-  normalize as normalize2,
-  relative,
-  resolve,
-  sep
-} from "node:path";
-
-// src/config-store.ts
-import { randomBytes as randomBytes3 } from "node:crypto";
-import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync4,
-  mkdirSync as mkdirSync3,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync3,
-  rmSync as rmSync3,
-  writeFileSync as writeFileSync3,
-  writeSync
-} from "node:fs";
-import { dirname as dirname3, join as join6 } from "node:path";
-var LOCK_STALE_MS = 5e3;
-var LOCK_TRIES = 40;
-var TMP_STALE_MS = 6e4;
-function pause(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-function withConfigLock(fileName, update2) {
-  const directory = memrootConfigDir();
-  ensurePrivateDir(directory, dirname3(directory), false);
-  const lock = `${join6(directory, fileName)}.lock`;
-  const nonce = randomBytes3(8).toString("hex");
-  const owner = join6(lock, "owner");
-  let held2 = false;
-  for (let i2 = 0; i2 < LOCK_TRIES && !held2; i2++) {
-    try {
-      mkdirSync3(lock, { mode: 448 });
-      writeFileSync3(owner, nonce, { mode: 384 });
-      held2 = true;
-    } catch (error) {
-      if (error.code !== "EEXIST") break;
-      try {
-        if (Date.now() - lstatSync4(lock).mtimeMs > LOCK_STALE_MS)
-          rmSync3(lock, { recursive: true, force: true });
-      } catch {
-      }
-      pause(25);
-    }
-  }
-  try {
-    return update2();
-  } finally {
-    if (held2)
-      try {
-        if (readFileSync2(owner, "utf8") === nonce)
-          rmSync3(lock, { recursive: true, force: true });
-      } catch {
-      }
-  }
-}
-function persistConfigJson(fileName, value) {
-  const directory = memrootConfigDir();
-  ensurePrivateDir(directory, dirname3(directory), false);
-  const path = join6(directory, fileName);
-  try {
-    const now = Date.now();
-    for (const name of listFiles(directory))
-      if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
-        try {
-          if (now - lstatSync4(join6(directory, name)).mtimeMs > TMP_STALE_MS)
-            rmSync3(join6(directory, name), { force: true });
-        } catch {
-        }
-  } catch {
-  }
-  const temporary = `${path}.${process.pid}.${randomBytes3(4).toString("hex")}.tmp`;
-  try {
-    const fd = openSync2(temporary, "wx", 384);
-    try {
-      fchmodSync(fd, 384);
-      writeSync(fd, `${JSON.stringify(value, null, 2)}
-`);
-      fsyncSync(fd);
-    } finally {
-      closeSync2(fd);
-    }
-    for (let attempt = 0; ; attempt++)
-      try {
-        renameSync3(temporary, path);
-        break;
-      } catch (error) {
-        const code = error.code;
-        if (attempt >= 5 || code !== "EPERM" && code !== "EBUSY") throw error;
-        pause(20);
-      }
-  } finally {
-    rmSync3(temporary, { force: true });
-  }
-}
-
-// src/project-selection.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
-import { lstatSync as lstatSync5, renameSync as renameSync4 } from "node:fs";
-import { join as join7 } from "node:path";
-var PROJECT_SELECTION_FILE = "project-selection.json";
-var MAX_FILE_BYTES = 256 * 1024;
-var MAX_RECORDS = 64;
-var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectSelectionPath() {
-  return join7(memrootConfigDir(), PROJECT_SELECTION_FILE);
-}
-function normalizeApiBase(apiBase) {
-  try {
-    const url = new URL(apiBase);
-    return `${url.protocol}//${url.host}${url.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return apiBase.replace(/\/+$/, "");
-  }
-}
-function selectionKey(apiBase, principalId) {
-  return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
-}
-function withLock(update2) {
-  return withConfigLock(PROJECT_SELECTION_FILE, update2);
-}
-function persist(store) {
-  persistConfigJson(PROJECT_SELECTION_FILE, {
-    schemaVersion: 1,
-    selections: store
-  });
-}
-function valid(value) {
-  const v = value;
-  return !!v && typeof v === "object" && typeof v.apiBase === "string" && isAllowedApiBase(v.apiBase) && !v.apiBase.endsWith("/") && UUID.test(String(v.principalId)) && UUID.test(String(v.tenantId)) && UUID.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID.test(String(v.selectionId)) && typeof v.selectedAt === "string" && !Number.isNaN(Date.parse(v.selectedAt)) && (v.source === "explicit" || v.source === "sole_project");
-}
-function readStore() {
-  try {
-    const raw = readPrivateFileIfExists(projectSelectionPath(), MAX_FILE_BYTES);
-    if (raw === void 0) return {};
-    const value = JSON.parse(raw);
-    if (value?.schemaVersion !== 1 || !value.selections || typeof value.selections !== "object" || Array.isArray(value.selections))
-      return {};
-    const out = {};
-    for (const [key, entry] of Object.entries(
-      value.selections
-    ))
-      if (valid(entry) && key === selectionKey(entry.apiBase, entry.principalId))
-        out[key] = entry;
-    return out;
-  } catch {
-    return {};
-  }
-}
-function readSelection(apiBase, principalId) {
-  if (!principalId) return void 0;
-  const key = selectionKey(apiBase, principalId);
-  const found = readStore()[key];
-  if (found) return found;
-  migrateLegacyDefaults();
-  return readStore()[key];
-}
-var LEGACY_DEFAULTS = "project-defaults.json";
-function migrateLegacyDefaults() {
-  const legacy = join7(memrootConfigDir(), LEGACY_DEFAULTS);
-  try {
-    lstatSync5(legacy);
-  } catch {
-    return false;
-  }
-  try {
-    return withLock(() => {
-      let raw;
-      try {
-        raw = readPrivateFileIfExists(legacy, MAX_FILE_BYTES);
-      } catch {
-        raw = void 0;
-      }
-      if (raw === void 0) return false;
-      const store = readStore();
-      let adopted = 0;
-      try {
-        const value = JSON.parse(raw);
-        const newest = /* @__PURE__ */ new Map();
-        if (value?.schemaVersion === 1 && value.defaults)
-          for (const d of Object.values(value.defaults)) {
-            if (!d || typeof d.apiBase !== "string" || typeof d.userId !== "string" || d.principalId !== d.userId || typeof d.updatedAt !== "string")
-              continue;
-            const key = selectionKey(d.apiBase, d.userId);
-            const prior = newest.get(key);
-            if (!prior || String(prior.updatedAt) < d.updatedAt)
-              newest.set(key, d);
-          }
-        for (const [key, d] of newest)
-          if (!store[key])
-            try {
-              upsert(store, {
-                apiBase: String(d.apiBase),
-                principalId: String(d.principalId),
-                tenantId: String(d.tenantId),
-                projectId: String(d.projectId),
-                name: String(d.name || d.projectId),
-                source: "explicit"
-              });
-              adopted++;
-            } catch {
-            }
-      } catch {
-      }
-      if (adopted > 0) persist(store);
-      renameSync4(legacy, `${legacy}.migrated`);
-      return true;
-    });
-  } catch {
-    return false;
-  }
-}
-function upsert(store, input) {
-  const key = selectionKey(input.apiBase, input.principalId);
-  const prior = store[key];
-  const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
-  const record = {
-    apiBase: normalizeApiBase(input.apiBase),
-    principalId: input.principalId.toLowerCase(),
-    tenantId: input.tenantId,
-    projectId: input.projectId,
-    name: input.name,
-    selectionId: input.selectionId ?? (same && prior ? prior.selectionId : randomUUID2()),
-    selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    source: input.source
-  };
-  if (!valid(record))
-    throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
-  store[key] = record;
-  const keys = Object.keys(store);
-  if (keys.length > MAX_RECORDS)
-    for (const old of keys.sort(
-      (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
-    ).slice(0, keys.length - MAX_RECORDS))
-      delete store[old];
-  return record;
-}
-function writeSelection(input) {
-  return withLock(() => {
-    const store = readStore();
-    const record = upsert(store, input);
-    persist(store);
-    return record;
-  });
-}
-function clearSelection(apiBase, principalId, onlyProjectId) {
-  withLock(() => {
-    const store = readStore();
-    const key = selectionKey(apiBase, principalId);
-    const prior = store[key];
-    if (!prior) return;
-    if (onlyProjectId !== void 0 && prior.projectId !== onlyProjectId)
-      return;
-    delete store[key];
-    persist(store);
-  });
-}
-
-// src/project-folders.ts
-var PROJECT_FOLDERS_FILE = "project-folders.json";
-var MAX_BINDINGS = 256;
-var MAX_FILE_BYTES2 = 512 * 1024;
-var MAX_ACCOUNTS = 64;
-var MAX_PATH = 4096;
-var MAX_WALK = 128;
-var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function projectFoldersPath() {
-  return join8(memrootConfigDir(), PROJECT_FOLDERS_FILE);
-}
-var FOLD_CASE = process.platform === "win32";
-function folderContains(folder, path, options) {
-  const a2 = options.foldCase ? folder.toLowerCase() : folder;
-  const b = options.foldCase ? path.toLowerCase() : path;
-  if (a2 === b) return true;
-  const prefix = a2.endsWith(options.separator) ? a2 : `${a2}${options.separator}`;
-  return b.startsWith(prefix);
-}
-function applicableBinding(bindings, scope, options) {
-  const same = (a2, b) => options.foldCase ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
-  const chains = [
-    { root: scope.top, path: scope.cwd, mapped: false },
-    ...scope.main ? [{ ...scope.main, mapped: true }] : []
-  ];
-  let best;
-  for (const chain of chains)
-    for (const binding of bindings) {
-      const root = chain.root;
-      if (root !== void 0 && !folderContains(root, binding.folder, options) || !folderContains(binding.folder, chain.path, options))
-        continue;
-      const depth = binding.folder.length - (root?.length ?? 0);
-      if (best && depth <= best.depth) continue;
-      const atRoot = root !== void 0 && same(binding.folder, root);
-      const via = chain.mapped ? atRoot ? "main_checkout" : "main_checkout_folder" : same(binding.folder, scope.cwd) ? "folder" : root === void 0 ? "parent_folder" : atRoot ? "repo_root" : "repo_folder";
-      best = { binding, via, depth };
-    }
-  return best && { binding: best.binding, via: best.via };
-}
-var match = { foldCase: FOLD_CASE, separator: sep };
-function canonicalFolder(path) {
-  const absolute = normalize2(resolve(path));
-  let head = absolute;
-  for (let i2 = 0; i2 < MAX_WALK; i2++) {
-    try {
-      const real = realpathSync.native(head);
-      const rest = relative(head, absolute);
-      return rest ? join8(real, rest) : real;
-    } catch {
-      const parent = dirname4(head);
-      if (parent === head) break;
-      head = parent;
-    }
-  }
-  return absolute;
-}
-function smallFile(path) {
-  try {
-    const info = lstatSync6(path);
-    if (!info.isFile() || info.size > 4096) return void 0;
-    return readFileSync3(path, "utf8");
-  } catch {
-    return void 0;
-  }
-}
-function folderScope(real) {
-  for (let dir = real, i2 = 0; i2 < MAX_WALK; i2++) {
-    const dotGit = join8(dir, ".git");
-    let info;
-    try {
-      info = lstatSync6(dotGit);
-    } catch {
-      info = void 0;
-    }
-    if (info) {
-      const root = info.isFile() ? worktreeMain(dir, dotGit) : void 0;
-      if (!root) return { cwd: real, top: dir };
-      const rest = relative(dir, real);
-      return {
-        cwd: real,
-        top: dir,
-        main: { root, path: rest ? join8(root, rest) : root }
-      };
-    }
-    const parent = dirname4(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  return { cwd: real };
-}
-function worktreeMain(dir, dotGit) {
-  const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
-  if (!pointer?.[1]) return void 0;
-  const gitdir = resolve(dir, pointer[1]);
-  if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
-  const back = smallFile(join8(gitdir, "gitdir"))?.trim();
-  if (!back) return void 0;
-  try {
-    if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
-      return void 0;
-  } catch {
-    return void 0;
-  }
-  const common = smallFile(join8(gitdir, "commondir"))?.trim();
-  if (!common) return void 0;
-  let commonDir;
-  try {
-    commonDir = realpathSync.native(resolve(gitdir, common));
-  } catch {
-    return void 0;
-  }
-  if (basename(commonDir) !== ".git") return void 0;
-  return dirname4(commonDir);
-}
-function bindingFolder(path) {
-  const scope = folderScope(canonicalFolder(path));
-  const folder = scope.main?.path ?? scope.cwd;
-  const root = scope.main?.root ?? scope.top;
-  return {
-    folder,
-    mapped: !!scope.main,
-    covers: !root ? "folder" : sameFolder(folder, root) ? "repository" : "subtree"
-  };
-}
-function validBinding(value) {
-  const v = value;
-  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute4(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
-}
-function validKey(key) {
-  const at = key.lastIndexOf("|");
-  return at > 0 && isAllowedApiBase(key.slice(0, at)) && UUID2.test(key.slice(at + 1)) && key === selectionKey(key.slice(0, at), key.slice(at + 1));
-}
-function readStore2(strictKey) {
-  try {
-    const raw = readPrivateFileIfExists(projectFoldersPath(), MAX_FILE_BYTES2);
-    if (raw === void 0) return {};
-    const value = JSON.parse(raw);
-    if (value?.schemaVersion !== 1 || !value.bindings || typeof value.bindings !== "object" || Array.isArray(value.bindings))
-      throw new Error("INVALID_PROJECT_FOLDER_STORE");
-    const out = {};
-    for (const [key, list] of Object.entries(
-      value.bindings
-    )) {
-      if (key === strictKey && (!Array.isArray(list) || list.length > MAX_BINDINGS || !list.every(validBinding)))
-        throw new Error("INVALID_PROJECT_FOLDER_STORE");
-      if (validKey(key) && Array.isArray(list))
-        out[key] = list.filter(validBinding).slice(0, MAX_BINDINGS);
-    }
-    return out;
-  } catch (error) {
-    if (strictKey !== void 0) throw error;
-    return {};
-  }
-}
-function update(change) {
-  return withConfigLock(PROJECT_FOLDERS_FILE, () => {
-    const store = readStore2();
-    const result = change(store);
-    for (const key of Object.keys(store))
-      if (store[key]?.length === 0) delete store[key];
-    const keys = Object.keys(store);
-    for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ACCOUNTS)))
-      delete store[key];
-    persistConfigJson(PROJECT_FOLDERS_FILE, {
-      schemaVersion: 1,
-      bindings: store
-    });
-    return result;
-  });
-}
-var sameFolder = (a2, b) => FOLD_CASE ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
-function readBindings(apiBase, principalId, { requireValid = false } = {}) {
-  if (!principalId) return [];
-  const key = selectionKey(apiBase, principalId);
-  return readStore2(requireValid ? key : void 0)[key] ?? [];
-}
-function bindingMatchFor(apiBase, principalId, cwd) {
-  const bindings = readBindings(apiBase, principalId);
-  if (bindings.length === 0) return void 0;
-  return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
-}
-function bindingFor(apiBase, principalId, cwd) {
-  return bindingMatchFor(apiBase, principalId, cwd)?.binding;
-}
-function bindFolder(input) {
-  return update((store) => {
-    const key = selectionKey(input.apiBase, input.principalId);
-    const list = store[key] ?? [];
-    const prior = list.find((b) => sameFolder(b.folder, input.folder));
-    const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
-    const binding = {
-      folder: input.folder,
-      tenantId: input.tenantId,
-      projectId: input.projectId,
-      name: input.name,
-      bindingId: same && prior ? prior.bindingId : randomUUID3(),
-      boundAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    if (!validBinding(binding))
-      throw new Error("PROJECT_FOLDER_INVALID: Refusing an invalid binding.");
-    const rest = list.filter((b) => b !== prior);
-    if (rest.length >= MAX_BINDINGS)
-      throw new Error(
-        `PROJECT_FOLDER_LIMIT: At most ${MAX_BINDINGS} folders can be bound; remove one with unbind --folder.`
-      );
-    store[key] = [...rest, binding];
-    return binding;
-  });
-}
-function unbindFolder(apiBase, principalId, folder) {
-  return update((store) => {
-    const key = selectionKey(apiBase, principalId);
-    const list = store[key] ?? [];
-    const found = list.find((b) => sameFolder(b.folder, folder));
-    if (found) store[key] = list.filter((b) => b !== found);
-    return found;
-  });
-}
-function refreshBindings(apiBase, principalId, tenantId, projects) {
-  const key = selectionKey(apiBase, principalId);
-  const changes = (list) => list.map((b) => {
-    const live = projects.find((p) => p.project_id === b.projectId);
-    if (!live) return b.stale ? b : { ...b, stale: true };
-    const name = live.name ?? b.name;
-    if (!b.stale && name === b.name && b.tenantId === tenantId) return b;
-    const { stale: _stale, ...rest } = b;
-    return { ...rest, name, tenantId };
-  });
-  const before = readStore2()[key] ?? [];
-  if (changes(before).every(
-    (b, i2) => b.stale === before[i2]?.stale && b.name === before[i2]?.name && b.tenantId === before[i2]?.tenantId
-  ))
-    return;
-  update((store) => {
-    if (store[key]) store[key] = changes(store[key]);
-  });
-}
-function folderMissing(folder) {
-  try {
-    return !lstatSync6(folder).isDirectory();
-  } catch {
-    return true;
-  }
-}
-
-// src/project-context.ts
-var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function validUuid(value) {
-  return typeof value === "string" && UUID3.test(value);
-}
-function projectCommandPrefix() {
-  try {
-    const here = dirname5(fileURLToPath(import.meta.url));
-    const script = join9(here, "project.mjs");
-    if (existsSync(script) && !/["\\$`\n]/.test(script))
-      return `node "${script}"`;
-  } catch {
-  }
-  return `npx -y memroot@${"0.20.2"} project`;
-}
-function folderOption(folder) {
-  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
-}
-function legacySessionRecordsDir() {
-  return join9(stateDir(), "project-sessions");
-}
-
-// src/capture/consent.ts
-var CAPTURE_AGENTS = ["claude", "codex", "grok"];
-var CONSENT_TEXT_VERSION = "capture-consent-v2";
-var MAX_ITEMS_PER_CAPTURE_LIMIT = 50;
-var MAX_ITEMS_PER_24H_LIMIT = 2500;
-var PREVIOUS_MAX_ITEMS_PER_24H_LIMIT = 500;
-var KEYS = [
-  "schemaVersion",
-  "enabled",
-  "enabledAt",
-  "consentTextVersion",
-  "apiBase",
-  "agents",
-  "crossAgentExtraction",
-  "includeHeadlessSessions",
-  "maxItemsPerSession",
-  "maxItemsPerDay",
-  "models"
-];
-var MODEL = /^[A-Za-z0-9._:/@+-]{1,128}$/;
-function isInt(value, min, max) {
-  return typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
-}
-function parseConsent(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return void 0;
-  const record = value;
-  const keys = Object.keys(record);
-  if (keys.some((key) => !KEYS.includes(key)) || keys.length !== KEYS.length)
-    return void 0;
-  const agents2 = record.agents;
-  const models = record.models;
-  if (record.schemaVersion !== 1 || typeof record.enabled !== "boolean" || typeof record.enabledAt !== "string" || Number.isNaN(Date.parse(record.enabledAt)) || record.consentTextVersion !== CONSENT_TEXT_VERSION || typeof record.apiBase !== "string" || !isAllowedApiBase(record.apiBase) || record.apiBase.endsWith("/") || !Array.isArray(agents2) || agents2.length === 0 || agents2.length > CAPTURE_AGENTS.length || new Set(agents2).size !== agents2.length || agents2.some((agent) => !CAPTURE_AGENTS.includes(agent)) || typeof record.crossAgentExtraction !== "boolean" || typeof record.includeHeadlessSessions !== "boolean" || !isInt(record.maxItemsPerSession, 1, 5) || !isInt(record.maxItemsPerDay, 1, 20) || !models || typeof models !== "object" || Array.isArray(models))
-    return void 0;
-  const modelRecord = models;
-  const modelKeys = Object.keys(modelRecord);
-  if (modelKeys.length !== CAPTURE_AGENTS.length || modelKeys.some((key) => !CAPTURE_AGENTS.includes(key)) || Object.values(modelRecord).some(
-    (model) => model !== null && (typeof model !== "string" || !MODEL.test(model))
-  ))
-    return void 0;
-  return record;
-}
-function readConsent() {
-  let raw;
-  try {
-    raw = readPrivateFileIfExists(consentPath(), 64 * 1024);
-  } catch {
-    return { kind: "invalid" };
-  }
-  if (raw === void 0) return { kind: "absent" };
-  try {
-    const consent = parseConsent(JSON.parse(raw));
-    return consent ? { kind: "ok", consent } : { kind: "invalid" };
-  } catch {
-    return { kind: "invalid" };
-  }
-}
-function activeConsentFor(agent) {
-  const read = readConsent();
-  if (read.kind !== "ok") return void 0;
-  return read.consent.enabled && read.consent.agents.includes(agent) ? read.consent : void 0;
-}
-var CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v6";
-var PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION = "capture-consent-v5";
-function currentAgreement(consent) {
-  if (!consent.enabled) return void 0;
-  try {
-    const raw = readPrivateFileIfExists(captureAgreementPath(), 4 * 1024);
-    if (raw === void 0) return void 0;
-    const value = JSON.parse(raw);
-    if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 6 || value.schemaVersion !== 1 || value.consentTextVersion !== CAPTURE_AGREEMENT_TEXT_VERSION && value.consentTextVersion !== PREVIOUS_CAPTURE_AGREEMENT_TEXT_VERSION || value.consentEnabledAt !== consent.enabledAt || typeof value.capturingSince !== "string" || Number.isNaN(Date.parse(value.capturingSince)) || !isInt(value.maxItemsPerCapture, 1, MAX_ITEMS_PER_CAPTURE_LIMIT) || !isInt(
-      value.maxItemsPerDay,
-      1,
-      value.consentTextVersion === CAPTURE_AGREEMENT_TEXT_VERSION ? MAX_ITEMS_PER_24H_LIMIT : PREVIOUS_MAX_ITEMS_PER_24H_LIMIT
-    ))
-      return void 0;
-    return value;
-  } catch {
-    return void 0;
-  }
-}
-function activeAgreementFor(agent) {
-  const consent = activeConsentFor(agent);
-  if (!consent) return void 0;
-  const agreement = currentAgreement(consent);
-  return agreement ? { consent, agreement } : void 0;
-}
-
-// src/capture/extract/run.ts
-var MAX_OUTPUT_BYTES = 256 * 1024;
-var MAX_STDERR_BYTES = 8 * 1024;
-
-// src/capture/queue/job.ts
-import { join as join10 } from "node:path";
-var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
-var JOB_ID = /^(claude|codex|grok)-[a-f0-9]{32}$/;
-function queueDir() {
-  return stateSubdir("queue");
-}
-var conflictPath = (jobId) => join10(queueDir(), `${jobId}.account-conflict`);
-function hasAccountConflict(jobId) {
-  const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
-  if (marker === void 0) return false;
-  const at = Date.parse(marker);
-  if (Number.isFinite(at) && Date.now() - at > JOB_TTL_MS) {
-    removeFile(conflictPath(jobId));
-    return false;
-  }
-  return true;
-}
-function listJobIds() {
-  const names = listFiles(queueDir());
-  for (const name of names) {
-    const id = name.slice(0, -".account-conflict".length);
-    if (name.endsWith(".account-conflict") && JOB_ID.test(id))
-      hasAccountConflict(id);
-  }
-  return names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
-}
-
-// src/capture/queue/ledger.ts
-var UPLOAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
-
-// src/capture/upload/http.ts
+// src/connection/http.ts
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 var HTTP_TIMEOUT_MS = 3e4;
@@ -2372,17 +4031,13 @@ function httpPost(target, headers, payload, timeoutMs = HTTP_TIMEOUT_MS, budget)
   });
 }
 
-// src/capture/upload/token-broker.ts
-var MCP_CLIENT_ID = "memroot-cli";
+// src/connection/token-broker.ts
 var REFRESH_SKEW_MS = 3e4;
 var AuthRequiredError = class extends Error {
   constructor() {
     super("AUTH_REQUIRED");
   }
 };
-function mcpAccount(apiBase) {
-  return `${apiBase}#mcp`;
-}
 function mcpResource(apiBase) {
   return `${apiBase}/mcp`;
 }
@@ -2406,7 +4061,7 @@ var TokenBroker = class {
   invalidate() {
     this.cached = void 0;
   }
-  async accessToken(signal) {
+  async accessToken(signal2) {
     if (this.pending) {
       if (this.pending.expiresAt <= Date.now()) throw new AuthRequiredError();
       return this.pending.token;
@@ -2418,7 +4073,7 @@ var TokenBroker = class {
         const deadline = Date.now() + this.credentials.authTimeoutMs;
         const abort = AbortSignal.any([
           AbortSignal.timeout(this.credentials.authTimeoutMs),
-          ...signal ? [signal] : []
+          ...signal2 ? [signal2] : []
         ]);
         this.refreshing = this.refreshAccessToken(deadline, abort).finally(
           () => {
@@ -2427,19 +4082,19 @@ var TokenBroker = class {
         );
       }
       const pending = this.refreshing;
-      if (!signal) return pending;
-      if (signal.aborted) throw new TransportError("auth_cancelled");
+      if (!signal2) return pending;
+      if (signal2.aborted) throw new TransportError("auth_cancelled");
       return new Promise((resolve3, reject) => {
         const aborted = () => reject(new TransportError("auth_cancelled"));
-        signal.addEventListener("abort", aborted, { once: true });
-        pending.then(resolve3, reject).finally(() => signal.removeEventListener("abort", aborted));
+        signal2.addEventListener("abort", aborted, { once: true });
+        pending.then(resolve3, reject).finally(() => signal2.removeEventListener("abort", aborted));
       });
     }
     return this.refreshAccessToken();
   }
-  async refreshAccessToken(deadline, signal) {
+  async refreshAccessToken(deadline, signal2) {
     const remaining = () => {
-      if (signal?.aborted || deadline !== void 0 && deadline <= Date.now())
+      if (signal2?.aborted || deadline !== void 0 && deadline <= Date.now())
         throw new TransportError("auth_timeout");
       return deadline === void 0 ? void 0 : Math.max(1, deadline - Date.now());
     };
@@ -2449,29 +4104,57 @@ var TokenBroker = class {
         staleMs: 6e4,
         waitMs: Math.min(2e4, remaining() ?? 2e4),
         pollMs: 100,
-        ...signal ? { signal } : {}
+        ...signal2 ? { signal: signal2 } : {}
       }
     );
     if (!release) throw new TransportError("auth_lock_busy");
     try {
-      const account = this.credentials?.account ?? mcpAccount(this.apiBase);
+      const account = this.credentials?.account ?? captureAccount(this.apiBase);
       const refreshToken = await readSecret(account, remaining());
       if (!refreshToken) throw new AuthRequiredError();
-      const response = await httpPost(
-        new URL(`${this.apiBase}/oauth/token`),
+      const as = {
+        issuer: this.apiBase,
+        token_endpoint: `${this.apiBase}/oauth/token`
+      };
+      const client = {
+        client_id: this.credentials?.clientId ?? CLI_CLIENT_ID
+      };
+      const seen = {};
+      const answer = await refreshTokenGrantRequest(
+        as,
+        client,
+        None(),
+        refreshToken,
         {
-          "content-type": "application/x-www-form-urlencoded",
-          accept: "application/json"
-        },
-        new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-          client_id: this.credentials?.clientId ?? MCP_CLIENT_ID,
-          resource: mcpResource(this.apiBase)
-        }).toString(),
-        remaining(),
-        deadline === void 0 ? void 0 : { absoluteTimeout: true, ...signal ? { signal } : {} }
+          additionalParameters: { resource: mcpResource(this.apiBase) },
+          [customFetch]: async (url, init) => {
+            const { "user-agent": _agent, ...headers } = init.headers;
+            const response2 = await httpPost(
+              new URL(url),
+              headers,
+              String(init.body),
+              remaining(),
+              deadline === void 0 ? void 0 : { absoluteTimeout: true, ...signal2 ? { signal: signal2 } : {} }
+            ).catch((error) => {
+              if (deadline !== void 0 && error instanceof TransportError && error.code === "timeout")
+                throw new TransportError("network_error");
+              throw error;
+            });
+            seen.response = response2;
+            const contentType = response2.headers["content-type"];
+            const empty = response2.status === 204 || response2.status === 205 || response2.status === 304;
+            return new Response(empty ? null : response2.body, {
+              // A Response needs a status in 200-599; anything else is malformed.
+              status: response2.status >= 200 && response2.status <= 599 ? response2.status : 500,
+              headers: typeof contentType === "string" ? { "content-type": contentType } : {}
+            });
+          },
+          // The API base admits plain HTTP only on a loopback address.
+          [allowInsecureRequests]: new URL(this.apiBase).protocol === "http:"
+        }
       );
+      const response = seen.response;
+      if (!response) throw new TransportError("token_response_invalid");
       let body = {};
       try {
         const parsed = JSON.parse(response.body || "{}");
@@ -2485,24 +4168,28 @@ var TokenBroker = class {
           throw new AuthRequiredError();
         throw new TransportError(`token_http_${response.status}`);
       }
-      if (typeof body.access_token !== "string" || !body.access_token)
+      let tokens;
+      try {
+        tokens = await processRefreshTokenResponse(as, client, answer);
+      } catch {
         throw new TransportError("token_response_invalid");
-      if (typeof body.refresh_token === "string" && body.refresh_token && body.refresh_token !== refreshToken)
-        await storeSecret(account, body.refresh_token, remaining());
+      }
+      if (typeof tokens.refresh_token === "string" && tokens.refresh_token && tokens.refresh_token !== refreshToken)
+        await storeSecret(account, tokens.refresh_token, remaining());
       remaining();
-      const lifetime = typeof body.expires_in === "number" && body.expires_in > 0 ? body.expires_in : 300;
+      const lifetime = typeof tokens.expires_in === "number" && tokens.expires_in > 0 ? tokens.expires_in : 300;
       this.cached = {
-        token: body.access_token,
+        token: tokens.access_token,
         expiresAt: Date.now() + lifetime * 1e3
       };
-      return body.access_token;
+      return tokens.access_token;
     } finally {
       release();
     }
   }
 };
 
-// src/capture/upload/mcp-client.ts
+// src/connection/mcp-client.ts
 var MCP_PROTOCOL_VERSION = "2025-11-25";
 var McpInputRejected = class extends Error {
   constructor(rules) {
@@ -2634,10 +4321,14 @@ var McpClient = class {
   }
 };
 
-// src/auth.ts
-var PROD_API_BASE = "https://api.memroot.dev";
-var DEV_API_BASE = "http://localhost:8787";
-var STATIC_CLIENT_ID = "memroot-cli";
+// src/capture/extract/run.ts
+var MAX_OUTPUT_BYTES = 256 * 1024;
+var MAX_STDERR_BYTES = 8 * 1024;
+
+// src/capture/queue/ledger.ts
+var UPLOAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
+
+// src/connection/auth.ts
 var CALLBACK_PATH = "/callback";
 var LOGIN_TIMEOUT_MS = 18e4;
 var REQUESTED_SCOPE = "memory.read memory.write";
@@ -2648,15 +4339,6 @@ var OAuthError = class extends Error {
   }
   oauth;
 };
-function resolveApiBase(options, config) {
-  const base = options.apiBase ?? process.env.MEMROOT_API_BASE ?? (options.env ? options.env === "dev" ? DEV_API_BASE : PROD_API_BASE : void 0) ?? config.apiBase ?? PROD_API_BASE;
-  const normalized = base.replace(/\/+$/, "");
-  if (!isAllowedApiBase(normalized))
-    throw new Error(
-      "INSECURE_API_BASE: The API base must use https, or http only on a loopback address for local development."
-    );
-  return normalized;
-}
 function parseTokenSet(body) {
   if (typeof body.access_token !== "string" || !body.access_token)
     throw new Error(
@@ -2669,12 +4351,9 @@ function parseTokenSet(body) {
   return tokens;
 }
 var REQUEST_TIMEOUT_MS = 3e4;
-function request(target, method, contentType, payload) {
+function request(target, method, requestHeaders, payload) {
   const transport = target.protocol === "https:" ? httpsRequest2 : httpRequest2;
-  const headers = {
-    accept: "application/json"
-  };
-  if (contentType) headers["content-type"] = contentType;
+  const headers = { ...requestHeaders };
   if (payload !== void 0)
     headers["content-length"] = Buffer.byteLength(payload);
   return new Promise((resolve3, reject) => {
@@ -2692,10 +4371,14 @@ function request(target, method, contentType, payload) {
         response.on("data", (chunk) => {
           body += chunk;
         });
-        response.on(
-          "end",
-          () => resolve3({ status: response.statusCode ?? 0, body })
-        );
+        response.on("end", () => {
+          const contentType = response.headers["content-type"];
+          resolve3({
+            status: response.statusCode ?? 0,
+            body,
+            ...contentType ? { contentType } : {}
+          });
+        });
       }
     );
     request2.on("timeout", () => request2.destroy(new Error("request timeout")));
@@ -2710,13 +4393,38 @@ function request(target, method, contentType, payload) {
     request2.end(payload);
   });
 }
-async function getJson(url) {
-  const response = await request(new URL(url), "GET");
-  if (response.status >= 400)
-    throw new Error(
-      `AUTH_METADATA_FAILED: ${url} returned ${response.status}.`
-    );
-  return parseJsonBody(response.body);
+function oauthTransport(apiBase) {
+  const seen = { answer: void 0 };
+  const options = {
+    [customFetch]: async (url, init) => {
+      const { "user-agent": _agent, ...headers } = init.headers;
+      seen.answer = void 0;
+      const answer = await request(
+        new URL(url),
+        init.method,
+        headers,
+        init.body === void 0 ? void 0 : String(init.body)
+      );
+      seen.answer = answer;
+      const empty = answer.status === 204 || answer.status === 205 || answer.status === 304;
+      return new Response(empty ? null : answer.body, {
+        // A Response needs a status in 200-599; anything else is malformed.
+        status: answer.status >= 200 && answer.status <= 599 ? answer.status : 500,
+        headers: answer.contentType ? { "content-type": answer.contentType } : {}
+      });
+    },
+    // resolveApiBase admits plain HTTP only on a loopback address.
+    [allowInsecureRequests]: new URL(apiBase).protocol === "http:"
+  };
+  return { options, seen };
+}
+function authorizationServer(apiBase) {
+  return {
+    issuer: apiBase,
+    authorization_endpoint: `${apiBase}/authorize`,
+    token_endpoint: `${apiBase}/oauth/token`,
+    registration_endpoint: `${apiBase}/oauth/register`
+  };
 }
 function parseJsonBody(text) {
   let body;
@@ -2736,67 +4444,90 @@ function oauthFailure(record, status) {
   const description = typeof record.error_description === "string" ? ` ${record.error_description}` : "";
   return new OAuthError(code, `AUTH_TOKEN_REJECTED: ${code}.${description}`);
 }
-async function postForm(apiBase, path, params) {
-  const response = await request(
-    new URL(`${apiBase}${path}`),
-    "POST",
-    "application/x-www-form-urlencoded",
-    new URLSearchParams(params).toString()
-  );
-  let record = {};
+function errorRecord(answer) {
   try {
-    record = response.body ? parseJsonBody(response.body) : {};
-  } catch (error) {
-    if (response.status < 400) throw error;
+    return answer.body ? parseJsonBody(answer.body) : {};
+  } catch {
+    return {};
   }
-  if (response.status >= 400) throw oauthFailure(record, response.status);
-  return parseJsonBody(response.body);
+}
+function tokenFailure(answer, error) {
+  if (!answer) return error instanceof Error ? error : new Error(String(error));
+  if (answer.status >= 400)
+    return oauthFailure(errorRecord(answer), answer.status);
+  const body = parseJsonBody(answer.body);
+  if (typeof body.access_token !== "string" || !body.access_token)
+    return new Error(
+      "AUTH_RESPONSE_INVALID: The token endpoint returned no access token."
+    );
+  return new Error(
+    "AUTH_RESPONSE_INVALID: The server returned a malformed response."
+  );
+}
+async function tokenRequest(apiBase, send, process2) {
+  const { options, seen } = oauthTransport(apiBase);
+  const response = await send(options);
+  try {
+    return parseTokenSet(await process2(response));
+  } catch (error) {
+    throw tokenFailure(seen.answer, error);
+  }
 }
 async function registerClient(apiBase, redirectUri, clientName = "Memroot CLI") {
-  const response = await request(
-    new URL(`${apiBase}/oauth/register`),
-    "POST",
-    "application/json",
-    JSON.stringify({
+  const { options, seen } = oauthTransport(apiBase);
+  const response = await dynamicClientRegistrationRequest(
+    authorizationServer(apiBase),
+    {
       client_name: clientName,
       redirect_uris: [redirectUri],
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
       scope: REQUESTED_SCOPE
-    })
+    },
+    options
   );
   if (response.status === 404 || response.status === 405 || response.status === 501)
     return void 0;
-  let record = {};
   try {
-    record = parseJsonBody(response.body);
-  } catch {
-    record = {};
-  }
-  if (response.status >= 400) {
-    const code = typeof record.error === "string" ? record.error : `http_${response.status}`;
-    throw new OAuthError(
-      code,
-      `AUTH_REGISTRATION_FAILED: Client registration failed (${code}).`
-    );
-  }
-  if (typeof record.client_id !== "string" || !record.client_id)
+    return (await processDynamicClientRegistrationResponse(response)).client_id;
+  } catch (error) {
+    const answer = seen.answer;
+    if (!answer) throw error;
+    if (answer.status >= 400) {
+      const record = errorRecord(answer);
+      const code = typeof record.error === "string" ? record.error : `http_${answer.status}`;
+      throw new OAuthError(
+        code,
+        `AUTH_REGISTRATION_FAILED: Client registration failed (${code}).`
+      );
+    }
     throw new Error(
       "AUTH_RESPONSE_INVALID: Client registration returned no client_id."
     );
-  return record.client_id;
+  }
 }
-async function exchangeCode(apiBase, clientId, redirectUri, code, verifier, resource) {
-  return parseTokenSet(
-    await postForm(apiBase, "/oauth/token", {
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri,
-      client_id: clientId,
-      code_verifier: verifier,
-      ...resource ? { resource } : {}
-    })
+async function exchangeCode(apiBase, clientId, redirectUri, code, state, verifier, resource) {
+  const as = authorizationServer(apiBase);
+  const client = { client_id: clientId };
+  const callback = validateAuthResponse(
+    as,
+    client,
+    new URLSearchParams({ code, state }),
+    state
+  );
+  return tokenRequest(
+    apiBase,
+    (options) => authorizationCodeGrantRequest(
+      as,
+      client,
+      None(),
+      callback,
+      redirectUri,
+      verifier,
+      resource ? { ...options, additionalParameters: { resource } } : options
+    ),
+    (response) => processAuthorizationCodeResponse(as, client, response)
   );
 }
 function sameOrigin(url, apiBase) {
@@ -2811,28 +4542,53 @@ function terminalSafe(text, max = 200) {
   return clean.length > max ? `${clean.slice(0, max)}\u2026` : clean;
 }
 async function revokeRefreshToken(apiBase, refreshToken, clientId) {
-  const metadata = await getJson(
-    `${apiBase}/.well-known/oauth-authorization-server`
-  );
+  const metadataUrl = `${apiBase}/.well-known/oauth-authorization-server`;
+  const discovery = oauthTransport(apiBase);
+  let metadata;
+  try {
+    metadata = await processDiscoveryResponse(
+      new URL(apiBase),
+      await discoveryRequest(new URL(apiBase), {
+        ...discovery.options,
+        algorithm: "oauth2"
+      })
+    );
+  } catch (error) {
+    const answer = discovery.seen.answer;
+    if (!answer) throw error;
+    if (answer.status >= 400)
+      throw new Error(
+        `AUTH_METADATA_FAILED: ${metadataUrl} returned ${answer.status}.`
+      );
+    throw new Error(
+      "AUTH_RESPONSE_INVALID: The server returned a malformed response."
+    );
+  }
   const endpoint = metadata.revocation_endpoint;
   if (typeof endpoint !== "string" || !endpoint || !isAllowedApiBase(endpoint) || !sameOrigin(endpoint, apiBase))
     throw new Error(
       "AUTH_REVOKE_UNSUPPORTED: The server does not advertise a usable revocation endpoint."
     );
-  const response = await request(
-    new URL(endpoint),
-    "POST",
-    "application/x-www-form-urlencoded",
-    new URLSearchParams({
-      token: refreshToken,
-      token_type_hint: "refresh_token",
-      client_id: clientId
-    }).toString()
-  );
-  if (response.status !== 200)
-    throw new Error(
-      `AUTH_REVOKE_FAILED: Revocation returned ${response.status}.`
+  const { options, seen } = oauthTransport(apiBase);
+  try {
+    await processRevocationResponse(
+      await revocationRequest(
+        { ...metadata, revocation_endpoint: endpoint },
+        { client_id: clientId },
+        None(),
+        refreshToken,
+        {
+          ...options,
+          additionalParameters: { token_type_hint: "refresh_token" }
+        }
+      )
     );
+  } catch (error) {
+    if (!seen.answer) throw error;
+    throw new Error(
+      `AUTH_REVOKE_FAILED: Revocation returned ${seen.answer.status}.`
+    );
+  }
 }
 function page(title, detail) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Memroot \u2014 ${title}</title></head><body><h1>${title}</h1><p>${detail}</p></body></html>`;
@@ -2954,7 +4710,7 @@ function appleScriptString(value) {
 function openBrowser(url) {
   if (process.platform === "darwin") {
     try {
-      const child = spawn("osascript", ["-"], {
+      const child = spawn2("osascript", ["-"], {
         detached: true,
         stdio: ["pipe", "ignore", "ignore"],
         shell: false
@@ -2972,9 +4728,9 @@ function openBrowser(url) {
     };
   }
   let directory;
-  const onSignal = (signal) => {
+  const onSignal = (signal2) => {
     cleanup();
-    process.kill(process.pid, signal);
+    process.kill(process.pid, signal2);
   };
   const cleanup = () => {
     if (!directory) return;
@@ -2985,18 +4741,18 @@ function openBrowser(url) {
     process.off("SIGTERM", onSignal);
   };
   try {
-    directory = mkdtempSync(join11(tmpdir(), "memroot-login-"));
+    directory = mkdtempSync(join12(tmpdir(), "memroot-login-"));
     process.on("exit", cleanup);
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
-    const file = join11(directory, "sign-in.html");
+    const file = join12(directory, "sign-in.html");
     const target = htmlAttribute(url);
     writeFileSync4(
       file,
       `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><meta http-equiv="refresh" content="0;url=${target}"><title>Memroot sign-in</title></head><body><p><a href="${target}">Continue to Memroot sign-in</a></p></body></html>`,
       { flag: "wx", mode: 384 }
     );
-    const child = spawn("xdg-open", [file], {
+    const child = spawn2("xdg-open", [file], {
       detached: true,
       stdio: "ignore",
       shell: false
@@ -3065,6 +4821,7 @@ ${url}`
           clientId,
           redirectUri,
           result.code,
+          state,
           verifier,
           resource
         );
@@ -3176,7 +4933,7 @@ async function acceptConnectionAccount(base, verify, options, grant) {
       if (switched || grant?.kind === "agy") {
         await retireCredential(
           oldBase,
-          `${oldBase}#agy-mcp`,
+          agyAccount(oldBase),
           agyClient,
           Boolean(agyClient),
           recoverOrphan
@@ -3189,8 +4946,8 @@ async function acceptConnectionAccount(base, verify, options, grant) {
       if (switched || grant?.kind === "rest" && restClient && restClient !== grant.clientId) {
         await retireCredential(
           oldBase,
-          oldBase,
-          restClient ?? STATIC_CLIENT_ID,
+          restAccount(oldBase),
+          restClient ?? CLI_CLIENT_ID,
           Boolean(restClient)
         );
         cachedAccessToken = void 0;
@@ -3204,8 +4961,8 @@ async function acceptConnectionAccount(base, verify, options, grant) {
         if (grant || oldBase !== base)
           await retireCredential(
             oldBase,
-            mcpCredentialAccount(oldBase),
-            STATIC_CLIENT_ID
+            captureAccount(oldBase),
+            CLI_CLIENT_ID
           );
       }
       const next = { ...current, apiBase: base, userId: principal };
@@ -3213,17 +4970,17 @@ async function acceptConnectionAccount(base, verify, options, grant) {
       if (grant?.kind === "rest") {
         next.clientId = grant.clientId;
         next.clientIdApiBase = base;
-        account = base;
+        account = restAccount(base);
         cachedAccessToken = void 0;
       } else if (grant?.kind === "capture") {
-        account = mcpCredentialAccount(base);
+        account = captureAccount(base);
       } else if (grant?.kind === "agy") {
         next.agyMcpClient = {
           apiBase: base,
           clientId: grant.clientId,
           principalId: principal
         };
-        account = `${base}#agy-mcp`;
+        account = agyAccount(base);
       }
       assertCredentialLocks();
       if (!account || !grant) {
@@ -3262,14 +5019,11 @@ async function acceptConnectionAccount(base, verify, options, grant) {
     });
   });
 }
-function mcpCredentialAccount(apiBase) {
-  return `${apiBase}#mcp`;
-}
 async function loginMcp(apiBase, options, settle) {
   assertCredentialStoreAvailable();
   const { tokens } = await authorizePkce({
     apiBase,
-    clientId: STATIC_CLIENT_ID,
+    clientId: CLI_CLIENT_ID,
     noBrowser: Boolean(options.noBrowser),
     resource: `${apiBase}/mcp`,
     allowDcr: false
@@ -3285,10 +5039,10 @@ async function loginMcp(apiBase, options, settle) {
         })
       ),
       options,
-      { kind: "capture", clientId: STATIC_CLIENT_ID, refresh: refreshToken }
+      { kind: "capture", clientId: CLI_CLIENT_ID, refresh: refreshToken }
     );
   } catch (error) {
-    await revokeRefreshToken(apiBase, refreshToken, STATIC_CLIENT_ID).catch(
+    await revokeRefreshToken(apiBase, refreshToken, CLI_CLIENT_ID).catch(
       () => {
       }
     );
@@ -3299,30 +5053,7 @@ async function loginMcp(apiBase, options, settle) {
   );
 }
 
-// src/capture/hooks/spawn.ts
-import { spawn as spawn2 } from "node:child_process";
-import { existsSync as existsSync2 } from "node:fs";
-import { dirname as dirname6, join as join12 } from "node:path";
-import { fileURLToPath as fileURLToPath2 } from "node:url";
-function spawnWorker() {
-  try {
-    const here = dirname6(fileURLToPath2(import.meta.url));
-    const sibling = join12(here, "capture-worker.mjs");
-    const worker = existsSync2(sibling) ? sibling : join12(here, "plugins", "claude", "scripts", "capture-worker.mjs");
-    if (!existsSync2(worker)) return;
-    const child = spawn2(process.execPath, [worker], {
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
-    });
-    child.on("error", () => {
-    });
-    child.unref();
-  } catch {
-  }
-}
-
-// src/project-command.ts
+// src/project/command.ts
 function parseProjectList(value) {
   const v = value;
   if (v?.schema_version !== 2 || !validUuid(v.principal_id) || !validUuid(v.tenant_id) || v.truncated !== false || !Array.isArray(v.projects) || v.projects.length > 100 || v.projects.some(
@@ -3575,7 +5306,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.20.2"}`;
+  const userAgent = `memroot-cli/${"0.21.0"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;

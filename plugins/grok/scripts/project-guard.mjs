@@ -19,60 +19,7 @@ var MCP_TOOL_NAMES_V1 = [
   ...MCP_READ_ONLY_TOOL_NAMES_V1
 ];
 
-// src/capture/hooks/envelope.ts
-var MAX_ENVELOPE_BYTES = 64 * 1024;
-var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
-var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
-var STDIN_DEADLINE_MS = 500;
-function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve2) => {
-    let bytes = 0;
-    let chunks = [];
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      chunks = [];
-      process.stdin.removeAllListeners("data");
-      if (bytes > maxBytes) process.stdin.on("data", () => {
-      });
-      else process.stdin.destroy();
-      resolve2(value);
-    };
-    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
-    process.stdin.on("error", () => finish(void 0));
-    process.stdin.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes <= maxBytes) chunks.push(chunk);
-    });
-    process.stdin.on("end", () => {
-      if (bytes > maxBytes) return finish(void 0);
-      try {
-        const value = JSON.parse(
-          Buffer.concat(chunks).toString("utf8")
-        );
-        finish(
-          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
-        );
-      } catch {
-        finish(void 0);
-      }
-    });
-  });
-}
-
-// src/capture/hooks/guards.ts
-function inertProcess() {
-  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
-  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
-  return false;
-}
-function hostAgent(bundled) {
-  return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
-}
-
-// src/client-version.ts
+// src/connection/client-version.ts
 var STRICT_VERSION = /^(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,3})\.(0|[1-9]\d{0,4})$/u;
 function strictClientVersion(version) {
   return typeof version === "string" && STRICT_VERSION.test(version) ? version : void 0;
@@ -82,12 +29,12 @@ function withClientVersion(args, version) {
   return version ? { ...rest, client_version: version } : rest;
 }
 
-// src/project-context.ts
+// src/project/context.ts
 import { existsSync } from "node:fs";
 import { dirname as dirname4, join as join5 } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// src/capture/paths.ts
+// src/state/paths.ts
 import {
   chmodSync,
   closeSync,
@@ -176,7 +123,7 @@ function listFiles(path) {
   }
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import {
   basename,
@@ -189,7 +136,7 @@ import {
   sep
 } from "node:path";
 
-// src/api-base.ts
+// src/connection/api-base.ts
 function isLoopbackHostname(hostname) {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
 }
@@ -203,8 +150,9 @@ function isAllowedApiBase(value) {
     return false;
   }
 }
+var PROD_API_BASE = "https://api.memroot.dev";
 
-// src/config-store.ts
+// src/state/config-store.ts
 import { randomBytes } from "node:crypto";
 import {
   closeSync as closeSync2,
@@ -299,14 +247,13 @@ function persistConfigJson(fileName, value) {
   }
 }
 
-// src/project-selection.ts
+// src/project/selection.ts
 import { randomUUID } from "node:crypto";
 import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
 import { join as join3 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
   return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
@@ -442,7 +389,7 @@ function upsert(store, input) {
   return record2;
 }
 function offlineIdentity(recordedOnly = false) {
-  let apiBase = PRODUCTION_API_BASE;
+  let apiBase = PROD_API_BASE;
   let userId;
   try {
     const raw = readPrivateFileIfExists(
@@ -466,7 +413,7 @@ function offlineIdentity(recordedOnly = false) {
   return userId ? { apiBase, userId } : { apiBase };
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
 var MAX_BINDINGS = 256;
 var MAX_FILE_BYTES2 = 512 * 1024;
@@ -623,7 +570,7 @@ function bindingMatchFor(apiBase, principalId, cwd) {
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
 
-// src/project-scope.ts
+// src/project/scope.ts
 function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
@@ -654,7 +601,7 @@ function eventFolder(event) {
   return typeof event.workspaceRoot === "string" ? event.workspaceRoot : void 0;
 }
 
-// src/project-context.ts
+// src/project/context.ts
 function clip(value, max) {
   return value.replace(/[\r\n"\\`$]+/g, " ").slice(0, max);
 }
@@ -666,7 +613,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.20.2"} project`;
+  return `npx -y memroot@${"0.21.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -678,7 +625,60 @@ function staleBindingText(project) {
   return `Memroot project "${clip(project.name, 80)}" bound to folder "${clip(folder, 300)}" is no longer available, so Memroot calls here are refused. Bind another: ${command} use "<name>" ${option}; or use the project selected on this computer: ${command} unbind ${option}.`;
 }
 
-// src/plugin/project-guard.ts
+// src/hooks/shared/envelope.ts
+var MAX_ENVELOPE_BYTES = 64 * 1024;
+var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
+var STDIN_DEADLINE_MS = 500;
+function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
+  return new Promise((resolve2) => {
+    let bytes = 0;
+    let chunks = [];
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      chunks = [];
+      process.stdin.removeAllListeners("data");
+      if (bytes > maxBytes) process.stdin.on("data", () => {
+      });
+      else process.stdin.destroy();
+      resolve2(value);
+    };
+    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
+    process.stdin.on("error", () => finish(void 0));
+    process.stdin.on("data", (chunk) => {
+      bytes += chunk.length;
+      if (bytes <= maxBytes) chunks.push(chunk);
+    });
+    process.stdin.on("end", () => {
+      if (bytes > maxBytes) return finish(void 0);
+      try {
+        const value = JSON.parse(
+          Buffer.concat(chunks).toString("utf8")
+        );
+        finish(
+          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
+        );
+      } catch {
+        finish(void 0);
+      }
+    });
+  });
+}
+
+// src/hooks/shared/guards.ts
+function inertProcess() {
+  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
+  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
+  return false;
+}
+function hostAgent(bundled) {
+  return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
+}
+
+// src/hooks/project-guard.ts
 var memroot = false;
 var MCP_PREFIX = "^(?:mcp__(?:plugin_[A-Za-z0-9_-]+_)?)?memroot__";
 var named = (names) => new RegExp(`${MCP_PREFIX}(?:${names.join("|")})$`, "u");
@@ -778,7 +778,7 @@ async function main() {
     reason,
     withClientVersion(
       { ...input, project_id: selected.projectId },
-      strictClientVersion("0.20.2")
+      strictClientVersion("0.21.0")
     )
   );
 }

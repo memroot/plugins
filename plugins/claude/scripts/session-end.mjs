@@ -3,10 +3,169 @@
 // src/capture/hooks/session-end.ts
 import { writeSync as writeSync2 } from "node:fs";
 
+// src/hooks/shared/envelope.ts
+var MAX_ENVELOPE_BYTES = 64 * 1024;
+var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
+var STDIN_DEADLINE_MS = 500;
+function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
+  return new Promise((resolve2) => {
+    let bytes = 0;
+    let chunks = [];
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      chunks = [];
+      process.stdin.removeAllListeners("data");
+      if (bytes > maxBytes) process.stdin.on("data", () => {
+      });
+      else process.stdin.destroy();
+      resolve2(value);
+    };
+    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
+    process.stdin.on("error", () => finish(void 0));
+    process.stdin.on("data", (chunk) => {
+      bytes += chunk.length;
+      if (bytes <= maxBytes) chunks.push(chunk);
+    });
+    process.stdin.on("end", () => {
+      if (bytes > maxBytes) return finish(void 0);
+      try {
+        const value = JSON.parse(
+          Buffer.concat(chunks).toString("utf8")
+        );
+        finish(
+          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
+        );
+      } catch {
+        finish(void 0);
+      }
+    });
+  });
+}
+var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
+var REASON = /^[a-z_]{1,40}$/;
+var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|session_resume|session_fork)$/;
+function string(record, ...keys) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string") return value;
+  }
+  return void 0;
+}
+function captureTrigger(agent2, record) {
+  const names = agent2 === "grok" ? [record.hook_event_name, record.hookEventName] : [record.hook_event_name];
+  if (names.includes("SessionEnd")) return "session_end";
+  if (names.includes("PostCompact")) return "compaction";
+  if (agent2 !== "grok" && names.includes("PreCompact")) return "compaction";
+  if (names.includes("Stop")) return "turn_end";
+  if (agent2 === "claude" && names.includes("SubagentStop"))
+    return "subagent_stop";
+  if ((names.includes("Notification") || agent2 === "grok" && record.hookEventName === "notification") && (record.notification_type === "idle_prompt" || agent2 === "grok" && record.notificationType === "idle_prompt"))
+    return "idle";
+  if (agent2 !== "grok") return void 0;
+  if (record.hookEventName === "session_end") return "session_end";
+  if (record.hookEventName === "post_compact") return "compaction";
+  if (record.hookEventName === "stop") return "turn_end";
+  return void 0;
+}
+function isSubagentEvent(record) {
+  return record.subagentType !== void 0 || record.subagent_type !== void 0 || record.agent_id !== void 0 || record.agent_type !== void 0;
+}
+function normalizeCaptureEvent(agent2, trigger, record) {
+  const sessionId = string(record, "session_id", "sessionId");
+  const cwd = string(record, "cwd", "workspaceRoot");
+  const rawTranscript = "transcript_path" in record ? record.transcript_path : record.transcriptPath;
+  if (!sessionId || !SESSION_ID.test(sessionId)) return void 0;
+  if (!cwd?.startsWith("/") || cwd.length > 4096 || cwd.includes("\0"))
+    return void 0;
+  let transcriptPath;
+  if (typeof rawTranscript === "string" && rawTranscript.length > 0)
+    transcriptPath = rawTranscript;
+  else if (agent2 === "grok" && rawTranscript === void 0)
+    transcriptPath = null;
+  else return void 0;
+  let reason;
+  if (trigger === "turn_end" || trigger === "subagent_stop")
+    reason = "turn_end";
+  else if (trigger === "idle") reason = "idle_prompt";
+  else if (trigger === "resume") reason = "session_resume";
+  else if (trigger === "compaction") {
+    const how = string(record, "trigger", "source");
+    reason = how === "auto" || how === "manual" ? `compact_${how}` : "compact";
+  } else {
+    const value = string(record, "reason");
+    reason = value && REASON.test(value) && !OPEN_SESSION_REASON.test(value) ? value : "other";
+  }
+  return {
+    sessionId,
+    transcriptPath,
+    cwd,
+    reason,
+    subagent: isSubagentEvent(record)
+  };
+}
+
+// src/hooks/shared/guards.ts
+import { realpathSync } from "node:fs";
+import { homedir } from "node:os";
+import { isAbsolute, join, normalize } from "node:path";
+function inertProcess() {
+  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
+  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
+  return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
+}
+function hostAgent(bundled) {
+  return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
+}
+function absoluteEnv(name) {
+  const value = process.env[name];
+  return value && isAbsolute(value) ? normalize(value) : void 0;
+}
+function transcriptRoots(agent2) {
+  if (agent2 === "claude")
+    return [
+      join(
+        absoluteEnv("CLAUDE_CONFIG_DIR") ?? join(homedir(), ".claude"),
+        "projects"
+      )
+    ];
+  if (agent2 === "codex") {
+    const home = absoluteEnv("CODEX_HOME") ?? join(homedir(), ".codex");
+    return [join(home, "sessions"), join(home, "archived_sessions")];
+  }
+  return [
+    join(absoluteEnv("GROK_HOME") ?? join(homedir(), ".grok"), "sessions")
+  ];
+}
+function transcriptPathAllowed(agent2, path) {
+  if (!isAbsolute(path) || path.length > 4096 || path.includes("\0") || path.split("/").includes("..") || normalize(path) !== path)
+    return false;
+  if (agent2 !== "grok" && !path.endsWith(".jsonl")) return false;
+  return transcriptRoots(agent2).some((root) => {
+    if (path.startsWith(`${root}/`)) return true;
+    try {
+      return path.startsWith(`${realpathSync(root)}/`);
+    } catch {
+      return false;
+    }
+  });
+}
+function isHeadlessSession(agent2) {
+  if (agent2 === "claude")
+    return (process.env.CLAUDE_CODE_ENTRYPOINT ?? "").startsWith("sdk");
+  return false;
+}
+
 // src/capture/hooks/capture-trigger.ts
 import { lstatSync as lstatSync6 } from "node:fs";
 
-// src/api-base.ts
+// src/connection/api-base.ts
 function isLoopbackHostname(hostname) {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
 }
@@ -20,21 +179,39 @@ function isAllowedApiBase(value) {
     return false;
   }
 }
+var PROD_API_BASE = "https://api.memroot.dev";
 
-// src/project-folders.ts
-import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+// src/project/folders.ts
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync as realpathSync2 } from "node:fs";
 import {
   basename,
   dirname as dirname3,
-  isAbsolute as isAbsolute2,
-  join as join4,
-  normalize as normalize2,
+  isAbsolute as isAbsolute3,
+  join as join5,
+  normalize as normalize3,
   relative,
   resolve,
   sep
 } from "node:path";
 
-// src/capture/paths.ts
+// src/state/config-store.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join3 } from "node:path";
+
+// src/state/paths.ts
 import { randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -50,8 +227,8 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, normalize } from "node:path";
+import { homedir as homedir2 } from "node:os";
+import { dirname, isAbsolute as isAbsolute2, join as join2, normalize as normalize2 } from "node:path";
 var UnsafePathError = class extends Error {
   constructor(code = "UNSAFE_PATH") {
     super(`${code}: refusing an unexpected file type or symbolic link.`);
@@ -59,38 +236,38 @@ var UnsafePathError = class extends Error {
   }
   code;
 };
-function absoluteEnv(name) {
+function absoluteEnv2(name) {
   const value = process.env[name];
   if (!value) return void 0;
-  if (!isAbsolute(value))
+  if (!isAbsolute2(value))
     throw new Error(`INVALID_STATE_DIRECTORY: ${name} must be absolute.`);
-  return normalize(value);
+  return normalize2(value);
 }
 function stateBoundary() {
-  const explicit = absoluteEnv("MEMROOT_STATE_DIR");
+  const explicit = absoluteEnv2("MEMROOT_STATE_DIR");
   if (explicit) return { boundary: explicit, dir: explicit };
-  const base = absoluteEnv("XDG_STATE_HOME") ?? join(homedir(), ".local", "state");
-  return { boundary: base, dir: join(base, "memroot", "capture") };
+  const base = absoluteEnv2("XDG_STATE_HOME") ?? join2(homedir2(), ".local", "state");
+  return { boundary: base, dir: join2(base, "memroot", "capture") };
 }
 function stateDir() {
   return stateBoundary().dir;
 }
 function memrootConfigDir() {
   const override = process.env.MEMROOT_TEST_CONFIG_DIR;
-  if (process.env.NODE_ENV === "test" && override && isAbsolute(override))
-    return normalize(override);
-  return join(homedir(), ".memroot");
+  if (process.env.NODE_ENV === "test" && override && isAbsolute2(override))
+    return normalize2(override);
+  return join2(homedir2(), ".memroot");
 }
 function consentPath() {
-  return join(memrootConfigDir(), "capture.json");
+  return join2(memrootConfigDir(), "capture.json");
 }
 function assertRealDirectory(path) {
   const info = lstatSync(path);
   if (info.isSymbolicLink() || !info.isDirectory()) throw new UnsafePathError();
 }
 function ensurePrivateDir(path, boundary, checkRoot = false) {
-  const target2 = normalize(path);
-  const root = normalize(boundary);
+  const target2 = normalize2(path);
+  const root = normalize2(boundary);
   if (target2 !== root && !target2.startsWith(`${root}/`))
     throw new UnsafePathError();
   mkdirSync(target2, { recursive: true, mode: 448 });
@@ -108,7 +285,7 @@ function ensurePrivateDir(path, boundary, checkRoot = false) {
 }
 function stateSubdir(...parts) {
   const { boundary, dir } = stateBoundary();
-  const path = join(dir, ...parts);
+  const path = join2(dir, ...parts);
   ensurePrivateDir(path, boundary, boundary === dir);
   return path;
 }
@@ -171,25 +348,10 @@ function listFiles(path) {
   }
 }
 function captureAgreementPath() {
-  return join(memrootConfigDir(), "capture-agreement.json");
+  return join2(memrootConfigDir(), "capture-agreement.json");
 }
 
-// src/config-store.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
-import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
-  writeSync
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+// src/state/config-store.ts
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
@@ -199,9 +361,9 @@ function pause(ms) {
 function withConfigLock(fileName, update) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const lock = `${join2(directory, fileName)}.lock`;
+  const lock = `${join3(directory, fileName)}.lock`;
   const nonce = randomBytes2(8).toString("hex");
-  const owner = join2(lock, "owner");
+  const owner = join3(lock, "owner");
   let held = false;
   for (let i = 0; i < LOCK_TRIES && !held; i++) {
     try {
@@ -232,14 +394,14 @@ function withConfigLock(fileName, update) {
 function persistConfigJson(fileName, value) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
-  const path = join2(directory, fileName);
+  const path = join3(directory, fileName);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
       if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
         try {
-          if (now - lstatSync2(join2(directory, name)).mtimeMs > TMP_STALE_MS)
-            rmSync2(join2(directory, name), { force: true });
+          if (now - lstatSync2(join3(directory, name)).mtimeMs > TMP_STALE_MS)
+            rmSync2(join3(directory, name), { force: true });
         } catch {
         }
   } catch {
@@ -269,17 +431,16 @@ function persistConfigJson(fileName, value) {
   }
 }
 
-// src/project-selection.ts
+// src/project/selection.ts
 import { randomUUID } from "node:crypto";
 import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
-import { join as join3 } from "node:path";
+import { join as join4 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
-  return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
+  return join4(memrootConfigDir(), PROJECT_SELECTION_FILE);
 }
 function normalizeApiBase(apiBase) {
   try {
@@ -333,7 +494,7 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join3(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join4(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
     lstatSync3(legacy);
   } catch {
@@ -412,11 +573,11 @@ function upsert(store, input) {
   return record;
 }
 function offlineIdentity(recordedOnly = false) {
-  let apiBase = PRODUCTION_API_BASE;
+  let apiBase = PROD_API_BASE;
   let userId;
   try {
     const raw = readPrivateFileIfExists(
-      join3(memrootConfigDir(), "config.json"),
+      join4(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw !== void 0) {
@@ -436,7 +597,7 @@ function offlineIdentity(recordedOnly = false) {
   return userId ? { apiBase, userId } : { apiBase };
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
 var MAX_BINDINGS = 256;
 var MAX_FILE_BYTES2 = 512 * 1024;
@@ -444,7 +605,7 @@ var MAX_PATH = 4096;
 var MAX_WALK = 128;
 var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectFoldersPath() {
-  return join4(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+  return join5(memrootConfigDir(), PROJECT_FOLDERS_FILE);
 }
 var FOLD_CASE = process.platform === "win32";
 function folderContains(folder, path, options) {
@@ -476,16 +637,16 @@ function applicableBinding(bindings, scope, options) {
 }
 var match = { foldCase: FOLD_CASE, separator: sep };
 function usableFolder(value) {
-  return typeof value === "string" && isAbsolute2(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+  return typeof value === "string" && isAbsolute3(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
 }
 function canonicalFolder(path) {
-  const absolute = normalize2(resolve(path));
+  const absolute = normalize3(resolve(path));
   let head = absolute;
   for (let i = 0; i < MAX_WALK; i++) {
     try {
-      const real = realpathSync.native(head);
+      const real = realpathSync2.native(head);
       const rest = relative(head, absolute);
-      return rest ? join4(real, rest) : real;
+      return rest ? join5(real, rest) : real;
     } catch {
       const parent = dirname3(head);
       if (parent === head) break;
@@ -505,7 +666,7 @@ function smallFile(path) {
 }
 function folderScope(real) {
   for (let dir = real, i = 0; i < MAX_WALK; i++) {
-    const dotGit = join4(dir, ".git");
+    const dotGit = join5(dir, ".git");
     let info;
     try {
       info = lstatSync4(dotGit);
@@ -519,7 +680,7 @@ function folderScope(real) {
       return {
         cwd: real,
         top: dir,
-        main: { root, path: rest ? join4(root, rest) : root }
+        main: { root, path: rest ? join5(root, rest) : root }
       };
     }
     const parent = dirname3(dir);
@@ -533,19 +694,19 @@ function worktreeMain(dir, dotGit) {
   if (!pointer?.[1]) return void 0;
   const gitdir = resolve(dir, pointer[1]);
   if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
-  const back = smallFile(join4(gitdir, "gitdir"))?.trim();
+  const back = smallFile(join5(gitdir, "gitdir"))?.trim();
   if (!back) return void 0;
   try {
-    if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+    if (realpathSync2.native(resolve(gitdir, back)) !== realpathSync2.native(dotGit))
       return void 0;
   } catch {
     return void 0;
   }
-  const common = smallFile(join4(gitdir, "commondir"))?.trim();
+  const common = smallFile(join5(gitdir, "commondir"))?.trim();
   if (!common) return void 0;
   let commonDir;
   try {
-    commonDir = realpathSync.native(resolve(gitdir, common));
+    commonDir = realpathSync2.native(resolve(gitdir, common));
   } catch {
     return void 0;
   }
@@ -554,7 +715,7 @@ function worktreeMain(dir, dotGit) {
 }
 function validBinding(value) {
   const v = value;
-  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute3(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
 }
 function validKey(key) {
   const at = key.lastIndexOf("|");
@@ -593,7 +754,7 @@ function bindingMatchFor(apiBase, principalId, cwd) {
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
 
-// src/project-scope.ts
+// src/project/scope.ts
 function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
@@ -709,9 +870,9 @@ function activeAgreementFor(agent2) {
 
 // src/capture/queue/job.ts
 import { createHash, randomBytes as randomBytes3 } from "node:crypto";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 
-// src/project-context.ts
+// src/project/context.ts
 var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function validUuid(value) {
   return typeof value === "string" && UUID3.test(value);
@@ -736,7 +897,7 @@ function sha256Hex(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 function readOrCreateSalt() {
-  const path = join5(stateSubdir(), "salt");
+  const path = join6(stateSubdir(), "salt");
   const existing = readPrivateFileIfExists(path, 1024);
   if (existing !== void 0) {
     const value = existing.trim();
@@ -754,7 +915,7 @@ function sessionRefFor(salt, agent2, sessionId) {
 function queueDir() {
   return stateSubdir("queue");
 }
-var conflictPath = (jobId) => join5(queueDir(), `${jobId}.account-conflict`);
+var conflictPath = (jobId) => join6(queueDir(), `${jobId}.account-conflict`);
 function hasAccountConflict(jobId) {
   const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
   if (marker === void 0) return false;
@@ -774,7 +935,7 @@ function observeAccountConflict(agent2, sessionId, account) {
     createPrivateFileExclusive(conflictPath(id), (/* @__PURE__ */ new Date()).toISOString());
 }
 function jobPath(jobId) {
-  return join5(queueDir(), `${jobId}.json`);
+  return join6(queueDir(), `${jobId}.json`);
 }
 function parseJob(value) {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -888,7 +1049,7 @@ function enqueueFromHook(input) {
 
 // src/capture/hooks/debounce.ts
 import { lstatSync as lstatSync5 } from "node:fs";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 var TURN_END_EVERY = 8;
 var TURN_END_AFTER_MS = 20 * 60 * 1e3;
 var IDLE_AFTER_MS = 5 * 60 * 1e3;
@@ -925,7 +1086,7 @@ function cleanup(directory, keep) {
     if (name === keep || !/^(claude|codex|grok)-[a-f0-9]{32}\.json$/.test(name))
       continue;
     try {
-      const path = join6(directory, name);
+      const path = join7(directory, name);
       if (lstatSync5(path).mtimeMs < cutoff) removeFile(path);
     } catch {
     }
@@ -934,10 +1095,10 @@ function cleanup(directory, keep) {
 function noteTrigger(agent2, sessionId, trigger, now = Date.now()) {
   const name = stateName(agent2, sessionId);
   if (trigger === "session_end") {
-    removeFile(join6(stateDir(), "triggers", name));
+    removeFile(join7(stateDir(), "triggers", name));
     return true;
   }
-  const path = join6(stateSubdir("triggers"), name);
+  const path = join7(stateSubdir("triggers"), name);
   const prior = read(path);
   const state = prior ?? { turnEnds: 0, lastCaptureAt: now };
   if (trigger === "turn_end") state.turnEnds += 1;
@@ -954,165 +1115,6 @@ function noteTrigger(agent2, sessionId, trigger, now = Date.now()) {
     } catch {
     }
   return deferredIdle ? "idle_prompt" : capture;
-}
-
-// src/capture/hooks/envelope.ts
-var MAX_ENVELOPE_BYTES = 64 * 1024;
-var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
-var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
-var STDIN_DEADLINE_MS = 500;
-function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve2) => {
-    let bytes = 0;
-    let chunks = [];
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      chunks = [];
-      process.stdin.removeAllListeners("data");
-      if (bytes > maxBytes) process.stdin.on("data", () => {
-      });
-      else process.stdin.destroy();
-      resolve2(value);
-    };
-    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
-    process.stdin.on("error", () => finish(void 0));
-    process.stdin.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes <= maxBytes) chunks.push(chunk);
-    });
-    process.stdin.on("end", () => {
-      if (bytes > maxBytes) return finish(void 0);
-      try {
-        const value = JSON.parse(
-          Buffer.concat(chunks).toString("utf8")
-        );
-        finish(
-          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
-        );
-      } catch {
-        finish(void 0);
-      }
-    });
-  });
-}
-var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
-var REASON = /^[a-z_]{1,40}$/;
-var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|session_resume|session_fork)$/;
-function string(record, ...keys) {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string") return value;
-  }
-  return void 0;
-}
-function captureTrigger(agent2, record) {
-  const names = agent2 === "grok" ? [record.hook_event_name, record.hookEventName] : [record.hook_event_name];
-  if (names.includes("SessionEnd")) return "session_end";
-  if (names.includes("PostCompact")) return "compaction";
-  if (agent2 !== "grok" && names.includes("PreCompact")) return "compaction";
-  if (names.includes("Stop")) return "turn_end";
-  if (agent2 === "claude" && names.includes("SubagentStop"))
-    return "subagent_stop";
-  if ((names.includes("Notification") || agent2 === "grok" && record.hookEventName === "notification") && (record.notification_type === "idle_prompt" || agent2 === "grok" && record.notificationType === "idle_prompt"))
-    return "idle";
-  if (agent2 !== "grok") return void 0;
-  if (record.hookEventName === "session_end") return "session_end";
-  if (record.hookEventName === "post_compact") return "compaction";
-  if (record.hookEventName === "stop") return "turn_end";
-  return void 0;
-}
-function isSubagentEvent(record) {
-  return record.subagentType !== void 0 || record.subagent_type !== void 0 || record.agent_id !== void 0 || record.agent_type !== void 0;
-}
-function normalizeCaptureEvent(agent2, trigger, record) {
-  const sessionId = string(record, "session_id", "sessionId");
-  const cwd = string(record, "cwd", "workspaceRoot");
-  const rawTranscript = "transcript_path" in record ? record.transcript_path : record.transcriptPath;
-  if (!sessionId || !SESSION_ID.test(sessionId)) return void 0;
-  if (!cwd?.startsWith("/") || cwd.length > 4096 || cwd.includes("\0"))
-    return void 0;
-  let transcriptPath;
-  if (typeof rawTranscript === "string" && rawTranscript.length > 0)
-    transcriptPath = rawTranscript;
-  else if (agent2 === "grok" && rawTranscript === void 0)
-    transcriptPath = null;
-  else return void 0;
-  let reason;
-  if (trigger === "turn_end" || trigger === "subagent_stop")
-    reason = "turn_end";
-  else if (trigger === "idle") reason = "idle_prompt";
-  else if (trigger === "resume") reason = "session_resume";
-  else if (trigger === "compaction") {
-    const how = string(record, "trigger", "source");
-    reason = how === "auto" || how === "manual" ? `compact_${how}` : "compact";
-  } else {
-    const value = string(record, "reason");
-    reason = value && REASON.test(value) && !OPEN_SESSION_REASON.test(value) ? value : "other";
-  }
-  return {
-    sessionId,
-    transcriptPath,
-    cwd,
-    reason,
-    subagent: isSubagentEvent(record)
-  };
-}
-
-// src/capture/hooks/guards.ts
-import { realpathSync as realpathSync2 } from "node:fs";
-import { homedir as homedir2 } from "node:os";
-import { isAbsolute as isAbsolute3, join as join7, normalize as normalize3 } from "node:path";
-function inertProcess() {
-  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
-  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
-  return false;
-}
-function processGuard() {
-  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
-}
-function hostAgent(bundled) {
-  return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
-}
-function absoluteEnv2(name) {
-  const value = process.env[name];
-  return value && isAbsolute3(value) ? normalize3(value) : void 0;
-}
-function transcriptRoots(agent2) {
-  if (agent2 === "claude")
-    return [
-      join7(
-        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join7(homedir2(), ".claude"),
-        "projects"
-      )
-    ];
-  if (agent2 === "codex") {
-    const home = absoluteEnv2("CODEX_HOME") ?? join7(homedir2(), ".codex");
-    return [join7(home, "sessions"), join7(home, "archived_sessions")];
-  }
-  return [
-    join7(absoluteEnv2("GROK_HOME") ?? join7(homedir2(), ".grok"), "sessions")
-  ];
-}
-function transcriptPathAllowed(agent2, path) {
-  if (!isAbsolute3(path) || path.length > 4096 || path.includes("\0") || path.split("/").includes("..") || normalize3(path) !== path)
-    return false;
-  if (agent2 !== "grok" && !path.endsWith(".jsonl")) return false;
-  return transcriptRoots(agent2).some((root) => {
-    if (path.startsWith(`${root}/`)) return true;
-    try {
-      return path.startsWith(`${realpathSync2(root)}/`);
-    } catch {
-      return false;
-    }
-  });
-}
-function isHeadlessSession(agent2) {
-  if (agent2 === "claude")
-    return (process.env.CLAUDE_CODE_ENTRYPOINT ?? "").startsWith("sdk");
-  return false;
 }
 
 // src/capture/hooks/capture-trigger.ts

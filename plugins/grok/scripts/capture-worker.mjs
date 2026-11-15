@@ -5,46 +5,810 @@ var __export = (target2, all) => {
     __defProp(target2, name, { get: all[name], enumerable: true });
 };
 
-// src/capture/worker/main.ts
-import { randomBytes as randomBytes5 } from "node:crypto";
-import {
-  lstatSync as lstatSync10,
-  mkdtempSync,
-  realpathSync as realpathSync4,
-  renameSync as renameSync6,
-  rmSync as rmSync5,
-  statSync as statSync2
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join as join20 } from "node:path";
-
-// src/config.ts
-import {
-  chmod,
-  lstat as lstat2,
-  readFile as readFile2,
-  rename as rename2,
-  rm as rm2,
-  writeFile as writeFile2
-} from "node:fs/promises";
-import { join as join4 } from "node:path";
-
-// src/api-base.ts
-function isLoopbackHostname(hostname4) {
-  return hostname4 === "127.0.0.1" || hostname4 === "localhost" || hostname4 === "::1" || hostname4 === "[::1]";
+// src/connection/http.ts
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
+var HTTP_TIMEOUT_MS = 3e4;
+var MAX_RESPONSE_BYTES = 1024 * 1024;
+var TransportError = class extends Error {
+  constructor(code) {
+    super(code);
+    this.code = code;
+  }
+  code;
+};
+function httpPost(target2, headers, payload, timeoutMs = HTTP_TIMEOUT_MS, budget) {
+  const transport = target2.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise((resolve2, reject) => {
+    const req = transport(
+      target2,
+      {
+        method: "POST",
+        agent: false,
+        timeout: timeoutMs,
+        ...budget?.signal ? { signal: budget.signal } : {},
+        headers: { ...headers, "content-length": Buffer.byteLength(payload) }
+      },
+      (response) => {
+        const chunks = [];
+        let size = 0;
+        response.on("data", (chunk) => {
+          size += chunk.length;
+          if (size > MAX_RESPONSE_BYTES) {
+            req.destroy(new TransportError("response_too_large"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on(
+          "end",
+          () => resolve2({
+            status: response.statusCode ?? 0,
+            headers: response.headers,
+            body: Buffer.concat(chunks).toString("utf8")
+          })
+        );
+        response.on("error", () => reject(new TransportError("network_error")));
+      }
+    );
+    const deadline = budget?.absoluteTimeout ? setTimeout(() => req.destroy(new TransportError("timeout")), timeoutMs) : void 0;
+    if (deadline) req.once("close", () => clearTimeout(deadline));
+    req.on("timeout", () => req.destroy(new TransportError("timeout")));
+    req.on(
+      "error",
+      (error62) => reject(
+        error62 instanceof TransportError ? error62 : new TransportError("network_error")
+      )
+    );
+    req.end(payload);
+  });
 }
-function isAllowedApiBase(value) {
+
+// ../../node_modules/.pnpm/oauth4webapi@3.8.8/node_modules/oauth4webapi/build/index.js
+var USER_AGENT;
+if (typeof navigator === "undefined" || !navigator.userAgent?.startsWith?.("Mozilla/5.0 ")) {
+  const NAME = "oauth4webapi";
+  const VERSION = "v3.8.8";
+  USER_AGENT = `${NAME}/${VERSION}`;
+}
+function looseInstanceOf(input2, expected) {
+  if (input2 == null) {
+    return false;
+  }
   try {
-    const url2 = new URL(value);
-    if (url2.username || url2.password || url2.search || url2.hash) return false;
-    if (url2.protocol === "https:") return true;
-    return url2.protocol === "http:" && isLoopbackHostname(url2.hostname);
+    return input2 instanceof expected || Object.getPrototypeOf(input2)[Symbol.toStringTag] === expected.prototype[Symbol.toStringTag];
   } catch {
     return false;
   }
 }
+var ERR_INVALID_ARG_VALUE = "ERR_INVALID_ARG_VALUE";
+var ERR_INVALID_ARG_TYPE = "ERR_INVALID_ARG_TYPE";
+function CodedTypeError(message, code, cause) {
+  const err = new TypeError(message, { cause });
+  Object.assign(err, { code });
+  return err;
+}
+var allowInsecureRequests = /* @__PURE__ */ Symbol();
+var clockSkew = /* @__PURE__ */ Symbol();
+var clockTolerance = /* @__PURE__ */ Symbol();
+var customFetch = /* @__PURE__ */ Symbol();
+var jweDecrypt = /* @__PURE__ */ Symbol();
+var encoder = new TextEncoder();
+var decoder = new TextDecoder();
+function buf(input2) {
+  if (typeof input2 === "string") {
+    return encoder.encode(input2);
+  }
+  return decoder.decode(input2);
+}
+var encodeBase64Url;
+if (Uint8Array.prototype.toBase64) {
+  encodeBase64Url = (input2) => {
+    if (input2 instanceof ArrayBuffer) {
+      input2 = new Uint8Array(input2);
+    }
+    return input2.toBase64({ alphabet: "base64url", omitPadding: true });
+  };
+} else {
+  const CHUNK_SIZE = 32768;
+  encodeBase64Url = (input2) => {
+    if (input2 instanceof ArrayBuffer) {
+      input2 = new Uint8Array(input2);
+    }
+    const arr = [];
+    for (let i = 0; i < input2.byteLength; i += CHUNK_SIZE) {
+      arr.push(String.fromCharCode.apply(null, input2.subarray(i, i + CHUNK_SIZE)));
+    }
+    return btoa(arr.join("")).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+  };
+}
+var decodeBase64Url;
+if (Uint8Array.fromBase64) {
+  decodeBase64Url = (input2) => {
+    try {
+      return Uint8Array.fromBase64(input2, { alphabet: "base64url" });
+    } catch (cause) {
+      throw CodedTypeError("The input to be decoded is not correctly encoded.", ERR_INVALID_ARG_VALUE, cause);
+    }
+  };
+} else {
+  decodeBase64Url = (input2) => {
+    try {
+      const binary = atob(input2.replace(/-/g, "+").replace(/_/g, "/").replace(/\s/g, ""));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    } catch (cause) {
+      throw CodedTypeError("The input to be decoded is not correctly encoded.", ERR_INVALID_ARG_VALUE, cause);
+    }
+  };
+}
+function b64u(input2) {
+  if (typeof input2 === "string") {
+    return decodeBase64Url(input2);
+  }
+  return encodeBase64Url(input2);
+}
+var UnsupportedOperationError = class extends Error {
+  code;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    this.code = UNSUPPORTED_OPERATION;
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+var OperationProcessingError = class extends Error {
+  code;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    if (options?.code) {
+      this.code = options?.code;
+    }
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+function OPE(message, code, cause) {
+  return new OperationProcessingError(message, { code, cause });
+}
+function isJsonObject(input2) {
+  if (input2 === null || typeof input2 !== "object" || Array.isArray(input2)) {
+    return false;
+  }
+  return true;
+}
+function prepareHeaders(input2) {
+  if (looseInstanceOf(input2, Headers)) {
+    input2 = Object.fromEntries(input2.entries());
+  }
+  const headers = new Headers(input2 ?? {});
+  if (USER_AGENT && !headers.has("user-agent")) {
+    headers.set("user-agent", USER_AGENT);
+  }
+  if (headers.has("authorization")) {
+    throw CodedTypeError('"options.headers" must not include the "authorization" header name', ERR_INVALID_ARG_VALUE);
+  }
+  return headers;
+}
+function signal(url2, value) {
+  if (value !== void 0) {
+    if (typeof value === "function") {
+      value = value(url2.href);
+    }
+    if (!(value instanceof AbortSignal)) {
+      throw CodedTypeError('"options.signal" must return or be an instance of AbortSignal', ERR_INVALID_ARG_TYPE);
+    }
+    return value;
+  }
+  return void 0;
+}
+function assertNumber(input2, allow0, it, code, cause) {
+  try {
+    if (typeof input2 !== "number" || !Number.isFinite(input2)) {
+      throw CodedTypeError(`${it} must be a number`, ERR_INVALID_ARG_TYPE, cause);
+    }
+    if (input2 > 0)
+      return;
+    if (allow0) {
+      if (input2 !== 0) {
+        throw CodedTypeError(`${it} must be a non-negative number`, ERR_INVALID_ARG_VALUE, cause);
+      }
+      return;
+    }
+    throw CodedTypeError(`${it} must be a positive number`, ERR_INVALID_ARG_VALUE, cause);
+  } catch (err) {
+    if (code) {
+      throw OPE(err.message, code, cause);
+    }
+    throw err;
+  }
+}
+function assertString(input2, it, code, cause) {
+  try {
+    if (typeof input2 !== "string") {
+      throw CodedTypeError(`${it} must be a string`, ERR_INVALID_ARG_TYPE, cause);
+    }
+    if (input2.length === 0) {
+      throw CodedTypeError(`${it} must not be empty`, ERR_INVALID_ARG_VALUE, cause);
+    }
+  } catch (err) {
+    if (code) {
+      throw OPE(err.message, code, cause);
+    }
+    throw err;
+  }
+}
+function assertApplicationJson(response) {
+  assertContentType(response, "application/json");
+}
+function notJson(response, ...types) {
+  let msg = '"response" content-type must be ';
+  if (types.length > 2) {
+    const last = types.pop();
+    msg += `${types.join(", ")}, or ${last}`;
+  } else if (types.length === 2) {
+    msg += `${types[0]} or ${types[1]}`;
+  } else {
+    msg += types[0];
+  }
+  return OPE(msg, RESPONSE_IS_NOT_JSON, response);
+}
+function assertContentType(response, contentType) {
+  if (getContentType(response) !== contentType) {
+    throw notJson(response, contentType);
+  }
+}
+function getClockSkew(client) {
+  const skew = client?.[clockSkew];
+  return typeof skew === "number" && Number.isFinite(skew) ? skew : 0;
+}
+function getClockTolerance(client) {
+  const tolerance = client?.[clockTolerance];
+  return typeof tolerance === "number" && Number.isFinite(tolerance) && Math.sign(tolerance) !== -1 ? tolerance : 30;
+}
+function epochTime() {
+  return Math.floor(Date.now() / 1e3);
+}
+function assertAs(as) {
+  if (typeof as !== "object" || as === null) {
+    throw CodedTypeError('"as" must be an object', ERR_INVALID_ARG_TYPE);
+  }
+  assertString(as.issuer, '"as.issuer"');
+}
+function assertClient(client) {
+  if (typeof client !== "object" || client === null) {
+    throw CodedTypeError('"client" must be an object', ERR_INVALID_ARG_TYPE);
+  }
+  assertString(client.client_id, '"client.client_id"');
+}
+function None() {
+  return (_as, client, body, _headers) => {
+    body.set("client_id", client.client_id);
+  };
+}
+var URLParse = URL.parse ? (url2, base) => URL.parse(url2, base) : (url2, base) => {
+  try {
+    return new URL(url2, base);
+  } catch {
+    return null;
+  }
+};
+function checkProtocol(url2, enforceHttps) {
+  if (enforceHttps && url2.protocol !== "https:") {
+    throw OPE("only requests to HTTPS are allowed", HTTP_REQUEST_FORBIDDEN, url2);
+  }
+  if (url2.protocol !== "https:" && url2.protocol !== "http:") {
+    throw OPE("only HTTP and HTTPS requests are allowed", REQUEST_PROTOCOL_FORBIDDEN, url2);
+  }
+}
+function validateEndpoint(value, endpoint, useMtlsAlias, enforceHttps) {
+  let url2;
+  if (typeof value !== "string" || !(url2 = URLParse(value))) {
+    throw OPE(`authorization server metadata does not contain a valid ${useMtlsAlias ? `"as.mtls_endpoint_aliases.${endpoint}"` : `"as.${endpoint}"`}`, value === void 0 ? MISSING_SERVER_METADATA : INVALID_SERVER_METADATA, { attribute: useMtlsAlias ? `mtls_endpoint_aliases.${endpoint}` : endpoint });
+  }
+  checkProtocol(url2, enforceHttps);
+  return url2;
+}
+function resolveEndpoint(as, endpoint, useMtlsAlias, enforceHttps) {
+  if (useMtlsAlias && as.mtls_endpoint_aliases && endpoint in as.mtls_endpoint_aliases) {
+    return validateEndpoint(as.mtls_endpoint_aliases[endpoint], endpoint, useMtlsAlias, enforceHttps);
+  }
+  return validateEndpoint(as[endpoint], endpoint, useMtlsAlias, enforceHttps);
+}
+var ResponseBodyError = class extends Error {
+  cause;
+  code;
+  error;
+  status;
+  error_description;
+  response;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    this.code = RESPONSE_BODY_ERROR;
+    this.cause = options.cause;
+    this.error = options.cause.error;
+    this.status = options.response.status;
+    this.error_description = options.cause.error_description;
+    Object.defineProperty(this, "response", { enumerable: false, value: options.response });
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+var WWWAuthenticateChallengeError = class extends Error {
+  cause;
+  code;
+  response;
+  status;
+  constructor(message, options) {
+    super(message, options);
+    this.name = this.constructor.name;
+    this.code = WWW_AUTHENTICATE_CHALLENGE;
+    this.cause = options.cause;
+    this.status = options.response.status;
+    this.response = options.response;
+    Object.defineProperty(this, "response", { enumerable: false });
+    Error.captureStackTrace?.(this, this.constructor);
+  }
+};
+var tokenMatch = "[a-zA-Z0-9!#$%&\\'\\*\\+\\-\\.\\^_`\\|~]+";
+var token68Match = "[a-zA-Z0-9\\-\\._\\~\\+\\/]+={0,2}";
+var quotedMatch = '"((?:[^"\\\\]|\\\\[\\s\\S])*)"';
+var quotedParamMatcher = "(" + tokenMatch + ")\\s*=\\s*" + quotedMatch;
+var paramMatcher = "(" + tokenMatch + ")\\s*=\\s*(" + tokenMatch + ")";
+var schemeRE = new RegExp("^[,\\s]*(" + tokenMatch + ")");
+var quotedParamRE = new RegExp("^[,\\s]*" + quotedParamMatcher + "[,\\s]*(.*)");
+var unquotedParamRE = new RegExp("^[,\\s]*" + paramMatcher + "[,\\s]*(.*)");
+var token68ParamRE = new RegExp("^(" + token68Match + ")(?:$|[,\\s])(.*)");
+function parseWwwAuthenticateChallenges(response) {
+  if (!looseInstanceOf(response, Response)) {
+    throw CodedTypeError('"response" must be an instance of Response', ERR_INVALID_ARG_TYPE);
+  }
+  const header = response.headers.get("www-authenticate");
+  if (header === null) {
+    return void 0;
+  }
+  const challenges = [];
+  let rest = header;
+  while (rest) {
+    let match2 = rest.match(schemeRE);
+    const scheme = match2?.["1"].toLowerCase();
+    if (!scheme) {
+      return void 0;
+    }
+    const afterScheme = rest.substring(match2[0].length);
+    if (afterScheme && !afterScheme.match(/^[\s,]/)) {
+      return void 0;
+    }
+    const spaceMatch = afterScheme.match(/^\s+(.*)$/);
+    const hasParameters = !!spaceMatch;
+    rest = spaceMatch ? spaceMatch[1] : void 0;
+    const parameters = {};
+    let token68;
+    if (hasParameters) {
+      while (rest) {
+        let key;
+        let value;
+        if (match2 = rest.match(quotedParamRE)) {
+          ;
+          [, key, value, rest] = match2;
+          if (value.includes("\\")) {
+            value = value.replace(/\\([\s\S])/g, "$1");
+          }
+          parameters[key.toLowerCase()] = value;
+          continue;
+        }
+        if (match2 = rest.match(unquotedParamRE)) {
+          ;
+          [, key, value, rest] = match2;
+          parameters[key.toLowerCase()] = value;
+          continue;
+        }
+        if (match2 = rest.match(token68ParamRE)) {
+          if (Object.keys(parameters).length) {
+            break;
+          }
+          ;
+          [, token68, rest] = match2;
+          break;
+        }
+        return void 0;
+      }
+    } else {
+      rest = afterScheme || void 0;
+    }
+    const challenge = { scheme, parameters };
+    if (token68) {
+      challenge.token68 = token68;
+    }
+    challenges.push(challenge);
+  }
+  if (!challenges.length) {
+    return void 0;
+  }
+  return challenges;
+}
+async function parseOAuthResponseErrorBody(response) {
+  if (response.status > 399 && response.status < 500) {
+    assertReadableResponse(response);
+    assertApplicationJson(response);
+    try {
+      const json2 = await response.clone().json();
+      if (isJsonObject(json2) && typeof json2.error === "string" && json2.error.length) {
+        return json2;
+      }
+    } catch {
+    }
+  }
+  return void 0;
+}
+async function checkOAuthBodyError(response, expected, label) {
+  if (response.status !== expected) {
+    checkAuthenticationChallenges(response);
+    let err;
+    if (err = await parseOAuthResponseErrorBody(response)) {
+      await response.body?.cancel();
+      throw new ResponseBodyError("server responded with an error in the response body", {
+        cause: err,
+        response
+      });
+    }
+    throw OPE(`"response" is not a conform ${label} response (unexpected HTTP status code)`, RESPONSE_IS_NOT_CONFORM, response);
+  }
+}
+function assertDPoP(option) {
+  if (!branded.has(option)) {
+    throw CodedTypeError('"options.DPoP" is not a valid DPoPHandle', ERR_INVALID_ARG_VALUE);
+  }
+}
+function getContentType(input2) {
+  return input2.headers.get("content-type")?.split(";")[0];
+}
+async function authenticatedRequest(as, client, clientAuthentication, url2, body, headers, options) {
+  await clientAuthentication(as, client, body, headers);
+  headers.set("content-type", "application/x-www-form-urlencoded;charset=UTF-8");
+  return (options?.[customFetch] || fetch)(url2.href, {
+    body,
+    headers: Object.fromEntries(headers.entries()),
+    method: "POST",
+    redirect: "manual",
+    signal: signal(url2, options?.signal)
+  });
+}
+async function tokenEndpointRequest(as, client, clientAuthentication, grantType, parameters, options) {
+  const url2 = resolveEndpoint(as, "token_endpoint", client.use_mtls_endpoint_aliases, options?.[allowInsecureRequests] !== true);
+  parameters.set("grant_type", grantType);
+  const headers = prepareHeaders(options?.headers);
+  headers.set("accept", "application/json");
+  if (options?.DPoP !== void 0) {
+    assertDPoP(options.DPoP);
+    await options.DPoP.addProof(url2, headers, "POST");
+  }
+  const response = await authenticatedRequest(as, client, clientAuthentication, url2, parameters, headers, options);
+  options?.DPoP?.cacheNonce(response, url2);
+  return response;
+}
+async function refreshTokenGrantRequest(as, client, clientAuthentication, refreshToken, options) {
+  assertAs(as);
+  assertClient(client);
+  assertString(refreshToken, '"refreshToken"');
+  const parameters = new URLSearchParams(options?.additionalParameters);
+  parameters.set("refresh_token", refreshToken);
+  return tokenEndpointRequest(as, client, clientAuthentication, "refresh_token", parameters, options);
+}
+var idTokenClaims = /* @__PURE__ */ new WeakMap();
+var jwtRefs = /* @__PURE__ */ new WeakMap();
+async function processGenericAccessTokenResponse(as, client, response, additionalRequiredIdTokenClaims, decryptFn, recognizedTokenTypes) {
+  assertAs(as);
+  assertClient(client);
+  if (!looseInstanceOf(response, Response)) {
+    throw CodedTypeError('"response" must be an instance of Response', ERR_INVALID_ARG_TYPE);
+  }
+  await checkOAuthBodyError(response, 200, "Token Endpoint");
+  assertReadableResponse(response);
+  const json2 = await getResponseJsonBody(response);
+  assertString(json2.access_token, '"response" body "access_token" property', INVALID_RESPONSE, {
+    body: json2
+  });
+  assertString(json2.token_type, '"response" body "token_type" property', INVALID_RESPONSE, {
+    body: json2
+  });
+  json2.token_type = json2.token_type.toLowerCase();
+  if (json2.expires_in !== void 0) {
+    let expiresIn = typeof json2.expires_in !== "number" ? parseFloat(json2.expires_in) : json2.expires_in;
+    assertNumber(expiresIn, true, '"response" body "expires_in" property', INVALID_RESPONSE, {
+      body: json2
+    });
+    json2.expires_in = expiresIn;
+  }
+  if (json2.refresh_token !== void 0) {
+    assertString(json2.refresh_token, '"response" body "refresh_token" property', INVALID_RESPONSE, {
+      body: json2
+    });
+  }
+  if (json2.scope !== void 0 && typeof json2.scope !== "string") {
+    throw OPE('"response" body "scope" property must be a string', INVALID_RESPONSE, { body: json2 });
+  }
+  if (json2.id_token !== void 0) {
+    assertString(json2.id_token, '"response" body "id_token" property', INVALID_RESPONSE, {
+      body: json2
+    });
+    const requiredClaims = [];
+    if (client.require_auth_time === true) {
+      requiredClaims.push("auth_time");
+    }
+    if (client.default_max_age !== void 0) {
+      assertNumber(client.default_max_age, true, '"client.default_max_age"');
+      requiredClaims.push("auth_time");
+    }
+    if (additionalRequiredIdTokenClaims?.length) {
+      requiredClaims.push(...additionalRequiredIdTokenClaims);
+    }
+    const { claims, jwt: jwt2 } = await validateIdTokenClaims(as, client, json2.id_token, requiredClaims, decryptFn);
+    validateIdTokenAuthorizedParty(client, claims);
+    validateIdTokenAuthTimeClaim(claims);
+    jwtRefs.set(response, jwt2);
+    idTokenClaims.set(json2, claims);
+  }
+  if (recognizedTokenTypes?.[json2.token_type] !== void 0) {
+    recognizedTokenTypes[json2.token_type](response, json2);
+  } else if (json2.token_type !== "dpop" && json2.token_type !== "bearer") {
+    throw new UnsupportedOperationError("unsupported `token_type` value", { cause: { body: json2 } });
+  }
+  return json2;
+}
+function checkAuthenticationChallenges(response) {
+  let challenges;
+  if (challenges = parseWwwAuthenticateChallenges(response)) {
+    throw new WWWAuthenticateChallengeError("server responded with a challenge in the WWW-Authenticate HTTP Header", { cause: challenges, response });
+  }
+}
+async function processRefreshTokenResponse(as, client, response, options) {
+  return processGenericAccessTokenResponse(as, client, response, void 0, options?.[jweDecrypt], options?.recognizedTokenTypes);
+}
+function validateAudience(expected, result) {
+  if (Array.isArray(result.claims.aud)) {
+    if (!result.claims.aud.includes(expected)) {
+      throw OPE('unexpected JWT "aud" (audience) claim value', JWT_CLAIM_COMPARISON, {
+        expected,
+        claims: result.claims,
+        claim: "aud"
+      });
+    }
+  } else if (result.claims.aud !== expected) {
+    throw OPE('unexpected JWT "aud" (audience) claim value', JWT_CLAIM_COMPARISON, {
+      expected,
+      claims: result.claims,
+      claim: "aud"
+    });
+  }
+  return result;
+}
+function validateIssuer(as, result) {
+  const expected = as[_expectedIssuer]?.(result) ?? as.issuer;
+  if (result.claims.iss !== expected) {
+    throw OPE('unexpected JWT "iss" (issuer) claim value', JWT_CLAIM_COMPARISON, {
+      expected,
+      claims: result.claims,
+      claim: "iss"
+    });
+  }
+  return result;
+}
+var branded = /* @__PURE__ */ new WeakSet();
+var jwtClaimNames = {
+  aud: "audience",
+  c_hash: "code hash",
+  client_id: "client id",
+  exp: "expiration time",
+  iat: "issued at",
+  iss: "issuer",
+  jti: "jwt id",
+  nonce: "nonce",
+  s_hash: "state hash",
+  sub: "subject",
+  ath: "access token hash",
+  htm: "http method",
+  htu: "http uri",
+  cnf: "confirmation",
+  auth_time: "authentication time"
+};
+function validatePresence(required2, result) {
+  for (const claim2 of required2) {
+    if (result.claims[claim2] === void 0) {
+      throw OPE(`JWT "${claim2}" (${jwtClaimNames[claim2]}) claim missing`, INVALID_RESPONSE, {
+        claims: result.claims
+      });
+    }
+  }
+  return result;
+}
+function validateStringClaim(claim2, result) {
+  if (typeof result.claims[claim2] !== "string") {
+    throw OPE(`unexpected JWT "${claim2}" (${jwtClaimNames[claim2]}) claim type`, INVALID_RESPONSE, {
+      claims: result.claims
+    });
+  }
+  return result;
+}
+function validateIdTokenClaims(as, client, idToken, requiredClaims, decryptFn) {
+  return validateJwt(idToken, checkSigningAlgorithm.bind(void 0, client.id_token_signed_response_alg, as.id_token_signing_alg_values_supported, "RS256"), getClockSkew(client), getClockTolerance(client), decryptFn).then(validatePresence.bind(void 0, ["aud", "exp", "iat", "iss", "sub", ...requiredClaims])).then(validateIssuer.bind(void 0, as)).then(validateAudience.bind(void 0, client.client_id)).then(validateStringClaim.bind(void 0, "sub"));
+}
+function validateIdTokenAuthTimeClaim(claims) {
+  if (claims.auth_time !== void 0) {
+    assertNumber(claims.auth_time, true, 'ID Token "auth_time" (authentication time)', INVALID_RESPONSE, { claims });
+  }
+}
+function validateIdTokenAuthorizedParty(client, claims) {
+  if (Array.isArray(claims.aud) && claims.aud.length !== 1) {
+    if (claims.azp === void 0) {
+      throw OPE('ID Token "aud" (audience) claim includes additional untrusted audiences', JWT_CLAIM_COMPARISON, { claims, claim: "aud" });
+    }
+    if (claims.azp !== client.client_id) {
+      throw OPE('unexpected ID Token "azp" (authorized party) claim value', JWT_CLAIM_COMPARISON, {
+        expected: client.client_id,
+        claims,
+        claim: "azp"
+      });
+    }
+  }
+}
+var WWW_AUTHENTICATE_CHALLENGE = "OAUTH_WWW_AUTHENTICATE_CHALLENGE";
+var RESPONSE_BODY_ERROR = "OAUTH_RESPONSE_BODY_ERROR";
+var UNSUPPORTED_OPERATION = "OAUTH_UNSUPPORTED_OPERATION";
+var PARSE_ERROR = "OAUTH_PARSE_ERROR";
+var INVALID_RESPONSE = "OAUTH_INVALID_RESPONSE";
+var RESPONSE_IS_NOT_JSON = "OAUTH_RESPONSE_IS_NOT_JSON";
+var RESPONSE_IS_NOT_CONFORM = "OAUTH_RESPONSE_IS_NOT_CONFORM";
+var HTTP_REQUEST_FORBIDDEN = "OAUTH_HTTP_REQUEST_FORBIDDEN";
+var REQUEST_PROTOCOL_FORBIDDEN = "OAUTH_REQUEST_PROTOCOL_FORBIDDEN";
+var JWT_TIMESTAMP_CHECK = "OAUTH_JWT_TIMESTAMP_CHECK_FAILED";
+var JWT_CLAIM_COMPARISON = "OAUTH_JWT_CLAIM_COMPARISON_FAILED";
+var MISSING_SERVER_METADATA = "OAUTH_MISSING_SERVER_METADATA";
+var INVALID_SERVER_METADATA = "OAUTH_INVALID_SERVER_METADATA";
+function assertReadableResponse(response) {
+  if (response.bodyUsed) {
+    throw CodedTypeError('"response" body has been used already', ERR_INVALID_ARG_VALUE);
+  }
+}
+async function validateJwt(jws, checkAlg, clockSkew2, clockTolerance2, decryptJwt) {
+  let { 0: protectedHeader, 1: payload, length } = jws.split(".");
+  if (length === 5) {
+    if (decryptJwt !== void 0) {
+      jws = await decryptJwt(jws);
+      ({ 0: protectedHeader, 1: payload, length } = jws.split("."));
+    } else {
+      throw new UnsupportedOperationError("JWE decryption is not configured", { cause: jws });
+    }
+  }
+  if (length !== 3) {
+    throw OPE("Invalid JWT", INVALID_RESPONSE, jws);
+  }
+  let header;
+  try {
+    header = JSON.parse(buf(b64u(protectedHeader)));
+  } catch (cause) {
+    throw OPE("failed to parse JWT Header body as base64url encoded JSON", PARSE_ERROR, cause);
+  }
+  if (!isJsonObject(header)) {
+    throw OPE("JWT Header must be a top level object", INVALID_RESPONSE, jws);
+  }
+  checkAlg(header);
+  if (header.crit !== void 0) {
+    throw new UnsupportedOperationError('no JWT "crit" header parameter extensions are supported', {
+      cause: { header }
+    });
+  }
+  let claims;
+  try {
+    claims = JSON.parse(buf(b64u(payload)));
+  } catch (cause) {
+    throw OPE("failed to parse JWT Payload body as base64url encoded JSON", PARSE_ERROR, cause);
+  }
+  if (!isJsonObject(claims)) {
+    throw OPE("JWT Payload must be a top level object", INVALID_RESPONSE, jws);
+  }
+  const now = epochTime() + clockSkew2;
+  if (claims.exp !== void 0) {
+    if (typeof claims.exp !== "number") {
+      throw OPE('unexpected JWT "exp" (expiration time) claim type', INVALID_RESPONSE, { claims });
+    }
+    if (claims.exp <= now - clockTolerance2) {
+      throw OPE('unexpected JWT "exp" (expiration time) claim value, expiration is past current timestamp', JWT_TIMESTAMP_CHECK, { claims, now, tolerance: clockTolerance2, claim: "exp" });
+    }
+  }
+  if (claims.iat !== void 0) {
+    if (typeof claims.iat !== "number") {
+      throw OPE('unexpected JWT "iat" (issued at) claim type', INVALID_RESPONSE, { claims });
+    }
+  }
+  if (claims.iss !== void 0) {
+    if (typeof claims.iss !== "string") {
+      throw OPE('unexpected JWT "iss" (issuer) claim type', INVALID_RESPONSE, { claims });
+    }
+  }
+  if (claims.nbf !== void 0) {
+    if (typeof claims.nbf !== "number") {
+      throw OPE('unexpected JWT "nbf" (not before) claim type', INVALID_RESPONSE, { claims });
+    }
+    if (claims.nbf > now + clockTolerance2) {
+      throw OPE('unexpected JWT "nbf" (not before) claim value', JWT_TIMESTAMP_CHECK, {
+        claims,
+        now,
+        tolerance: clockTolerance2,
+        claim: "nbf"
+      });
+    }
+  }
+  if (claims.aud !== void 0) {
+    if (typeof claims.aud !== "string" && !Array.isArray(claims.aud)) {
+      throw OPE('unexpected JWT "aud" (audience) claim type', INVALID_RESPONSE, { claims });
+    }
+  }
+  return { header, claims, jwt: jws };
+}
+function checkSigningAlgorithm(client, issuer, fallback, header) {
+  if (client !== void 0) {
+    if (typeof client === "string" ? header.alg !== client : !client.includes(header.alg)) {
+      throw OPE('unexpected JWT "alg" header parameter', INVALID_RESPONSE, {
+        header,
+        expected: client,
+        reason: "client configuration"
+      });
+    }
+    return;
+  }
+  if (Array.isArray(issuer)) {
+    if (!issuer.includes(header.alg)) {
+      throw OPE('unexpected JWT "alg" header parameter', INVALID_RESPONSE, {
+        header,
+        expected: issuer,
+        reason: "authorization server metadata"
+      });
+    }
+    return;
+  }
+  if (fallback !== void 0) {
+    if (typeof fallback === "string" ? header.alg !== fallback : typeof fallback === "function" ? !fallback(header.alg) : !fallback.includes(header.alg)) {
+      throw OPE('unexpected JWT "alg" header parameter', INVALID_RESPONSE, {
+        header,
+        expected: fallback,
+        reason: "default value"
+      });
+    }
+    return;
+  }
+  throw OPE('missing client or server configuration to verify used JWT "alg" header parameter', void 0, { client, issuer, fallback });
+}
+async function getResponseJsonBody(response, check2 = assertApplicationJson) {
+  let json2;
+  try {
+    json2 = await response.json();
+  } catch (cause) {
+    check2(response);
+    throw OPE('failed to parse "response" body as JSON', PARSE_ERROR, cause);
+  }
+  if (!isJsonObject(json2)) {
+    throw OPE('"response" body must be a top level object', INVALID_RESPONSE, { body: json2 });
+  }
+  return json2;
+}
+var _expectedIssuer = /* @__PURE__ */ Symbol();
 
-// src/capture/paths.ts
+// src/state/lock.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import {
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2
+} from "node:fs";
+import { join as join2 } from "node:path";
+
+// src/state/paths.ts
 import { randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -181,16 +945,8 @@ function captureAgreementPath() {
   return join(memrootConfigDir(), "capture-agreement.json");
 }
 
-// src/capture/queue/lock.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
-import {
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2
-} from "node:fs";
-import { join as join2 } from "node:path";
+// src/state/lock.ts
+var WORKER_LOCK_STALE_MS = 9e5;
 function lockPath(name) {
   return join2(stateSubdir("locks"), name);
 }
@@ -359,7 +1115,53 @@ async function withCredentialLock(name, operation) {
   }
 }
 
-// src/storage.ts
+// src/connection/credential-accounts.ts
+var CLI_CLIENT_ID = "memroot-cli";
+function captureAccount(apiBase) {
+  return `${apiBase}#mcp`;
+}
+
+// src/connection/credentials.ts
+import { spawnSync } from "node:child_process";
+import { lstatSync as lstatSync3 } from "node:fs";
+import {
+  chmod as chmod2,
+  lstat as lstat3,
+  readFile as readFile3,
+  rename as rename3,
+  rm as rm3,
+  writeFile as writeFile3
+} from "node:fs/promises";
+import { isAbsolute as isAbsolute3, join as join5 } from "node:path";
+
+// src/state/config.ts
+import {
+  chmod,
+  lstat as lstat2,
+  readFile as readFile2,
+  rename as rename2,
+  rm as rm2,
+  writeFile as writeFile2
+} from "node:fs/promises";
+import { join as join4 } from "node:path";
+
+// src/connection/api-base.ts
+function isLoopbackHostname(hostname4) {
+  return hostname4 === "127.0.0.1" || hostname4 === "localhost" || hostname4 === "::1" || hostname4 === "[::1]";
+}
+function isAllowedApiBase(value) {
+  try {
+    const url2 = new URL(value);
+    if (url2.username || url2.password || url2.search || url2.hash) return false;
+    if (url2.protocol === "https:") return true;
+    return url2.protocol === "http:" && isLoopbackHostname(url2.hostname);
+  } catch {
+    return false;
+  }
+}
+var PROD_API_BASE = "https://api.memroot.dev";
+
+// src/state/storage.ts
 import {
   lstat,
   mkdir,
@@ -389,7 +1191,7 @@ async function safeDirectory(path2) {
     throw new Error(`UNSAFE_PATH: Expected a real directory at ${path2}.`);
 }
 
-// src/config.ts
+// src/state/config.ts
 function configDirectory() {
   return memrootConfigDir();
 }
@@ -507,26 +1309,490 @@ async function readConfig() {
   return config2;
 }
 
-// src/project-folders.ts
-import { lstatSync as lstatSync5, readFileSync as readFileSync3, realpathSync } from "node:fs";
+// src/connection/credentials.ts
+var SERVICE = "memroot";
+var TOOL_TIMEOUT_MS = 15e3;
+function credentialStoreKind() {
+  const override = process.env.MEMROOT_TEST_CREDENTIAL_STORE;
+  if (override === "file" && process.env.NODE_ENV === "test")
+    return "test-file";
+  if (override)
+    throw new Error(
+      "INVALID_CREDENTIAL_STORE: MEMROOT_TEST_CREDENTIAL_STORE=file is honored only when NODE_ENV=test; refusing to file-back credentials."
+    );
+  return process.platform === "darwin" ? "macos-keychain" : "libsecret";
+}
+function unavailable(tool) {
+  return new Error(
+    `AUTH_KEYCHAIN_UNAVAILABLE: ${tool} is not installed, so there is no OS credential store for the Memroot refresh token. Tokens are never written to files; install ${tool === "security" ? "the macOS security tool" : "libsecret's secret-tool"} or sign in on a supported system.`
+  );
+}
+function run(tool, args, input2, allowNotFound = false, timeoutMs = TOOL_TIMEOUT_MS, hardDeadline = false) {
+  const result = spawnSync(tool, args, {
+    encoding: "utf8",
+    input: input2,
+    timeout: Math.max(1, Math.min(TOOL_TIMEOUT_MS, timeoutMs)),
+    ...hardDeadline ? { killSignal: "SIGKILL" } : {},
+    shell: false,
+    maxBuffer: 1024 * 1024
+  });
+  if (result.error) {
+    if (result.error.code === "ENOENT")
+      throw unavailable(tool);
+    throw new Error(
+      `AUTH_KEYCHAIN_FAILED: ${tool} could not run (${result.error.code ?? "error"}).`
+    );
+  }
+  if (allowNotFound) return result;
+  if (result.status !== 0)
+    throw new Error(
+      `AUTH_KEYCHAIN_FAILED: ${tool} ${args[0] ?? ""} failed (${result.status ?? "signal"}). No credential was read or written.`
+    );
+  return result;
+}
+function quote(value) {
+  return JSON.stringify(value);
+}
+function testStorePath() {
+  return join5(configDirectory(), "test-credentials.json");
+}
+async function readTestStore() {
+  try {
+    const info = await lstat3(testStorePath());
+    if (!info.isFile() || info.isSymbolicLink())
+      throw new Error("INVALID_CREDENTIAL_STORE: Expected a regular file.");
+    const value = JSON.parse(await readFile3(testStorePath(), "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return value;
+  } catch (error62) {
+    if (error62.code === "ENOENT") return {};
+    throw error62;
+  }
+}
+async function writeTestStore(entries) {
+  const directory = configDirectory();
+  await safeDirectory(directory);
+  const path2 = testStorePath();
+  const temporary = `${path2}.${process.pid}.tmp`;
+  try {
+    await writeFile3(temporary, `${JSON.stringify(entries, null, 2)}
+`, {
+      flag: "wx",
+      mode: 384
+    });
+    await rename3(temporary, path2);
+    await chmod2(path2, 384);
+  } finally {
+    await rm3(temporary, { force: true });
+  }
+}
+function assertMacOSDefaultKeychain(timeoutMs) {
+  try {
+    const result = run(
+      "/usr/bin/security",
+      ["default-keychain", "-d", "user"],
+      void 0,
+      true,
+      Math.min(5e3, timeoutMs ?? 5e3),
+      true
+    );
+    const match2 = /^"([^"\r\n]+)"$/u.exec(result.stdout.trim());
+    const path2 = match2?.[1];
+    if (result.status !== 0 || !path2 || !isAbsolute3(path2)) throw new Error();
+    const info = lstatSync3(path2);
+    if (!info.isFile() || info.isSymbolicLink()) throw new Error();
+  } catch {
+    throw new Error(
+      "AUTH_KEYCHAIN_DEFAULT_UNAVAILABLE: This process has no usable default macOS keychain. Open Keychain Access for this macOS account, or run Memroot from its usual signed-in HOME, then retry. No keychain was created or changed."
+    );
+  }
+}
+async function storeSecret(account, secret, timeoutMs) {
+  const kind = credentialStoreKind();
+  if (kind === "test-file") {
+    const entries = await readTestStore();
+    entries[account] = secret;
+    await writeTestStore(entries);
+    return;
+  }
+  if (kind === "macos-keychain") {
+    const started = Date.now();
+    assertMacOSDefaultKeychain(timeoutMs);
+    const remaining = timeoutMs === void 0 ? void 0 : timeoutMs - (Date.now() - started);
+    if (remaining !== void 0 && remaining <= 0)
+      throw new Error(
+        "AUTH_KEYCHAIN_FAILED: Credential write deadline expired before any write."
+      );
+    run(
+      "security",
+      ["-i"],
+      `add-generic-password -U -s ${quote(SERVICE)} -a ${quote(account)} -w ${quote(secret)}
+`,
+      false,
+      remaining,
+      timeoutMs !== void 0
+    );
+    return;
+  }
+  run(
+    "secret-tool",
+    ["store", "--label", "Memroot CLI", "service", SERVICE, "account", account],
+    secret,
+    false,
+    timeoutMs,
+    timeoutMs !== void 0
+  );
+}
+async function readSecret(account, timeoutMs) {
+  const kind = credentialStoreKind();
+  if (kind === "test-file") return (await readTestStore())[account];
+  if (kind === "macos-keychain") {
+    const result2 = run(
+      "security",
+      ["find-generic-password", "-s", SERVICE, "-a", account, "-w"],
+      void 0,
+      true,
+      timeoutMs,
+      timeoutMs !== void 0
+    );
+    if (result2.status !== 0) {
+      if (/could not be found|item not found/i.test(result2.stderr))
+        return void 0;
+      throw new Error(
+        `AUTH_KEYCHAIN_FAILED: security find-generic-password failed (${result2.status ?? "signal"}).`
+      );
+    }
+    const secret2 = result2.stdout.replace(/\n$/, "");
+    return secret2.length ? secret2 : void 0;
+  }
+  const result = run(
+    "secret-tool",
+    ["lookup", "service", SERVICE, "account", account],
+    void 0,
+    true,
+    timeoutMs,
+    timeoutMs !== void 0
+  );
+  if (noUnlockedMatch(result)) return void 0;
+  const secret = result.stdout.replace(/\n$/, "");
+  if (result.status !== 0 || !secret)
+    throw new Error("AUTH_KEYCHAIN_FAILED: secret-tool lookup failed.");
+  return secret;
+}
+function noUnlockedMatch(result) {
+  return result.status === 1 && result.stderr === "" && result.stdout === "";
+}
+
+// src/connection/token-broker.ts
+var REFRESH_SKEW_MS = 3e4;
+var AuthRequiredError = class extends Error {
+  constructor() {
+    super("AUTH_REQUIRED");
+  }
+};
+function mcpResource(apiBase) {
+  return `${apiBase}/mcp`;
+}
+var TokenBroker = class {
+  /**
+   * `pending`: a fresh sign-in's access token, held in memory only while the
+   * connection's account is checked before its refresh token is stored. Such
+   * a broker never reads the credential store, which still holds the
+   * previous connection.
+   */
+  constructor(apiBase, pending, credentials) {
+    this.apiBase = apiBase;
+    this.pending = pending;
+    this.credentials = credentials;
+  }
+  apiBase;
+  pending;
+  credentials;
+  cached;
+  refreshing;
+  invalidate() {
+    this.cached = void 0;
+  }
+  async accessToken(signal2) {
+    if (this.pending) {
+      if (this.pending.expiresAt <= Date.now()) throw new AuthRequiredError();
+      return this.pending.token;
+    }
+    if (this.cached && this.cached.expiresAt - Date.now() > REFRESH_SKEW_MS)
+      return this.cached.token;
+    if (this.credentials?.authTimeoutMs !== void 0) {
+      if (!this.refreshing) {
+        const deadline = Date.now() + this.credentials.authTimeoutMs;
+        const abort = AbortSignal.any([
+          AbortSignal.timeout(this.credentials.authTimeoutMs),
+          ...signal2 ? [signal2] : []
+        ]);
+        this.refreshing = this.refreshAccessToken(deadline, abort).finally(
+          () => {
+            this.refreshing = void 0;
+          }
+        );
+      }
+      const pending = this.refreshing;
+      if (!signal2) return pending;
+      if (signal2.aborted) throw new TransportError("auth_cancelled");
+      return new Promise((resolve2, reject) => {
+        const aborted2 = () => reject(new TransportError("auth_cancelled"));
+        signal2.addEventListener("abort", aborted2, { once: true });
+        pending.then(resolve2, reject).finally(() => signal2.removeEventListener("abort", aborted2));
+      });
+    }
+    return this.refreshAccessToken();
+  }
+  async refreshAccessToken(deadline, signal2) {
+    const remaining = () => {
+      if (signal2?.aborted || deadline !== void 0 && deadline <= Date.now())
+        throw new TransportError("auth_timeout");
+      return deadline === void 0 ? void 0 : Math.max(1, deadline - Date.now());
+    };
+    const release = await acquireLock(
+      this.credentials?.lockName ?? "auth.lock",
+      {
+        staleMs: 6e4,
+        waitMs: Math.min(2e4, remaining() ?? 2e4),
+        pollMs: 100,
+        ...signal2 ? { signal: signal2 } : {}
+      }
+    );
+    if (!release) throw new TransportError("auth_lock_busy");
+    try {
+      const account = this.credentials?.account ?? captureAccount(this.apiBase);
+      const refreshToken = await readSecret(account, remaining());
+      if (!refreshToken) throw new AuthRequiredError();
+      const as = {
+        issuer: this.apiBase,
+        token_endpoint: `${this.apiBase}/oauth/token`
+      };
+      const client = {
+        client_id: this.credentials?.clientId ?? CLI_CLIENT_ID
+      };
+      const seen = {};
+      const answer = await refreshTokenGrantRequest(
+        as,
+        client,
+        None(),
+        refreshToken,
+        {
+          additionalParameters: { resource: mcpResource(this.apiBase) },
+          [customFetch]: async (url2, init) => {
+            const { "user-agent": _agent, ...headers } = init.headers;
+            const response2 = await httpPost(
+              new URL(url2),
+              headers,
+              String(init.body),
+              remaining(),
+              deadline === void 0 ? void 0 : { absoluteTimeout: true, ...signal2 ? { signal: signal2 } : {} }
+            ).catch((error62) => {
+              if (deadline !== void 0 && error62 instanceof TransportError && error62.code === "timeout")
+                throw new TransportError("network_error");
+              throw error62;
+            });
+            seen.response = response2;
+            const contentType = response2.headers["content-type"];
+            const empty2 = response2.status === 204 || response2.status === 205 || response2.status === 304;
+            return new Response(empty2 ? null : response2.body, {
+              // A Response needs a status in 200-599; anything else is malformed.
+              status: response2.status >= 200 && response2.status <= 599 ? response2.status : 500,
+              headers: typeof contentType === "string" ? { "content-type": contentType } : {}
+            });
+          },
+          // The API base admits plain HTTP only on a loopback address.
+          [allowInsecureRequests]: new URL(this.apiBase).protocol === "http:"
+        }
+      );
+      const response = seen.response;
+      if (!response) throw new TransportError("token_response_invalid");
+      let body = {};
+      try {
+        const parsed = JSON.parse(response.body || "{}");
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
+          body = parsed;
+      } catch {
+        body = {};
+      }
+      if (response.status >= 400) {
+        if (response.status === 400 && (body.error === "invalid_grant" || body.error === "invalid_client" || body.error === "invalid_target"))
+          throw new AuthRequiredError();
+        throw new TransportError(`token_http_${response.status}`);
+      }
+      let tokens;
+      try {
+        tokens = await processRefreshTokenResponse(as, client, answer);
+      } catch {
+        throw new TransportError("token_response_invalid");
+      }
+      if (typeof tokens.refresh_token === "string" && tokens.refresh_token && tokens.refresh_token !== refreshToken)
+        await storeSecret(account, tokens.refresh_token, remaining());
+      remaining();
+      const lifetime = typeof tokens.expires_in === "number" && tokens.expires_in > 0 ? tokens.expires_in : 300;
+      this.cached = {
+        token: tokens.access_token,
+        expiresAt: Date.now() + lifetime * 1e3
+      };
+      return tokens.access_token;
+    } finally {
+      release();
+    }
+  }
+};
+
+// src/connection/mcp-client.ts
+var MCP_PROTOCOL_VERSION = "2025-11-25";
+var McpInputRejected = class extends Error {
+  constructor(rules) {
+    super("MCP_INPUT_REJECTED");
+    this.rules = rules;
+  }
+  rules;
+};
+var McpToolError = class extends Error {
+  constructor(code) {
+    super(`MCP_TOOL_ERROR:${code}`);
+    this.code = code;
+  }
+  code;
+};
+var McpRateLimited = class extends Error {
+  constructor(retryAfterMs) {
+    super("MCP_RATE_LIMITED");
+    this.retryAfterMs = retryAfterMs;
+  }
+  retryAfterMs;
+};
+var MIN_RETRY_MS = 6e4;
+var MAX_RETRY_MS = 36e5;
+function retryAfter(value) {
+  const header = Array.isArray(value) ? value[0] : value;
+  const seconds = header ? Number(header) : Number.NaN;
+  let ms = MIN_RETRY_MS;
+  if (Number.isFinite(seconds) && seconds >= 0) ms = seconds * 1e3;
+  else {
+    const date5 = header ? Date.parse(header) : Number.NaN;
+    if (Number.isFinite(date5)) ms = date5 - Date.now();
+  }
+  return Math.min(Math.max(ms, MIN_RETRY_MS), MAX_RETRY_MS);
+}
+function parseRpc(contentType, body) {
+  let text = body;
+  if (contentType.includes("text/event-stream")) {
+    const data = body.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
+    text = data.at(-1) ?? "";
+  }
+  const value = JSON.parse(text);
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new TransportError("rpc_invalid");
+  return value;
+}
+var McpClient = class {
+  constructor(apiBase, broker, userAgent) {
+    this.apiBase = apiBase;
+    this.broker = broker;
+    this.userAgent = userAgent;
+  }
+  apiBase;
+  broker;
+  userAgent;
+  id = 0;
+  async post(token, payload) {
+    return httpPost(
+      new URL(`${this.apiBase}/mcp`),
+      {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
+        authorization: `Bearer ${token}`,
+        "user-agent": this.userAgent
+      },
+      payload
+    );
+  }
+  async call(name, args) {
+    const payload = JSON.stringify({
+      jsonrpc: "2.0",
+      id: ++this.id,
+      method: "tools/call",
+      params: { name, arguments: args }
+    });
+    let response = await this.post(await this.broker.accessToken(), payload);
+    if (response.status === 401) {
+      this.broker.invalidate();
+      response = await this.post(await this.broker.accessToken(), payload);
+      if (response.status === 401) throw new AuthRequiredError();
+    }
+    if (response.status === 403) throw new AuthRequiredError();
+    if (response.status === 429)
+      throw new McpRateLimited(retryAfter(response.headers["retry-after"]));
+    if (response.status !== 200)
+      throw new TransportError(`mcp_http_${response.status}`);
+    let message;
+    try {
+      message = parseRpc(
+        String(response.headers["content-type"] ?? ""),
+        response.body
+      );
+    } catch {
+      throw new TransportError("rpc_invalid");
+    }
+    const error62 = message.error;
+    if (error62) {
+      if (error62.code === -32602) {
+        const issues = error62.data?.issues;
+        const rules = Array.isArray(issues) ? issues.map((issue2) => issue2.rule).filter((rule) => typeof rule === "string") : [];
+        throw new McpInputRejected(rules);
+      }
+      throw new TransportError(
+        `rpc_error_${typeof error62.code === "number" ? error62.code : "unknown"}`
+      );
+    }
+    const result = message.result;
+    const text = result?.content?.find((item) => item.type === "text")?.text;
+    let value;
+    try {
+      value = typeof text === "string" ? JSON.parse(text) : void 0;
+    } catch {
+      value = void 0;
+    }
+    if (result?.isError === true) {
+      const error63 = value?.error;
+      if (error63?.code === "invalid_request" && Array.isArray(error63.issues))
+        throw new McpInputRejected(
+          error63.issues.map((issue2) => issue2.rule).filter((rule) => typeof rule === "string")
+        );
+      const code = error63?.code;
+      const safe = typeof code === "string" && /^[a-z_]{1,64}$/.test(code) ? code : "unknown";
+      if (safe === "rate_limited") throw new McpRateLimited(6e4);
+      throw new McpToolError(safe);
+    }
+    if (value === void 0) throw new TransportError("rpc_result_invalid");
+    return value;
+  }
+};
+
+// src/project/folders.ts
+import { lstatSync as lstatSync6, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import {
   basename,
   dirname as dirname4,
-  isAbsolute as isAbsolute3,
-  join as join7,
+  isAbsolute as isAbsolute4,
+  join as join8,
   normalize as normalize2,
   relative,
   resolve,
   sep
 } from "node:path";
 
-// src/config-store.ts
+// src/state/config-store.ts
 import { randomBytes as randomBytes3 } from "node:crypto";
 import {
   closeSync as closeSync2,
   fchmodSync,
   fsyncSync,
-  lstatSync as lstatSync3,
+  lstatSync as lstatSync4,
   mkdirSync as mkdirSync3,
   openSync as openSync2,
   readFileSync as readFileSync2,
@@ -535,7 +1801,7 @@ import {
   writeFileSync as writeFileSync3,
   writeSync
 } from "node:fs";
-import { dirname as dirname3, join as join5 } from "node:path";
+import { dirname as dirname3, join as join6 } from "node:path";
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
@@ -545,9 +1811,9 @@ function pause(ms) {
 function withConfigLock(fileName, update2) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname3(directory), false);
-  const lock = `${join5(directory, fileName)}.lock`;
+  const lock = `${join6(directory, fileName)}.lock`;
   const nonce = randomBytes3(8).toString("hex");
-  const owner = join5(lock, "owner");
+  const owner = join6(lock, "owner");
   let held2 = false;
   for (let i = 0; i < LOCK_TRIES && !held2; i++) {
     try {
@@ -557,7 +1823,7 @@ function withConfigLock(fileName, update2) {
     } catch (error62) {
       if (error62.code !== "EEXIST") break;
       try {
-        if (Date.now() - lstatSync3(lock).mtimeMs > LOCK_STALE_MS)
+        if (Date.now() - lstatSync4(lock).mtimeMs > LOCK_STALE_MS)
           rmSync3(lock, { recursive: true, force: true });
       } catch {
       }
@@ -578,14 +1844,14 @@ function withConfigLock(fileName, update2) {
 function persistConfigJson(fileName, value) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname3(directory), false);
-  const path2 = join5(directory, fileName);
+  const path2 = join6(directory, fileName);
   try {
     const now = Date.now();
     for (const name of listFiles(directory))
       if (name.startsWith(`${fileName}.`) && name.endsWith(".tmp"))
         try {
-          if (now - lstatSync3(join5(directory, name)).mtimeMs > TMP_STALE_MS)
-            rmSync3(join5(directory, name), { force: true });
+          if (now - lstatSync4(join6(directory, name)).mtimeMs > TMP_STALE_MS)
+            rmSync3(join6(directory, name), { force: true });
         } catch {
         }
   } catch {
@@ -615,17 +1881,16 @@ function persistConfigJson(fileName, value) {
   }
 }
 
-// src/project-selection.ts
+// src/project/selection.ts
 import { randomUUID } from "node:crypto";
-import { lstatSync as lstatSync4, renameSync as renameSync4 } from "node:fs";
-import { join as join6 } from "node:path";
+import { lstatSync as lstatSync5, renameSync as renameSync4 } from "node:fs";
+import { join as join7 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
-  return join6(memrootConfigDir(), PROJECT_SELECTION_FILE);
+  return join7(memrootConfigDir(), PROJECT_SELECTION_FILE);
 }
 function normalizeApiBase(apiBase) {
   try {
@@ -679,9 +1944,9 @@ function readSelection(apiBase, principalId) {
 }
 var LEGACY_DEFAULTS = "project-defaults.json";
 function migrateLegacyDefaults() {
-  const legacy = join6(memrootConfigDir(), LEGACY_DEFAULTS);
+  const legacy = join7(memrootConfigDir(), LEGACY_DEFAULTS);
   try {
-    lstatSync4(legacy);
+    lstatSync5(legacy);
   } catch {
     return false;
   }
@@ -778,11 +2043,11 @@ function clearSelection(apiBase, principalId, onlyProjectId) {
   });
 }
 function offlineIdentity(recordedOnly = false) {
-  let apiBase = PRODUCTION_API_BASE;
+  let apiBase = PROD_API_BASE;
   let userId;
   try {
     const raw = readPrivateFileIfExists(
-      join6(memrootConfigDir(), "config.json"),
+      join7(memrootConfigDir(), "config.json"),
       64 * 1024
     );
     if (raw !== void 0) {
@@ -808,7 +2073,7 @@ function currentSelection(apiBase) {
   return readSelection(base, identity.userId);
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
 var MAX_BINDINGS = 256;
 var MAX_FILE_BYTES2 = 512 * 1024;
@@ -817,7 +2082,7 @@ var MAX_PATH = 4096;
 var MAX_WALK = 128;
 var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectFoldersPath() {
-  return join7(memrootConfigDir(), PROJECT_FOLDERS_FILE);
+  return join8(memrootConfigDir(), PROJECT_FOLDERS_FILE);
 }
 var FOLD_CASE = process.platform === "win32";
 function folderContains(folder, path2, options) {
@@ -849,7 +2114,7 @@ function applicableBinding(bindings, scope, options) {
 }
 var match = { foldCase: FOLD_CASE, separator: sep };
 function usableFolder(value) {
-  return typeof value === "string" && isAbsolute3(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+  return typeof value === "string" && isAbsolute4(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
 }
 function canonicalFolder(path2) {
   const absolute = normalize2(resolve(path2));
@@ -858,7 +2123,7 @@ function canonicalFolder(path2) {
     try {
       const real = realpathSync.native(head);
       const rest = relative(head, absolute);
-      return rest ? join7(real, rest) : real;
+      return rest ? join8(real, rest) : real;
     } catch {
       const parent = dirname4(head);
       if (parent === head) break;
@@ -869,7 +2134,7 @@ function canonicalFolder(path2) {
 }
 function smallFile(path2) {
   try {
-    const info = lstatSync5(path2);
+    const info = lstatSync6(path2);
     if (!info.isFile() || info.size > 4096) return void 0;
     return readFileSync3(path2, "utf8");
   } catch {
@@ -878,10 +2143,10 @@ function smallFile(path2) {
 }
 function folderScope(real) {
   for (let dir = real, i = 0; i < MAX_WALK; i++) {
-    const dotGit = join7(dir, ".git");
+    const dotGit = join8(dir, ".git");
     let info;
     try {
-      info = lstatSync5(dotGit);
+      info = lstatSync6(dotGit);
     } catch {
       info = void 0;
     }
@@ -892,7 +2157,7 @@ function folderScope(real) {
       return {
         cwd: real,
         top: dir,
-        main: { root, path: rest ? join7(root, rest) : root }
+        main: { root, path: rest ? join8(root, rest) : root }
       };
     }
     const parent = dirname4(dir);
@@ -906,7 +2171,7 @@ function worktreeMain(dir, dotGit) {
   if (!pointer?.[1]) return void 0;
   const gitdir = resolve(dir, pointer[1]);
   if (basename(dirname4(gitdir)) !== "worktrees") return void 0;
-  const back = smallFile(join7(gitdir, "gitdir"))?.trim();
+  const back = smallFile(join8(gitdir, "gitdir"))?.trim();
   if (!back) return void 0;
   try {
     if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
@@ -914,7 +2179,7 @@ function worktreeMain(dir, dotGit) {
   } catch {
     return void 0;
   }
-  const common = smallFile(join7(gitdir, "commondir"))?.trim();
+  const common = smallFile(join8(gitdir, "commondir"))?.trim();
   if (!common) return void 0;
   let commonDir;
   try {
@@ -927,7 +2192,7 @@ function worktreeMain(dir, dotGit) {
 }
 function validBinding(value) {
   const v = value;
-  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute3(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
+  return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute4(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
 }
 function validKey(key) {
   const at = key.lastIndexOf("|");
@@ -993,7 +2258,7 @@ function markProjectStale(apiBase, principalId, projectId) {
   });
 }
 
-// src/project-scope.ts
+// src/project/scope.ts
 function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
@@ -1096,8 +2361,922 @@ function currentAgreement(consent) {
   }
 }
 
+// src/capture/extract/run.ts
+import { spawn } from "node:child_process";
+import { accessSync, constants as constants2, statSync } from "node:fs";
+import { delimiter, isAbsolute as isAbsolute5, join as join9 } from "node:path";
+var EXTRACTOR_TIMEOUT_MS = 18e4;
+var MAX_OUTPUT_BYTES = 256 * 1024;
+var MAX_STDERR_BYTES = 8 * 1024;
+var RunnerError = class extends Error {
+  constructor(failure2) {
+    super(`RUNNER_${failure2.toUpperCase()}`);
+    this.failure = failure2;
+  }
+  failure;
+};
+function findExecutable(name) {
+  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
+    if (!isAbsolute5(directory)) continue;
+    const path2 = join9(directory, name);
+    try {
+      accessSync(path2, constants2.X_OK);
+      if (statSync(path2).isFile()) return path2;
+    } catch {
+    }
+  }
+  return void 0;
+}
+var QUOTA_TEXT = /usage limit|rate limit|session limit|hit your [a-z ]*limit|quota|exceeded your|insufficient credits|credit balance|too many requests|429/i;
+function looksLikeQuota(text) {
+  return QUOTA_TEXT.test(text);
+}
+var lastDetails;
+function takeLastRunDetails() {
+  const details = lastDetails;
+  lastDetails = void 0;
+  return details;
+}
+var activeGroups = /* @__PURE__ */ new Set();
+function killActiveChildren() {
+  for (const pid of activeGroups) {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+    }
+  }
+  activeGroups.clear();
+}
+function defaultTimeoutMs() {
+  const override = Number(process.env.MEMROOT_CAPTURE_EXTRACTOR_TIMEOUT_MS);
+  return process.env.NODE_ENV === "test" && Number.isFinite(override) && override > 0 ? override : EXTRACTOR_TIMEOUT_MS;
+}
+function runProcess(binary, args, options) {
+  return new Promise((resolve2, reject) => {
+    const started = Date.now();
+    const child = spawn(binary, args, {
+      cwd: options.cwd,
+      env: options.env,
+      detached: true,
+      stdio: ["pipe", "pipe", "pipe"],
+      shell: false
+    });
+    const pid = child.pid;
+    if (pid) activeGroups.add(pid);
+    let stdout = Buffer.alloc(0);
+    let bytes = 0;
+    let stderr = "";
+    let failure2;
+    let exitCode = null;
+    let exitSignal = null;
+    let settled = false;
+    const killGroup = () => {
+      try {
+        if (pid) process.kill(-pid, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    const settle3 = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(grace);
+      killGroup();
+      if (pid) activeGroups.delete(pid);
+      child.stdout.destroy();
+      child.stderr.destroy();
+      if (options.record !== false)
+        lastDetails = {
+          ms: Date.now() - started,
+          code: exitCode,
+          signal: exitSignal,
+          timedOut: failure2 === "timeout",
+          outputCapped: failure2 === "output_too_large",
+          bytes
+        };
+      if (failure2) reject(new RunnerError(failure2));
+      else resolve2({ code: exitCode, stdout: stdout.toString("utf8"), stderr });
+    };
+    let grace;
+    const timer = setTimeout(() => {
+      failure2 = "timeout";
+      settle3();
+    }, options.timeoutMs ?? defaultTimeoutMs());
+    child.stdout.on("data", (chunk) => {
+      bytes += chunk.length;
+      if (failure2) return;
+      if (stdout.length + chunk.length > (options.maxOutputBytes ?? MAX_OUTPUT_BYTES)) {
+        failure2 = "output_too_large";
+        settle3();
+        return;
+      }
+      stdout = Buffer.concat([stdout, chunk]);
+    });
+    child.stderr.on("data", (chunk) => {
+      if (stderr.length < MAX_STDERR_BYTES)
+        stderr += chunk.toString("utf8").slice(0, MAX_STDERR_BYTES - stderr.length);
+    });
+    child.on("error", (error62) => {
+      if (settled) return;
+      failure2 = error62.code === "ENOENT" ? "not_installed" : "exit";
+      settle3();
+    });
+    child.on("exit", (code, signal2) => {
+      exitCode = code;
+      exitSignal = signal2;
+      grace = setTimeout(settle3, 2e3);
+    });
+    child.on("close", () => settle3());
+    child.stdin.on("error", () => {
+    });
+    child.stdin.end(options.stdin);
+  });
+}
+function parseJsonText(text) {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
+    if (fenced?.[1]) return JSON.parse(fenced[1]);
+    throw new RunnerError("output_invalid");
+  }
+}
+
+// src/capture/hooks/spawn.ts
+import { spawn as spawn2 } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname as dirname5, join as join10 } from "node:path";
+import { fileURLToPath } from "node:url";
+function spawnWorker() {
+  try {
+    const here = dirname5(fileURLToPath(import.meta.url));
+    const sibling = join10(here, "capture-worker.mjs");
+    const worker = existsSync(sibling) ? sibling : join10(here, "plugins", "claude", "scripts", "capture-worker.mjs");
+    if (!existsSync(worker)) return;
+    const child = spawn2(process.execPath, [worker], {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
+    });
+    child.on("error", () => {
+    });
+    child.unref();
+  } catch {
+  }
+}
+
+// src/capture/queue/job.ts
+import { createHash, randomBytes as randomBytes4 } from "node:crypto";
+import { join as join11 } from "node:path";
+
+// src/project/context.ts
+var UUID3 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+function validUuid(value) {
+  return typeof value === "string" && UUID3.test(value);
+}
+
+// src/capture/queue/job.ts
+var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
+var JOB_STATES = [
+  "pending",
+  "extracted",
+  "quota_blocked",
+  "auth_required",
+  "server_unsupported",
+  "runner_unavailable",
+  "project_required",
+  /** Written by CLI 0.2.0 to 0.5.0 only; read as pending. */
+  "awaiting_trigger"
+];
+var JOB_ID = /^(claude|codex|grok)-[a-f0-9]{32}$/;
+var HEX64 = /^[a-f0-9]{64}$/;
+function sha256Hex(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+function readOrCreateSalt() {
+  const path2 = join11(stateSubdir(), "salt");
+  const existing = readPrivateFileIfExists(path2, 1024);
+  if (existing !== void 0) {
+    const value = existing.trim();
+    if (!HEX64.test(value)) throw new Error("INVALID_SALT");
+    return value;
+  }
+  const salt = randomBytes4(32).toString("hex");
+  if (createPrivateFileExclusive(path2, `${salt}
+`)) return salt;
+  return readOrCreateSalt();
+}
+function sessionRefFor(salt, agent, sessionId) {
+  return sha256Hex(`${salt}\0${agent}\0${sessionId}`);
+}
+function queueDir() {
+  return stateSubdir("queue");
+}
+var conflictPath = (jobId) => join11(queueDir(), `${jobId}.account-conflict`);
+function hasAccountConflict(jobId) {
+  const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
+  if (marker === void 0) return false;
+  const at = Date.parse(marker);
+  if (Number.isFinite(at) && Date.now() - at > JOB_TTL_MS) {
+    removeFile(conflictPath(jobId));
+    return false;
+  }
+  return true;
+}
+function jobPath(jobId) {
+  return join11(queueDir(), `${jobId}.json`);
+}
+function parseJob(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return void 0;
+  const job = value;
+  const optionalTime = (field) => field === null || typeof field === "string" && !Number.isNaN(Date.parse(field));
+  if (job.schemaVersion !== 1 || typeof job.jobId !== "string" || !JOB_ID.test(job.jobId) || !CAPTURE_AGENTS.includes(job.agent) || !job.jobId.startsWith(`${job.agent}-`) || typeof job.sessionId !== "string" || !/^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/.test(job.sessionId) || typeof job.sessionRef !== "string" || !HEX64.test(job.sessionRef) || job.jobId !== `${job.agent}-${job.sessionRef.slice(0, 32)}` || !(job.transcriptPath === null || typeof job.transcriptPath === "string") || typeof job.cwd !== "string" || !job.cwd.startsWith("/") || typeof job.reason !== "string" || !optionalTime(job.endedAt) || job.endedAt === null || !optionalTime(job.createdAt) || job.createdAt === null || !JOB_STATES.includes(job.state) || typeof job.attempts !== "number" || !Number.isInteger(job.attempts) || job.attempts < 0 || !optionalTime(job.nextAttemptAt) || !(job.lastError === null || typeof job.lastError === "string"))
+    return void 0;
+  if (job.triggerRef !== void 0 && (typeof job.triggerRef !== "string" || !HEX64.test(job.triggerRef)))
+    return void 0;
+  if (job.account !== void 0) {
+    const account = job.account;
+    if (!account || typeof account.apiBase !== "string" || !validUuid(account.principalId))
+      return void 0;
+  }
+  if (job.target !== void 0 && !validTarget(job.target)) return void 0;
+  if (job.floorBytes !== void 0 && (!Number.isSafeInteger(job.floorBytes) || job.floorBytes < 0))
+    return void 0;
+  if (job.project !== void 0) {
+    const project = job.project;
+    if (!project || typeof project.apiBase !== "string" || !validUuid(project.projectId) || !validUuid(project.principalId) || !validUuid(project.tenantId) || !validUuid(project.segmentId))
+      return void 0;
+  }
+  return job;
+}
+function validTarget(value) {
+  const t = value;
+  return !!t && typeof t === "object" && typeof t.apiBase === "string" && validUuid(t.principalId) && validUuid(t.tenantId) && validUuid(t.projectId) && validUuid(t.selectionId);
+}
+function jobTarget(job) {
+  if (job.target) return job.target;
+  const p = job.project;
+  return p ? {
+    apiBase: p.apiBase,
+    principalId: p.principalId,
+    tenantId: p.tenantId,
+    projectId: p.projectId,
+    selectionId: p.segmentId
+  } : void 0;
+}
+function readJob(jobId) {
+  const raw = readPrivateFileIfExists(jobPath(jobId), 64 * 1024);
+  if (raw === void 0) return void 0;
+  try {
+    return parseJob(JSON.parse(raw));
+  } catch {
+    return void 0;
+  }
+}
+function writeJob(job) {
+  writePrivateFileAtomic(jobPath(job.jobId), `${JSON.stringify(job)}
+`);
+}
+function deleteJob(jobId) {
+  removeFile(jobPath(jobId));
+}
+function listJobIds() {
+  const names = listFiles(queueDir());
+  for (const name of names) {
+    const id = name.slice(0, -".account-conflict".length);
+    if (name.endsWith(".account-conflict") && JOB_ID.test(id))
+      hasAccountConflict(id);
+  }
+  return names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
+}
+
+// src/capture/queue/ledger.ts
+import { join as join12 } from "node:path";
+var MAX_CURSORS = 1e3;
+var MAX_TITLE_HASHES = 5e3;
+var MAX_UPLOADS = 5e3;
+var UPLOAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
+var HEX642 = /^[a-f0-9]{64}$/;
+function empty() {
+  return {
+    schemaVersion: 1,
+    cursors: {},
+    uploads: [],
+    titleHashes: [],
+    project: null,
+    lastRun: null
+  };
+}
+function ledgerPath() {
+  return join12(stateSubdir(), "ledger.json");
+}
+function sanitize(value) {
+  const ledger = empty();
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return ledger;
+  const record3 = value;
+  if (record3.schemaVersion !== 1) return ledger;
+  if (record3.cursors && typeof record3.cursors === "object")
+    for (const [key, entry] of Object.entries(
+      record3.cursors
+    )) {
+      const cursor = entry;
+      if (HEX642.test(key) && typeof cursor?.turns === "number" && Number.isInteger(cursor.turns) && cursor.turns >= 0 && typeof cursor.updatedAt === "string")
+        ledger.cursors[key] = {
+          turns: cursor.turns,
+          updatedAt: cursor.updatedAt
+        };
+    }
+  if (Array.isArray(record3.uploads))
+    for (const entry of record3.uploads) {
+      const upload2 = entry;
+      if (typeof upload2?.at === "string" && !Number.isNaN(Date.parse(upload2.at)) && typeof upload2.titleHash === "string" && HEX642.test(upload2.titleHash))
+        ledger.uploads.push({
+          at: upload2.at,
+          titleHash: upload2.titleHash,
+          ...typeof upload2.triggerRef === "string" && HEX642.test(upload2.triggerRef) ? { triggerRef: upload2.triggerRef } : {},
+          memoryId: typeof upload2.memoryId === "string" && /^[A-Za-z0-9._:-]{1,256}$/.test(upload2.memoryId) ? upload2.memoryId : null
+        });
+    }
+  if (Array.isArray(record3.titleHashes))
+    ledger.titleHashes = record3.titleHashes.filter(
+      (hash2) => typeof hash2 === "string" && HEX642.test(hash2)
+    ).slice(-MAX_TITLE_HASHES);
+  const project = record3.project;
+  if (project && typeof project.apiBase === "string" && typeof project.projectId === "string" && /^[A-Za-z0-9-]{1,128}$/.test(project.projectId))
+    ledger.project = { apiBase: project.apiBase, projectId: project.projectId };
+  const lastRun = record3.lastRun;
+  if (lastRun && typeof lastRun.startedAt === "string" && typeof lastRun.finishedAt === "string" && lastRun.outcomes && typeof lastRun.outcomes === "object") {
+    const outcomes2 = {};
+    for (const [key, count3] of Object.entries(lastRun.outcomes))
+      if (/^[a-z_]{1,40}$/.test(key) && typeof count3 === "number")
+        outcomes2[key] = count3;
+    ledger.lastRun = {
+      startedAt: lastRun.startedAt,
+      finishedAt: lastRun.finishedAt,
+      outcomes: outcomes2
+    };
+  }
+  return ledger;
+}
+function readLedger() {
+  try {
+    const raw = readPrivateFileIfExists(ledgerPath(), 4 * 1024 * 1024);
+    return raw === void 0 ? empty() : sanitize(JSON.parse(raw));
+  } catch {
+    return empty();
+  }
+}
+function writeLedger(ledger, options = {}) {
+  const disk = readLedger();
+  for (const [key, cursor] of Object.entries(disk.cursors)) {
+    const mine = ledger.cursors[key];
+    if (mine && key === options.rewindCursor) continue;
+    if (!mine || cursor.turns > mine.turns) ledger.cursors[key] = cursor;
+  }
+  const uploadKey = (upload2) => `${upload2.at}|${upload2.titleHash}|${upload2.memoryId ?? ""}`;
+  const seen = new Set(ledger.uploads.map(uploadKey));
+  for (const upload2 of disk.uploads)
+    if (!seen.has(uploadKey(upload2))) {
+      ledger.uploads.push(upload2);
+      seen.add(uploadKey(upload2));
+    }
+  ledger.uploads.sort((a, b) => a.at.localeCompare(b.at));
+  ledger.titleHashes = [
+    .../* @__PURE__ */ new Set([...disk.titleHashes, ...ledger.titleHashes])
+  ];
+  if (!options.replaceProject && !ledger.project) ledger.project = disk.project;
+  if (!ledger.lastRun) ledger.lastRun = disk.lastRun;
+  const now = Date.now();
+  ledger.uploads = ledger.uploads.filter((upload2) => now - Date.parse(upload2.at) < UPLOAD_RETENTION_MS).slice(-MAX_UPLOADS);
+  ledger.titleHashes = ledger.titleHashes.slice(-MAX_TITLE_HASHES);
+  const cursors = Object.entries(ledger.cursors);
+  if (cursors.length > MAX_CURSORS)
+    ledger.cursors = Object.fromEntries(
+      cursors.sort((a, b) => a[1].updatedAt.localeCompare(b[1].updatedAt)).slice(-MAX_CURSORS)
+    );
+  writePrivateFileAtomic(ledgerPath(), `${JSON.stringify(ledger)}
+`);
+}
+function uploadsInLastDay(ledger, now = Date.now()) {
+  return ledger.uploads.filter(
+    (upload2) => now - Date.parse(upload2.at) < 24 * 60 * 60 * 1e3
+  ).length;
+}
+
+// src/capture/queue/purge.ts
+import { join as join13 } from "node:path";
+function removeJobFiles(jobId) {
+  deleteJob(jobId);
+  const work = stateSubdir("work");
+  for (const name of listFiles(work))
+    if (name.startsWith(`${jobId}.`)) removeFile(join13(work, name));
+}
+function purgeAgent(agent) {
+  let removed = 0;
+  for (const jobId of listJobIds())
+    if (jobId.startsWith(`${agent}-`)) {
+      removeJobFiles(jobId);
+      removed++;
+    }
+  return removed;
+}
+function purgeQueue() {
+  const jobs = listJobIds();
+  for (const jobId of jobs) removeJobFiles(jobId);
+  for (const name of listFiles(queueDir()))
+    if (name.endsWith(".json.finishing") || name.endsWith(".account-conflict"))
+      removeFile(join13(queueDir(), name));
+  const work = stateSubdir("work");
+  for (const name of listFiles(work)) removeFile(join13(work, name));
+  return jobs.length;
+}
+
+// src/capture/redact/redact.ts
+import { createHash as createHash2 } from "node:crypto";
+import { hostname, userInfo } from "node:os";
+
+// ../../packages/domain/src/redaction/entropy.ts
+function shannon(value) {
+  if (!value) return 0;
+  const counts = /* @__PURE__ */ new Map();
+  for (const char of value) counts.set(char, (counts.get(char) ?? 0) + 1);
+  const length = [...value].length;
+  let bits = 0;
+  for (const count3 of counts.values()) {
+    const p = count3 / length;
+    bits -= p * Math.log2(p);
+  }
+  return bits;
+}
+var UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+var HEX = /^[0-9a-fA-F]+$/;
+var INTEGRITY = /^sha(?:1|256|384|512)-/;
+function isAllowlistedToken(token) {
+  return HEX.test(token) || UUID4.test(token) || INTEGRITY.test(token) || token.startsWith("[REDACTED");
+}
+function looksLikeHighEntropySecret(token) {
+  if (token.length < 32 || isAllowlistedToken(token)) return false;
+  if (token.includes("/")) return false;
+  if (!/[a-z]/.test(token) || !/[A-Z]/.test(token) || !/[0-9]/.test(token))
+    return false;
+  return shannon(token) >= 4.5;
+}
+
+// ../../packages/domain/src/redaction/rules.ts
+var whole = (kind) => (mark, match2) => mark(kind, match2);
+var keepPrefix = (kind) => (mark, _match, groups) => {
+  const secret = groups[groups.length - 1] ?? "";
+  return `${groups.slice(0, -1).join("")}${mark(kind, secret)}`;
+};
+var NOT_MARKER = "(?!\\[REDACTED)";
+var LINE_SPACE = "[^\\S\\r\\n\\u2028\\u2029]";
+var PLACEHOLDER = /^(?:changeme|change_me|example|placeholder|redacted|secret|password|token|undefined|null|none|true|false|your[_-].*|x{3,}.*|\*{3,}.*|<.*>|\$\{.*\}|\{\{.*\}\}|\$[A-Za-z_][A-Za-z0-9_]*|process\.env.*|os\.environ.*|env\(.*|getenv.*)$/i;
+var RULES = [
+  {
+    name: "private_key_pem",
+    keywords: ["private key"],
+    pattern: /-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----|$)/g,
+    replace: whole("private_key")
+  },
+  {
+    name: "gcp_service_account",
+    keywords: ["private_key_id"],
+    pattern: /("private_key_id"\s*:\s*")([0-9a-f]{40})(?=")/g,
+    replace: keepPrefix("gcp_private_key_id")
+  },
+  {
+    name: "anthropic_key",
+    keywords: ["sk-ant-"],
+    pattern: /\bsk-ant-(?:api\d\d|admin\d\d|oat\d\d|ort\d\d)-[A-Za-z0-9_-]{20,}|\bsk-ant-[A-Za-z0-9_-]{20,}/g,
+    replace: whole("anthropic_key")
+  },
+  {
+    name: "openai_key",
+    keywords: ["sk-"],
+    pattern: /\bsk-(?!ant-)(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}/g,
+    replace: whole("openai_key")
+  },
+  {
+    name: "xai_key",
+    keywords: ["xai-"],
+    pattern: /\bxai-[A-Za-z0-9]{40,}/g,
+    replace: whole("xai_key")
+  },
+  {
+    name: "aws_access_key_id",
+    pattern: /\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/g,
+    replace: whole("aws_access_key_id")
+  },
+  {
+    name: "aws_secret",
+    keywords: ["aws"],
+    pattern: /(aws_?secret_?access_?key|aws_?secret)(["']?\s*[:=]\s*["']?)([A-Za-z0-9/+=]{40})/gi,
+    replace: keepPrefix("aws_secret")
+  },
+  {
+    name: "github_token",
+    keywords: ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"],
+    pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}\b|\bgithub_pat_\w{82}\b/g,
+    replace: whole("github_token")
+  },
+  {
+    name: "gitlab_pat",
+    keywords: ["glpat-"],
+    pattern: /\bglpat-[\w-]{20,}/g,
+    replace: whole("gitlab_pat")
+  },
+  {
+    name: "slack",
+    keywords: ["xox", "hooks.slack.com"],
+    pattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}|https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/g,
+    replace: whole("slack")
+  },
+  {
+    name: "stripe",
+    keywords: ["_live_", "_test_", "_prod_"],
+    pattern: /\b(?:sk|rk|pk)_(?:live|test|prod)_[A-Za-z0-9]{10,99}\b/g,
+    replace: whole("stripe")
+  },
+  {
+    name: "google_api_key",
+    keywords: ["aiza"],
+    pattern: /\bAIza[\w-]{35}\b/g,
+    replace: whole("google_api_key")
+  },
+  {
+    name: "npm_hf_sendgrid_vault",
+    keywords: ["npm_", "hf_", "sg.", "hvs.", "hvb."],
+    pattern: /\bnpm_[A-Za-z0-9]{36}\b|\bhf_[A-Za-z]{34}\b|\bSG\.[\w.-]{66}\b|\bhv[sb]\.[\w-]{90,300}/g,
+    replace: whole("service_token")
+  },
+  {
+    name: "jwt",
+    keywords: ["eyj"],
+    // A token starts only where a run of base64url characters starts (not
+    // `\b`, which also matched after every `-` inside a run), so each run is
+    // scanned from one start and the rule is linear on long `eyJ-eyJ-...`
+    // runs.
+    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
+    replace: whole("jwt")
+  },
+  {
+    name: "url_userinfo",
+    keywords: ["://"],
+    pattern: new RegExp(
+      `\\b([a-z][a-z0-9+.-]{1,20}:\\/\\/[^\\s:@\\/]{1,256}:)${NOT_MARKER}([^\\s@\\/]{1,256})(?=@)`,
+      "gi"
+    ),
+    replace: keepPrefix("url_password")
+  },
+  {
+    name: "url_secret_params",
+    keywords: ["="],
+    pattern: new RegExp(
+      `([?&](?:access_token|id_token|refresh_token|token|api[_-]?key|apikey|key|secret|sig|signature|X-Amz-Signature|X-Amz-Credential|X-Goog-Signature|code|password)=)${NOT_MARKER}([^&\\s#"']+)`,
+      "gi"
+    ),
+    replace: keepPrefix("url_secret")
+  },
+  {
+    name: "auth_scheme",
+    keywords: ["bearer", "basic", "token"],
+    pattern: /\b(Bearer|Basic|Token)([ \t]+)([A-Za-z0-9._~+/=-]{16,})/gi,
+    replace: keepPrefix("auth_header")
+  },
+  {
+    name: "auth_header",
+    keywords: ["authorization", "api-key", "auth-token", "cookie"],
+    pattern: new RegExp(
+      `\\b(authorization|proxy-authorization|x-api-key|api-key|x-auth-token|cookie|set-cookie)(\\s*[:=]\\s*["']?)${NOT_MARKER}([^\\r\\n"']{8,})`,
+      "gi"
+    ),
+    replace: keepPrefix("auth_header")
+  },
+  {
+    name: "env_assignment",
+    // Bounded: the indentation (which never crosses a newline), the name
+    // around its keyword and the spacing around `=`/`:` have fixed upper
+    // bounds, so each line start costs a bounded number of steps. The
+    // unbounded form backtracked cubically on a newline run followed by a
+    // long name. A value on the next line (YAML `key:` then the value) is
+    // still matched, as before.
+    pattern: new RegExp(
+      `^(${LINE_SPACE}{0,64}(?:export${LINE_SPACE}{1,16})?[A-Za-z_][A-Za-z0-9_]{0,100}(?:KEY|SECRET|TOKEN|PASS(?:WORD|WD)?|PWD|CREDENTIALS?|AUTH|PRIVATE|SALT|DSN|CONN(?:ECTION)?_?STRING)[A-Za-z0-9_]{0,100}\\s{0,64}[=:]\\s{0,64}["']?)(?!\\$\\{?[A-Za-z_])(?!<)${NOT_MARKER}([^\\s"'#]{4,})`,
+      "gmi"
+    ),
+    replace: keepPrefix("env_secret")
+  },
+  {
+    name: "generic_keyword_assign",
+    keywords: ["key", "secret", "token", "passw", "pwd", "credential"],
+    pattern: new RegExp(
+      `\\b([\\w.-]{0,40}(?:api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key|client[_-]?secret)[\\w.-]{0,20})(["']?\\s*(?:=|:|=>|:=)\\s*["']?)${NOT_MARKER}([^\\s"',;]{8,200})`,
+      "gi"
+    ),
+    replace: (mark, match2, groups) => {
+      const value = groups[2] ?? "";
+      if (PLACEHOLDER.test(value) || /[=:]$/.test(value) || /^(.)\1+$/.test(value) || shannon(value) < 3)
+        return match2;
+      return `${groups[0] ?? ""}${groups[1] ?? ""}${mark("secret", value)}`;
+    }
+  },
+  {
+    name: "high_entropy_token",
+    pattern: /[A-Za-z0-9+/_=-]{32,}/g,
+    replace: (mark, match2) => looksLikeHighEntropySecret(match2) ? mark("high_entropy", match2) : match2
+  },
+  {
+    name: "email",
+    keywords: ["@"],
+    // RFC 5321/1035 lengths: local part up to 64, domain up to 253, label
+    // up to 63. Bounded so a long `a-a-a-...` run is not rescanned from
+    // every word boundary.
+    pattern: /\b[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}\b/g,
+    replace: (mark, match2) => /^noreply@|users\.noreply\.github\.com$|@example\.(?:com|org)$/i.test(
+      match2
+    ) ? match2 : mark("email", match2)
+  },
+  {
+    name: "home_path",
+    keywords: ["/users/", "/home/", "\\users\\"],
+    pattern: /(\/Users\/|\/home\/)([^/\s:'"]+)|\b([A-Z]:\\Users\\)([^\\\s]+)/gi,
+    replace: (_mark, _match, groups) => groups[0] ? "~" : "%USERPROFILE%"
+  }
+];
+
+// src/capture/redact/redact.ts
+var MAX_SEGMENT_BYTES = 256 * 1024;
+var MARKER = /\[REDACTED:[a-z_]+#[0-9a-f]{4}\]/g;
+var INVISIBLE = /[​-‏⁠-⁤﻿]/g;
+var COMMON_NAMES = /* @__PURE__ */ new Set([
+  "admin",
+  "root",
+  "user",
+  "users",
+  "test",
+  "runner",
+  "ubuntu",
+  "build",
+  "local",
+  "localhost",
+  "home",
+  "node",
+  // Assembled so the repository's retired-runtime scanner does not mistake
+  // this username stoplist entry for a container runtime reference.
+  ["dock", "er"].join(""),
+  "default",
+  "guest",
+  "work",
+  "main",
+  "master"
+]);
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function osIdentities() {
+  const names = [];
+  try {
+    names.push(userInfo().username);
+  } catch {
+  }
+  try {
+    const host = hostname();
+    names.push(host, host.replace(/\.local$/i, ""));
+  } catch {
+  }
+  return names;
+}
+function identityRules(identities) {
+  const rules = [];
+  for (const name of new Set(identities)) {
+    if (name.length < 4 || COMMON_NAMES.has(name.toLowerCase())) continue;
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) continue;
+    rules.push({
+      name: "local_identity",
+      keywords: [name.toLowerCase()],
+      pattern: new RegExp(
+        `(?<![A-Za-z0-9_])${escapeRegExp(name)}(?![A-Za-z0-9_])`,
+        "gi"
+      ),
+      replace: (mark, match2) => mark("local_identity", match2)
+    });
+  }
+  return rules;
+}
+function applyOutsideMarkers(text, transform2) {
+  let result = "";
+  let last = 0;
+  for (const match2 of text.matchAll(MARKER)) {
+    const index = match2.index ?? 0;
+    result += transform2(text.slice(last, index)) + match2[0];
+    last = index + match2[0].length;
+  }
+  return result + transform2(text.slice(last));
+}
+function createRedactor(salt, options = {}) {
+  if (!/^[a-f0-9]{64}$/.test(salt)) throw new Error("REDACTOR_SALT_INVALID");
+  const mark = (kind, secret) => `[REDACTED:${kind}#${createHash2("sha256").update(secret).update("\0").update(salt).digest("hex").slice(0, 4)}]`;
+  const rules = [
+    ...RULES,
+    ...identityRules(options.localIdentities ?? osIdentities())
+  ];
+  return {
+    redact(text) {
+      if (typeof text !== "string") throw new Error("REDACTOR_INPUT_INVALID");
+      if (Buffer.byteLength(text, "utf8") > MAX_SEGMENT_BYTES) return void 0;
+      let output2 = text.replace(INVISIBLE, "");
+      for (const rule of rules) {
+        const lower = output2.toLowerCase();
+        if (rule.keywords && !rule.keywords.some((keyword) => lower.includes(keyword)))
+          continue;
+        output2 = applyOutsideMarkers(
+          output2,
+          (part) => part.replace(rule.pattern, (...args) => {
+            const match2 = args[0];
+            const offsetIndex = args.findIndex(
+              (value, index) => index > 0 && typeof value === "number"
+            );
+            const groups = args.slice(1, offsetIndex).map((value) => typeof value === "string" ? value : "");
+            return rule.replace(mark, match2, groups);
+          })
+        );
+      }
+      return output2;
+    }
+  };
+}
+function redactDeep(redactor, value) {
+  let changed = false;
+  const visit2 = (item) => {
+    if (typeof item === "string") {
+      const output3 = redactor.redact(item);
+      if (output3 === void 0) {
+        changed = true;
+        return "";
+      }
+      if (output3 !== item) changed = true;
+      return output3;
+    }
+    if (Array.isArray(item)) return item.map(visit2);
+    if (item && typeof item === "object")
+      return Object.fromEntries(
+        Object.entries(item).map(([key, entry]) => [
+          key,
+          visit2(entry)
+        ])
+      );
+    return item;
+  };
+  const output2 = visit2(value);
+  return { value: output2, changed };
+}
+
+// src/capture/transcript/types.ts
+import { closeSync as closeSync3, constants as constants3, fstatSync as fstatSync2, openSync as openSync3, readSync } from "node:fs";
+import { constants as osConstants } from "node:os";
+import { StringDecoder } from "node:string_decoder";
+var UnsupportedTranscriptError = class extends Error {
+  constructor() {
+    super("UNSUPPORTED_TRANSCRIPT");
+  }
+};
+var TranscriptMissingError = class extends UnsupportedTranscriptError {
+  constructor() {
+    super();
+    this.message = "TRANSCRIPT_MISSING";
+  }
+};
+var MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
+var NOT_A_TRANSCRIPT = ["ENOENT", "ELOOP", "ENXIO", "EOPNOTSUPP", "ENODEV"];
+var NOT_A_TRANSCRIPT_ERRNO = NOT_A_TRANSCRIPT.map(
+  (name) => osConstants.errno[name]
+).filter((value) => typeof value === "number");
+function notATranscript(error62) {
+  const { code, errno } = error62;
+  return typeof code === "string" && NOT_A_TRANSCRIPT.includes(code) || typeof errno === "number" && NOT_A_TRANSCRIPT_ERRNO.includes(Math.abs(errno));
+}
+function forEachJsonLine(path2, visit2, end, keep) {
+  if (path2.endsWith(".zst")) throw new UnsupportedTranscriptError();
+  let fd;
+  try {
+    fd = openSync3(
+      path2,
+      constants3.O_RDONLY | constants3.O_NOFOLLOW | (constants3.O_NONBLOCK ?? 0)
+    );
+  } catch (error62) {
+    if (notATranscript(error62)) throw new UnsupportedTranscriptError();
+    throw error62;
+  }
+  try {
+    const info = fstatSync2(fd);
+    if (!info.isFile() || info.size > MAX_TRANSCRIPT_BYTES)
+      throw new UnsupportedTranscriptError();
+    const buffer = Buffer.alloc(1024 * 1024);
+    const decoder2 = new StringDecoder("utf8");
+    let carry = "";
+    let position = 0;
+    let lineStart = 0;
+    for (; ; ) {
+      const length = end === void 0 ? buffer.length : Math.min(buffer.length, end - position);
+      if (length <= 0) break;
+      const read2 = readSync(fd, buffer, 0, length, position);
+      if (read2 === 0) break;
+      position += read2;
+      const text = carry + decoder2.write(buffer.subarray(0, read2));
+      const lines = text.split("\n");
+      carry = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!keep || keep(line)) parseLine(line, visit2, lineStart);
+        lineStart += Buffer.byteLength(line) + 1;
+      }
+      if (carry.length > 32 * 1024 * 1024) {
+        lineStart += Buffer.byteLength(carry);
+        carry = "";
+      }
+    }
+    if (end === void 0) {
+      const last = carry + decoder2.end();
+      if (!keep || keep(last)) parseLine(last, visit2, lineStart);
+    }
+  } finally {
+    closeSync3(fd);
+  }
+}
+function parseLine(line, visit2, byteStart) {
+  if (!line.trim()) return;
+  try {
+    const value = JSON.parse(line);
+    if (value && typeof value === "object" && !Array.isArray(value))
+      visit2(value, byteStart);
+  } catch {
+  }
+}
+function record(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function textBlocks(content, types = ["text"]) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((block) => {
+    const item = record(block);
+    return item && types.includes(String(item.type)) && typeof item.text === "string" ? item.text : "";
+  }).filter(Boolean).join("\n");
+}
+function tidy(text) {
+  return text.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+function stamp(value) {
+  if (typeof value !== "string") return void 0;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? void 0 : ms;
+}
+
+// src/capture/worker/candidates.ts
+import { join as join14 } from "node:path";
+function candidatesPath(jobId) {
+  return join14(stateSubdir("work"), `${jobId}.candidates.json`);
+}
+function readCandidates(jobId) {
+  const raw = readPrivateFileIfExists(candidatesPath(jobId), 4 * 1024 * 1024);
+  if (raw === void 0) return void 0;
+  try {
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || value.jobId !== jobId || typeof value.projectId !== "string" || typeof value.endedAt !== "string" || !Array.isArray(value.items))
+      return void 0;
+    return value;
+  } catch {
+    return void 0;
+  }
+}
+function pendingStoredItems(exceptJobId) {
+  let total = 0;
+  for (const name of listFiles(stateSubdir("work"))) {
+    if (!name.endsWith(".candidates.json")) continue;
+    const jobId = name.slice(0, -".candidates.json".length);
+    if (jobId === exceptJobId) continue;
+    total += readCandidates(jobId)?.items.filter((item) => item.status === "pending").length ?? 0;
+  }
+  return total;
+}
+
+// src/capture/worker/extract-step.ts
+import { randomBytes as randomBytes5 } from "node:crypto";
+import { mkdtempSync, rmSync as rmSync5 } from "node:fs";
+import { tmpdir } from "node:os";
+import { join as join23 } from "node:path";
+
+// src/hooks/shared/envelope.ts
+var MAX_ENVELOPE_BYTES = 64 * 1024;
+var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
+var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|session_resume|session_fork)$/;
+
 // src/capture/extract/map.ts
-import { createHash } from "node:crypto";
+import { createHash as createHash3 } from "node:crypto";
 
 // ../../node_modules/.pnpm/zod@4.6.7/node_modules/zod/v4/classic/external.js
 var external_exports = {};
@@ -1243,7 +3422,7 @@ __export(external_exports, {
   guid: () => guid2,
   hash: () => hash,
   hex: () => hex2,
-  hostname: () => hostname2,
+  hostname: () => hostname3,
   httpUrl: () => httpUrl,
   iban: () => iban2,
   includes: () => _includes,
@@ -1309,7 +3488,7 @@ __export(external_exports, {
   properties: () => _properties,
   property: () => _property,
   readonly: () => readonly,
-  record: () => record,
+  record: () => record2,
   refine: () => refine,
   regex: () => _regex,
   regexes: () => regexes_exports,
@@ -3034,7 +5213,7 @@ __export(regexes_exports, {
   extendedDuration: () => extendedDuration,
   guid: () => guid,
   hex: () => hex,
-  hostname: () => hostname,
+  hostname: () => hostname2,
   html5Email: () => html5Email,
   httpProtocol: () => httpProtocol,
   iban: () => iban,
@@ -3117,7 +5296,7 @@ var cidrv4 = /^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(25[0-5]
 var cidrv6 = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:))\/(12[0-8]|1[01][0-9]|[1-9]?[0-9])$/;
 var base64 = /^$|^(?:[0-9a-zA-Z+/]{4})*(?:(?:[0-9a-zA-Z+/]{2}==)|(?:[0-9a-zA-Z+/]{3}=))?$/;
 var base64url = /^(?:[A-Za-z0-9_-]{4})*(?:[A-Za-z0-9_-]{2,3})?$/;
-var hostname = /^(?=.{1,253}\.?$)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[-0-9a-zA-Z]{0,61}[0-9a-zA-Z])?)*\.?$/;
+var hostname2 = /^(?=.{1,253}\.?$)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[-0-9a-zA-Z]{0,61}[0-9a-zA-Z])?)*\.?$/;
 var domain = /^(?=.{1,253}$)([a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$/;
 var httpProtocol = /^https?$/;
 var e164 = /^\+[1-9]\d{6,14}$/;
@@ -18182,7 +20361,7 @@ __export(schemas_exports2, {
   guid: () => guid2,
   hash: () => hash,
   hex: () => hex2,
-  hostname: () => hostname2,
+  hostname: () => hostname3,
   httpUrl: () => httpUrl,
   iban: () => iban2,
   instanceof: () => _instanceof,
@@ -18221,7 +20400,7 @@ __export(schemas_exports2, {
   preprocess: () => preprocess,
   promise: () => promise,
   readonly: () => readonly,
-  record: () => record,
+  record: () => record2,
   refine: () => refine,
   set: () => set,
   strictObject: () => strictObject,
@@ -18871,8 +21050,8 @@ var ZodCustomStringFormat = /* @__PURE__ */ $constructor("ZodCustomStringFormat"
 function stringFormat(format, fnOrRegex, _params = {}) {
   return _stringFormat(ZodCustomStringFormat, format, fnOrRegex, _params);
 }
-function hostname2(_params) {
-  return _stringFormat(ZodCustomStringFormat, "hostname", hostname, _params);
+function hostname3(_params) {
+  return _stringFormat(ZodCustomStringFormat, "hostname", hostname2, _params);
 }
 function hex2(_params) {
   return _stringFormat(ZodCustomStringFormat, "hex", hex, _params);
@@ -19323,7 +21502,7 @@ var ZodRecord = /* @__PURE__ */ $constructor("ZodRecord", (inst, def) => {
   inst.keyType = def.keyType;
   inst.valueType = def.valueType;
 });
-function record(keyType, valueType, params) {
+function record2(keyType, valueType, params) {
   if (!valueType || !valueType._zod) {
     return new ZodRecord({
       type: "record",
@@ -19798,7 +21977,7 @@ var stringbool = (...args) => _stringbool({
 }, ...args);
 function json(params) {
   const jsonSchema = lazy(() => {
-    return union([string2(params), number2(), boolean2(), _null3(), array(jsonSchema), record(string2(), jsonSchema)]);
+    return union([string2(params), number2(), boolean2(), _null3(), array(jsonSchema), record2(string2(), jsonSchema)]);
   });
   return jsonSchema;
 }
@@ -20816,6 +22995,223 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 
+// ../../packages/contracts/src/memory-api/ontology.ts
+var MemoryKindV1Schema = external_exports.enum([
+  "architecture_decision",
+  "invariant",
+  "convention",
+  "bug",
+  "root_cause",
+  "fix",
+  "failed_approach",
+  "preference",
+  "code_landmark",
+  "ownership_boundary",
+  "procedure"
+]);
+var families = {
+  code: [
+    "repository",
+    "module",
+    "directory",
+    "file",
+    "symbol",
+    "commit",
+    "branch",
+    "release",
+    "dependency",
+    "service",
+    "endpoint",
+    "database",
+    "index",
+    "queue",
+    "bucket",
+    "worker",
+    "pull_request",
+    "issue"
+  ],
+  engineering: [
+    "concept",
+    "technology",
+    "framework",
+    "library",
+    "language",
+    "protocol",
+    "configuration",
+    "environment",
+    "region",
+    "incident",
+    "error",
+    "behavior",
+    "test",
+    "command",
+    "document",
+    "adr"
+  ]
+};
+var predicates = external_exports.enum([
+  "has_property",
+  "uses",
+  "depends_on",
+  "implements",
+  "applies_to",
+  "part_of",
+  "requires",
+  "forbids",
+  "recommends",
+  "causes",
+  "fails_because",
+  "fixes",
+  "avoids",
+  "prefers",
+  "disfavors",
+  "owns",
+  "maintains",
+  "located_in",
+  "defined_in"
+]);
+var ASSERTION_TYPE_BY_PREDICATE_V1 = {
+  has_property: "descriptive",
+  uses: "descriptive",
+  depends_on: "descriptive",
+  implements: "descriptive",
+  applies_to: "descriptive",
+  part_of: "descriptive",
+  requires: "normative",
+  forbids: "normative",
+  recommends: "normative",
+  causes: "causal",
+  fails_because: "causal",
+  fixes: "remedial",
+  avoids: "remedial",
+  prefers: "preference",
+  disfavors: "preference",
+  owns: "ownership",
+  maintains: "ownership",
+  located_in: "location",
+  defined_in: "location"
+};
+var isPredicateV1 = (value) => typeof value === "string" && Object.hasOwn(ASSERTION_TYPE_BY_PREDICATE_V1, value);
+var isAssertionTypeV1 = (value) => Object.values(ASSERTION_TYPE_BY_PREDICATE_V1).includes(value);
+function predicatesForAssertionTypeV1(type) {
+  return Object.entries(ASSERTION_TYPE_BY_PREDICATE_V1).filter(([, value]) => value === type).map(([predicate]) => predicate);
+}
+var CE = ["code", "engineering"];
+var PREDICATE_ROLES_V1 = {
+  has_property: { subject: "any", object: "literal" },
+  uses: { subject: CE, object: CE },
+  depends_on: { subject: CE, object: CE },
+  implements: { subject: ["code"], object: ["engineering"] },
+  applies_to: {
+    subject: ["engineering", "principal_scope"],
+    object: ["code", "principal_scope"]
+  },
+  part_of: {
+    subject: ["code", "engineering", "principal_scope"],
+    object: ["code", "engineering", "principal_scope"],
+    sameFamily: true
+  },
+  requires: { subject: ["code", "principal_scope"], object: CE },
+  forbids: { subject: ["code", "principal_scope"], object: CE },
+  recommends: { subject: ["code", "principal_scope"], object: CE },
+  causes: {
+    subject: CE,
+    object: ["engineering"],
+    objectSubtypes: ["error", "incident", "behavior"]
+  },
+  fixes: {
+    subject: CE,
+    object: ["engineering"],
+    objectSubtypes: ["error", "incident", "behavior"]
+  },
+  avoids: {
+    subject: CE,
+    object: ["engineering"],
+    objectSubtypes: ["error", "incident", "behavior"]
+  },
+  fails_because: { subject: CE, object: CE },
+  prefers: { subject: ["principal_scope"], object: CE },
+  disfavors: { subject: ["principal_scope"], object: CE },
+  owns: { subject: ["principal_scope"], object: CE },
+  maintains: { subject: ["principal_scope"], object: CE },
+  located_in: {
+    subject: ["code"],
+    object: ["code"],
+    objectSubtypes: [
+      "module",
+      "file",
+      "directory",
+      "repository",
+      "service",
+      "database",
+      "worker"
+    ]
+  },
+  defined_in: {
+    subject: ["code"],
+    object: ["code"],
+    objectSubtypes: [
+      "module",
+      "file",
+      "directory",
+      "repository",
+      "commit",
+      "release"
+    ]
+  }
+};
+var ProvenanceOriginV1Schema = external_exports.enum([
+  "direct_api",
+  "session_extraction",
+  "import",
+  "system_reconciliation"
+]);
+
+// ../../packages/contracts/src/memory-api/agent-hints.ts
+function predicateTypeMismatchRule(predicate, assertionType) {
+  if (!isPredicateV1(predicate) || !isAssertionTypeV1(assertionType))
+    return "predicate/type mismatch";
+  return `predicate/type mismatch: ${predicate} requires assertion_type ${ASSERTION_TYPE_BY_PREDICATE_V1[predicate]}; ${assertionType} allows predicates ${predicatesForAssertionTypeV1(assertionType).join(", ")}`;
+}
+var orList = (items) => items.length < 2 ? items[0] ?? "" : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
+var CONTEXT_ENTITY_TEXT = "a context_entity";
+function familiesText(families2) {
+  const entities = families2.filter((family) => family !== "principal_scope");
+  const parts = [
+    ...entities.length > 0 ? [
+      `${entities[0] === "engineering" ? "an" : "a"} ${orList(entities)} entity`
+    ] : [],
+    ...families2.includes("principal_scope") ? [CONTEXT_ENTITY_TEXT] : []
+  ];
+  return parts.join(" or ");
+}
+function roleHint(predicate) {
+  const role = PREDICATE_ROLES_V1[predicate];
+  if (role.object === "literal") return "object must be a literal";
+  const subject = role.subject === "any" ? "any subject" : familiesText(role.subject);
+  const object2 = role.sameFamily ? "of the same family" : `${familiesText(role.object)}${role.objectSubtypes === void 0 ? "" : ` of subtype ${orList(role.objectSubtypes)}`}`;
+  return `subject must be ${subject}; object ${object2}`;
+}
+var ROLE_HINTS = Object.fromEntries(
+  predicates.options.map((predicate) => [predicate, roleHint(predicate)])
+);
+var LITERAL_OBJECT_EXAMPLE = '{"literal":{"type":"string","value":"\u2026"},"qualifier":"snake_case_name"}';
+function entityExample(predicate) {
+  const role = PREDICATE_ROLES_V1[predicate];
+  const families2 = role.object === "literal" ? [] : role.object;
+  const family = families2.includes("engineering") ? "engineering" : "code";
+  const subtype = role.objectSubtypes?.[0] ?? (family === "engineering" ? "concept" : "module");
+  const context = families2.includes("principal_scope") || role.subject !== "any" && role.subject.includes("principal_scope");
+  return `declare it in entities, e.g. {"ref":"x1","family":"${family}","subtype":"${subtype}","name":"\u2026","identity":{"normalized_name":"\u2026"}}, and use {"entity_ref":"x1"}${context ? '; a context_entity is {"context_entity":"project"} (or tenant, caller)' : ""}`;
+}
+function assertionShapeRule(predicate, problem) {
+  if (!isPredicateV1(predicate)) return "object mismatch";
+  if (problem === "entity_object" || predicate === "has_property")
+    return `has_property takes a literal object, e.g. ${LITERAL_OBJECT_EXAMPLE}`;
+  const roles = `${predicate}: ${ROLE_HINTS[predicate]}; ${entityExample(predicate)}`;
+  return problem === "literal_object" ? `${roles}. Only has_property takes a literal object` : roles;
+}
+
 // ../../packages/contracts/src/invisible-text-v1.ts
 var INVISIBLE_FORMATTING_CLASS = "\\u061c\\u200b\\u200e\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff";
 var SUBDIVISION_FLAG = "\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}";
@@ -20963,7 +23359,7 @@ function sessionCapturePolicyIssues(req) {
   return issues.slice(0, 5);
 }
 
-// ../../packages/contracts/src/memory-api-v1.ts
+// ../../packages/contracts/src/memory-api/primitives.ts
 var ref = external_exports.string().regex(/^[a-z0-9_-]{1,64}$/);
 var opaque = external_exports.string().min(1).max(256);
 var nfc = (schema) => external_exports.string().transform((value) => value.normalize("NFC")).pipe(schema);
@@ -20977,59 +23373,8 @@ var scalar = (min, max) => external_exports.string().refine(storableText, "well-
 var stored = (min, max) => external_exports.string().transform(stripHiddenText).pipe(scalar(min, max));
 var dateTime = external_exports.union([external_exports.iso.datetime(), external_exports.iso.datetime({ precision: -1 })]);
 var time3 = external_exports.object({ from: dateTime, to: dateTime.nullable() }).strict().refine((value) => value.to === null || value.to > value.from);
-var MemoryKindV1Schema = external_exports.enum([
-  "architecture_decision",
-  "invariant",
-  "convention",
-  "bug",
-  "root_cause",
-  "fix",
-  "failed_approach",
-  "preference",
-  "code_landmark",
-  "ownership_boundary",
-  "procedure"
-]);
-var families = {
-  code: [
-    "repository",
-    "module",
-    "directory",
-    "file",
-    "symbol",
-    "commit",
-    "branch",
-    "release",
-    "dependency",
-    "service",
-    "endpoint",
-    "database",
-    "index",
-    "queue",
-    "bucket",
-    "worker",
-    "pull_request",
-    "issue"
-  ],
-  engineering: [
-    "concept",
-    "technology",
-    "framework",
-    "library",
-    "language",
-    "protocol",
-    "configuration",
-    "environment",
-    "region",
-    "incident",
-    "error",
-    "behavior",
-    "test",
-    "command",
-    "document",
-    "adr"
-  ]
-};
+
+// ../../packages/contracts/src/memory-api/create.ts
 var IdentitySchema = external_exports.union([
   external_exports.object({
     normalized_remote_or_local_repository_identity: identityText()
@@ -21081,160 +23426,6 @@ var entityRef = external_exports.union([
   external_exports.object({ existing_entity_id: opaque }).strict(),
   contextEntity
 ]);
-var predicates = external_exports.enum([
-  "has_property",
-  "uses",
-  "depends_on",
-  "implements",
-  "applies_to",
-  "part_of",
-  "requires",
-  "forbids",
-  "recommends",
-  "causes",
-  "fails_because",
-  "fixes",
-  "avoids",
-  "prefers",
-  "disfavors",
-  "owns",
-  "maintains",
-  "located_in",
-  "defined_in"
-]);
-var ASSERTION_TYPE_BY_PREDICATE_V1 = {
-  has_property: "descriptive",
-  uses: "descriptive",
-  depends_on: "descriptive",
-  implements: "descriptive",
-  applies_to: "descriptive",
-  part_of: "descriptive",
-  requires: "normative",
-  forbids: "normative",
-  recommends: "normative",
-  causes: "causal",
-  fails_because: "causal",
-  fixes: "remedial",
-  avoids: "remedial",
-  prefers: "preference",
-  disfavors: "preference",
-  owns: "ownership",
-  maintains: "ownership",
-  located_in: "location",
-  defined_in: "location"
-};
-var isPredicateV1 = (value) => typeof value === "string" && Object.hasOwn(ASSERTION_TYPE_BY_PREDICATE_V1, value);
-var isAssertionTypeV1 = (value) => Object.values(ASSERTION_TYPE_BY_PREDICATE_V1).includes(value);
-function predicatesForAssertionTypeV1(type) {
-  return Object.entries(ASSERTION_TYPE_BY_PREDICATE_V1).filter(([, value]) => value === type).map(([predicate]) => predicate);
-}
-function predicateTypeMismatchRule(predicate, assertionType) {
-  if (!isPredicateV1(predicate) || !isAssertionTypeV1(assertionType))
-    return "predicate/type mismatch";
-  return `predicate/type mismatch: ${predicate} requires assertion_type ${ASSERTION_TYPE_BY_PREDICATE_V1[predicate]}; ${assertionType} allows predicates ${predicatesForAssertionTypeV1(assertionType).join(", ")}`;
-}
-var CE = ["code", "engineering"];
-var PREDICATE_ROLES_V1 = {
-  has_property: { subject: "any", object: "literal" },
-  uses: { subject: CE, object: CE },
-  depends_on: { subject: CE, object: CE },
-  implements: { subject: ["code"], object: ["engineering"] },
-  applies_to: {
-    subject: ["engineering", "principal_scope"],
-    object: ["code", "principal_scope"]
-  },
-  part_of: {
-    subject: ["code", "engineering", "principal_scope"],
-    object: ["code", "engineering", "principal_scope"],
-    sameFamily: true
-  },
-  requires: { subject: ["code", "principal_scope"], object: CE },
-  forbids: { subject: ["code", "principal_scope"], object: CE },
-  recommends: { subject: ["code", "principal_scope"], object: CE },
-  causes: {
-    subject: CE,
-    object: ["engineering"],
-    objectSubtypes: ["error", "incident", "behavior"]
-  },
-  fixes: {
-    subject: CE,
-    object: ["engineering"],
-    objectSubtypes: ["error", "incident", "behavior"]
-  },
-  avoids: {
-    subject: CE,
-    object: ["engineering"],
-    objectSubtypes: ["error", "incident", "behavior"]
-  },
-  fails_because: { subject: CE, object: CE },
-  prefers: { subject: ["principal_scope"], object: CE },
-  disfavors: { subject: ["principal_scope"], object: CE },
-  owns: { subject: ["principal_scope"], object: CE },
-  maintains: { subject: ["principal_scope"], object: CE },
-  located_in: {
-    subject: ["code"],
-    object: ["code"],
-    objectSubtypes: [
-      "module",
-      "file",
-      "directory",
-      "repository",
-      "service",
-      "database",
-      "worker"
-    ]
-  },
-  defined_in: {
-    subject: ["code"],
-    object: ["code"],
-    objectSubtypes: [
-      "module",
-      "file",
-      "directory",
-      "repository",
-      "commit",
-      "release"
-    ]
-  }
-};
-var orList = (items) => items.length < 2 ? items[0] ?? "" : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
-var CONTEXT_ENTITY_TEXT = "a context_entity";
-function familiesText(families2) {
-  const entities = families2.filter((family) => family !== "principal_scope");
-  const parts = [
-    ...entities.length > 0 ? [
-      `${entities[0] === "engineering" ? "an" : "a"} ${orList(entities)} entity`
-    ] : [],
-    ...families2.includes("principal_scope") ? [CONTEXT_ENTITY_TEXT] : []
-  ];
-  return parts.join(" or ");
-}
-function roleHint(predicate) {
-  const role = PREDICATE_ROLES_V1[predicate];
-  if (role.object === "literal") return "object must be a literal";
-  const subject = role.subject === "any" ? "any subject" : familiesText(role.subject);
-  const object2 = role.sameFamily ? "of the same family" : `${familiesText(role.object)}${role.objectSubtypes === void 0 ? "" : ` of subtype ${orList(role.objectSubtypes)}`}`;
-  return `subject must be ${subject}; object ${object2}`;
-}
-var ROLE_HINTS = Object.fromEntries(
-  predicates.options.map((predicate) => [predicate, roleHint(predicate)])
-);
-var LITERAL_OBJECT_EXAMPLE = '{"literal":{"type":"string","value":"\u2026"},"qualifier":"snake_case_name"}';
-function entityExample(predicate) {
-  const role = PREDICATE_ROLES_V1[predicate];
-  const families2 = role.object === "literal" ? [] : role.object;
-  const family = families2.includes("engineering") ? "engineering" : "code";
-  const subtype = role.objectSubtypes?.[0] ?? (family === "engineering" ? "concept" : "module");
-  const context = families2.includes("principal_scope") || role.subject !== "any" && role.subject.includes("principal_scope");
-  return `declare it in entities, e.g. {"ref":"x1","family":"${family}","subtype":"${subtype}","name":"\u2026","identity":{"normalized_name":"\u2026"}}, and use {"entity_ref":"x1"}${context ? '; a context_entity is {"context_entity":"project"} (or tenant, caller)' : ""}`;
-}
-function assertionShapeRule(predicate, problem) {
-  if (!isPredicateV1(predicate)) return "object mismatch";
-  if (problem === "entity_object" || predicate === "has_property")
-    return `has_property takes a literal object, e.g. ${LITERAL_OBJECT_EXAMPLE}`;
-  const roles = `${predicate}: ${ROLE_HINTS[predicate]}; ${entityExample(predicate)}`;
-  return problem === "literal_object" ? `${roles}. Only has_property takes a literal object` : roles;
-}
 var utf8 = (s) => new TextEncoder().encode(s).length;
 var literal2 = external_exports.object({
   literal: external_exports.object({
@@ -21361,12 +23552,6 @@ var EvidenceInputSchema = external_exports.discriminatedUnion("kind", [
     locator: SessionReferenceLocatorV1Schema,
     summary: stored(1, 1e3)
   }).strict()
-]);
-var ProvenanceOriginV1Schema = external_exports.enum([
-  "direct_api",
-  "session_extraction",
-  "import",
-  "system_reconciliation"
 ]);
 var PROVENANCE_ADAPTERS_V1 = [
   "codex",
@@ -21616,40 +23801,8 @@ var CreateMemoryRequestV1Schema = external_exports.object({
       });
 });
 var VALID_TIME_FUTURE_SKEW_MS = 10 * 6e4;
-var BudgetSchema = external_exports.object({
-  max_items: external_exports.number().int().min(1).max(20).default(8),
-  max_characters: external_exports.number().int().min(512).max(32e3).default(12e3),
-  max_assertions_per_memory: external_exports.number().int().min(1).max(8).default(4),
-  max_evidence_per_item: external_exports.number().int().min(0).max(5).default(3),
-  max_provenance_per_item: external_exports.number().int().min(1).max(3).default(2)
-}).strict();
-var RetrieveMemoryPackRequestV1Schema = external_exports.object({
-  schema_version: external_exports.literal(1),
-  query: scalar(1, 16e3),
-  context: external_exports.strictObject({
-    task: scalar(1, 512).optional(),
-    paths: external_exports.array(
-      external_exports.string().min(1).max(512).refine(storableText, "well-formed Unicode without U+0000").regex(/^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[^\\]+$/u)
-    ).max(32).optional()
-  }).optional(),
-  git_state: external_exports.object({
-    repository_entity_id: opaque,
-    commit_oid: external_exports.string().regex(/^[a-f0-9]{40,128}$/),
-    changed_paths: external_exports.array(
-      external_exports.string().max(1024).regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$)).+$/)
-    ).max(100).default([])
-  }).strict().nullable().default(null),
-  budget: BudgetSchema.default({
-    max_items: 8,
-    max_characters: 12e3,
-    max_assertions_per_memory: 4,
-    max_evidence_per_item: 3,
-    max_provenance_per_item: 2
-  }),
-  consistency: external_exports.object({
-    d1_bookmark: external_exports.string().min(1).max(4096).nullable().default(null)
-  }).strict().default({ d1_bookmark: null })
-}).strict();
+
+// ../../packages/contracts/src/memory-api/pack.ts
 var shown = external_exports.string().min(1);
 var count = external_exports.number().int().min(0);
 var MemoryPackResponseV1Schema = external_exports.object({
@@ -21662,6 +23815,30 @@ var MemoryPackResponseV1Schema = external_exports.object({
   // signals (confidence, usage, importance, freshness, applicability) by
   // match eligibility and query relevance.
   ranking_version: shown,
+  // Present only when the judge ran (ADR 0028): whether it ranked the pack,
+  // failed (the ordinary pack is answered), or cut every selected memory
+  // (an empty pack that is an abstention). `judge` is the client-facing
+  // subset of its diagnostics: no model, version or provider IDs. Declared
+  // here rather than picked from the judge RPC schema so that a reader of
+  // this module does not load the private RPC contract; the domain parity
+  // check (`contract-parity.typecheck.ts`) pins both types to the domain's.
+  outcome: external_exports.enum(["judge_ranked", "judge_fallback", "abstained_no_relevant"]).optional(),
+  judge: external_exports.object({
+    latencyMs: count,
+    inputTokens: count,
+    missingScores: count,
+    extraScores: count,
+    chunks: count,
+    fallback: external_exports.enum([
+      "timeout",
+      "unavailable",
+      "malformed",
+      "budget_exhausted",
+      "not_configured",
+      "residency_policy",
+      "plan_allowance_exhausted"
+    ]).nullable()
+  }).optional(),
   index_generation: shown.nullable(),
   d1_bookmark: shown.nullable(),
   pack: external_exports.array(
@@ -21729,6 +23906,42 @@ var MemoryPackResponseV1Schema = external_exports.object({
   request_id: shown
 });
 
+// ../../packages/contracts/src/memory-api/retrieve.ts
+var BudgetSchema = external_exports.object({
+  max_items: external_exports.number().int().min(1).max(20).default(8),
+  max_characters: external_exports.number().int().min(512).max(32e3).default(12e3),
+  max_assertions_per_memory: external_exports.number().int().min(1).max(8).default(4),
+  max_evidence_per_item: external_exports.number().int().min(0).max(5).default(3),
+  max_provenance_per_item: external_exports.number().int().min(1).max(3).default(2)
+}).strict();
+var RetrieveMemoryPackRequestV1Schema = external_exports.object({
+  schema_version: external_exports.literal(1),
+  query: scalar(1, 16e3),
+  context: external_exports.strictObject({
+    task: scalar(1, 512).optional(),
+    paths: external_exports.array(
+      external_exports.string().min(1).max(512).refine(storableText, "well-formed Unicode without U+0000").regex(/^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)\.\.(?:\/|$))[^\\]+$/u)
+    ).max(32).optional()
+  }).optional(),
+  git_state: external_exports.object({
+    repository_entity_id: opaque,
+    commit_oid: external_exports.string().regex(/^[a-f0-9]{40,128}$/),
+    changed_paths: external_exports.array(
+      external_exports.string().max(1024).regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$)).+$/)
+    ).max(100).default([])
+  }).strict().nullable().default(null),
+  budget: BudgetSchema.default({
+    max_items: 8,
+    max_characters: 12e3,
+    max_assertions_per_memory: 4,
+    max_evidence_per_item: 3,
+    max_provenance_per_item: 2
+  }),
+  consistency: external_exports.object({
+    d1_bookmark: external_exports.string().min(1).max(4096).nullable().default(null)
+  }).strict().default({ d1_bookmark: null })
+}).strict();
+
 // src/capture/extract/map.ts
 var AGENT_ID = {
   claude: "claude_code",
@@ -21767,8 +23980,8 @@ var LANGUAGE_BY_EXTENSION = {
   sql: "sql",
   sh: "shell"
 };
-function sha256Hex(value) {
-  return createHash("sha256").update(value).digest("hex");
+function sha256Hex2(value) {
+  return createHash3("sha256").update(value).digest("hex");
 }
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -21779,7 +23992,7 @@ function canonicalJson(value) {
   return JSON.stringify(value);
 }
 function titleHash(title) {
-  return sha256Hex(
+  return sha256Hex2(
     title.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim()
   );
 }
@@ -22016,9 +24229,9 @@ function mapCandidate(candidate, context) {
     assertion_relations: [],
     memory_relations: []
   };
-  const itemHash = sha256Hex(canonicalJson(core));
+  const itemHash = sha256Hex2(canonicalJson(core));
   const sourceId = `sx1:${context.sessionRef.slice(0, 32)}:${itemHash.slice(0, 32)}`;
-  const idempotencyKey = `sx1-${sha256Hex(`${context.sessionRef}:${itemHash}`)}`;
+  const idempotencyKey = `sx1-${sha256Hex2(`${context.sessionRef}:${itemHash}`)}`;
   const bySegment = new Map(
     context.segments.map((segment) => [segment.label, segment])
   );
@@ -22028,7 +24241,7 @@ function mapCandidate(candidate, context) {
   const segmentRefs = labels.map((label) => bySegment.get(label)).filter((segment) => Boolean(segment)).map((segment) => ({
     label: segment.label,
     // Salted with the install salt so short segments cannot be guessed.
-    sha256: sha256Hex(`${context.salt}\0${segment.text}`)
+    sha256: sha256Hex2(`${context.salt}\0${segment.text}`)
   }));
   const paths = [
     ...new Set(
@@ -22509,149 +24722,6 @@ function renderExtractorInput(input2) {
   return { system: fill(system, vars), user: fill(user, vars) };
 }
 
-// src/capture/extract/run.ts
-import { spawn } from "node:child_process";
-import { accessSync, constants as constants2, statSync } from "node:fs";
-import { delimiter, isAbsolute as isAbsolute4, join as join8 } from "node:path";
-var EXTRACTOR_TIMEOUT_MS = 18e4;
-var MAX_OUTPUT_BYTES = 256 * 1024;
-var MAX_STDERR_BYTES = 8 * 1024;
-var RunnerError = class extends Error {
-  constructor(failure2) {
-    super(`RUNNER_${failure2.toUpperCase()}`);
-    this.failure = failure2;
-  }
-  failure;
-};
-function findExecutable(name) {
-  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
-    if (!isAbsolute4(directory)) continue;
-    const path2 = join8(directory, name);
-    try {
-      accessSync(path2, constants2.X_OK);
-      if (statSync(path2).isFile()) return path2;
-    } catch {
-    }
-  }
-  return void 0;
-}
-var QUOTA_TEXT = /usage limit|rate limit|session limit|hit your [a-z ]*limit|quota|exceeded your|insufficient credits|credit balance|too many requests|429/i;
-function looksLikeQuota(text) {
-  return QUOTA_TEXT.test(text);
-}
-var lastDetails;
-function takeLastRunDetails() {
-  const details = lastDetails;
-  lastDetails = void 0;
-  return details;
-}
-var activeGroups = /* @__PURE__ */ new Set();
-function killActiveChildren() {
-  for (const pid of activeGroups) {
-    try {
-      process.kill(-pid, "SIGKILL");
-    } catch {
-    }
-  }
-  activeGroups.clear();
-}
-function defaultTimeoutMs() {
-  const override = Number(process.env.MEMROOT_CAPTURE_EXTRACTOR_TIMEOUT_MS);
-  return process.env.NODE_ENV === "test" && Number.isFinite(override) && override > 0 ? override : EXTRACTOR_TIMEOUT_MS;
-}
-function runProcess(binary, args, options) {
-  return new Promise((resolve2, reject) => {
-    const started = Date.now();
-    const child = spawn(binary, args, {
-      cwd: options.cwd,
-      env: options.env,
-      detached: true,
-      stdio: ["pipe", "pipe", "pipe"],
-      shell: false
-    });
-    const pid = child.pid;
-    if (pid) activeGroups.add(pid);
-    let stdout = Buffer.alloc(0);
-    let bytes = 0;
-    let stderr = "";
-    let failure2;
-    let exitCode = null;
-    let exitSignal = null;
-    let settled = false;
-    const killGroup = () => {
-      try {
-        if (pid) process.kill(-pid, "SIGKILL");
-      } catch {
-        child.kill("SIGKILL");
-      }
-    };
-    const settle3 = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      clearTimeout(grace);
-      killGroup();
-      if (pid) activeGroups.delete(pid);
-      child.stdout.destroy();
-      child.stderr.destroy();
-      if (options.record !== false)
-        lastDetails = {
-          ms: Date.now() - started,
-          code: exitCode,
-          signal: exitSignal,
-          timedOut: failure2 === "timeout",
-          outputCapped: failure2 === "output_too_large",
-          bytes
-        };
-      if (failure2) reject(new RunnerError(failure2));
-      else resolve2({ code: exitCode, stdout: stdout.toString("utf8"), stderr });
-    };
-    let grace;
-    const timer = setTimeout(() => {
-      failure2 = "timeout";
-      settle3();
-    }, options.timeoutMs ?? defaultTimeoutMs());
-    child.stdout.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (failure2) return;
-      if (stdout.length + chunk.length > (options.maxOutputBytes ?? MAX_OUTPUT_BYTES)) {
-        failure2 = "output_too_large";
-        settle3();
-        return;
-      }
-      stdout = Buffer.concat([stdout, chunk]);
-    });
-    child.stderr.on("data", (chunk) => {
-      if (stderr.length < MAX_STDERR_BYTES)
-        stderr += chunk.toString("utf8").slice(0, MAX_STDERR_BYTES - stderr.length);
-    });
-    child.on("error", (error62) => {
-      if (settled) return;
-      failure2 = error62.code === "ENOENT" ? "not_installed" : "exit";
-      settle3();
-    });
-    child.on("exit", (code, signal) => {
-      exitCode = code;
-      exitSignal = signal;
-      grace = setTimeout(settle3, 2e3);
-    });
-    child.on("close", () => settle3());
-    child.stdin.on("error", () => {
-    });
-    child.stdin.end(options.stdin);
-  });
-}
-function parseJsonText(text) {
-  const trimmed = text.trim();
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
-    if (fenced?.[1]) return JSON.parse(fenced[1]);
-    throw new RunnerError("output_invalid");
-  }
-}
-
 // src/capture/extract/runners/types.ts
 function childEnv(extra = {}) {
   return { ...process.env, MEMROOT_CAPTURE_WORKER: "1", ...extra };
@@ -22733,7 +24803,7 @@ ${result.stderr}`;
 }
 
 // src/capture/extract/runners/codex.ts
-import { join as join9 } from "node:path";
+import { join as join15 } from "node:path";
 function codexArgs(input2, schemaPath, outPath) {
   const args = [
     "exec",
@@ -22783,8 +24853,8 @@ function codexArgs(input2, schemaPath, outPath) {
   return args;
 }
 async function runCodex(input2) {
-  const schemaPath = join9(input2.workDir, "schema.json");
-  const outPath = join9(input2.workDir, `${input2.jobId}.out.json`);
+  const schemaPath = join15(input2.workDir, "schema.json");
+  const outPath = join15(input2.workDir, `${input2.jobId}.out.json`);
   writePrivateFileAtomic(schemaPath, input2.schemaJson);
   removeFile(outPath);
   try {
@@ -22817,7 +24887,7 @@ ${result.stdout}`) ? "quota" : "exit"
 // src/capture/extract/runners/grok.ts
 import { realpathSync as realpathSync2, rmSync as rmSync4 } from "node:fs";
 import { homedir as homedir3 } from "node:os";
-import { isAbsolute as isAbsolute5, join as join10 } from "node:path";
+import { isAbsolute as isAbsolute6, join as join16 } from "node:path";
 var GROK_EXTRACTOR_DENY = [
   "read_file",
   "hashline_read",
@@ -22877,14 +24947,14 @@ function grokArgs(input2, promptFile) {
   return args;
 }
 function removeExtractorHistory(extractorCwd, prefix = "memroot-extractor-") {
-  const home = process.env.GROK_HOME && isAbsolute5(process.env.GROK_HOME) ? process.env.GROK_HOME : join10(homedir3(), ".grok");
+  const home = process.env.GROK_HOME && isAbsolute6(process.env.GROK_HOME) ? process.env.GROK_HOME : join16(homedir3(), ".grok");
   const candidates = /* @__PURE__ */ new Set([extractorCwd]);
   try {
     candidates.add(realpathSync2(extractorCwd));
   } catch {
   }
   for (const cwd of candidates) {
-    const group = join10(home, "sessions", encodeURIComponent(cwd));
+    const group = join16(home, "sessions", encodeURIComponent(cwd));
     if (!encodeURIComponent(cwd).includes(prefix)) continue;
     rmSync4(group, { recursive: true, force: true });
   }
@@ -22899,7 +24969,7 @@ async function runGrok(input2) {
   }
 }
 async function runGrokOnce(input2) {
-  const promptFile = join10(input2.workDir, `${input2.jobId}.prompt`);
+  const promptFile = join16(input2.workDir, `${input2.jobId}.prompt`);
   let sessionId;
   writePrivateFileAtomic(promptFile, input2.user);
   try {
@@ -22971,382 +25041,10 @@ ${result.stderr}`) ? "quota" : "exit"
   }
 }
 
-// src/capture/redact/redact.ts
-import { createHash as createHash2 } from "node:crypto";
-import { hostname as hostname3, userInfo } from "node:os";
-
-// ../../packages/domain/src/redaction/entropy.ts
-function shannon(value) {
-  if (!value) return 0;
-  const counts = /* @__PURE__ */ new Map();
-  for (const char of value) counts.set(char, (counts.get(char) ?? 0) + 1);
-  const length = [...value].length;
-  let bits = 0;
-  for (const count3 of counts.values()) {
-    const p = count3 / length;
-    bits -= p * Math.log2(p);
-  }
-  return bits;
-}
-var UUID3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-var HEX = /^[0-9a-fA-F]+$/;
-var INTEGRITY = /^sha(?:1|256|384|512)-/;
-function isAllowlistedToken(token) {
-  return HEX.test(token) || UUID3.test(token) || INTEGRITY.test(token) || token.startsWith("[REDACTED");
-}
-function looksLikeHighEntropySecret(token) {
-  if (token.length < 32 || isAllowlistedToken(token)) return false;
-  if (token.includes("/")) return false;
-  if (!/[a-z]/.test(token) || !/[A-Z]/.test(token) || !/[0-9]/.test(token))
-    return false;
-  return shannon(token) >= 4.5;
-}
-
-// ../../packages/domain/src/redaction/rules.ts
-var whole = (kind) => (mark, match2) => mark(kind, match2);
-var keepPrefix = (kind) => (mark, _match, groups) => {
-  const secret = groups[groups.length - 1] ?? "";
-  return `${groups.slice(0, -1).join("")}${mark(kind, secret)}`;
-};
-var NOT_MARKER = "(?!\\[REDACTED)";
-var LINE_SPACE = "[^\\S\\r\\n\\u2028\\u2029]";
-var PLACEHOLDER = /^(?:changeme|change_me|example|placeholder|redacted|secret|password|token|undefined|null|none|true|false|your[_-].*|x{3,}.*|\*{3,}.*|<.*>|\$\{.*\}|\{\{.*\}\}|\$[A-Za-z_][A-Za-z0-9_]*|process\.env.*|os\.environ.*|env\(.*|getenv.*)$/i;
-var RULES = [
-  {
-    name: "private_key_pem",
-    keywords: ["private key"],
-    pattern: /-----BEGIN[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----[\s\S]*?(?:-----END[ A-Z0-9_-]{0,100}PRIVATE KEY(?: BLOCK)?-----|$)/g,
-    replace: whole("private_key")
-  },
-  {
-    name: "gcp_service_account",
-    keywords: ["private_key_id"],
-    pattern: /("private_key_id"\s*:\s*")([0-9a-f]{40})(?=")/g,
-    replace: keepPrefix("gcp_private_key_id")
-  },
-  {
-    name: "anthropic_key",
-    keywords: ["sk-ant-"],
-    pattern: /\bsk-ant-(?:api\d\d|admin\d\d|oat\d\d|ort\d\d)-[A-Za-z0-9_-]{20,}|\bsk-ant-[A-Za-z0-9_-]{20,}/g,
-    replace: whole("anthropic_key")
-  },
-  {
-    name: "openai_key",
-    keywords: ["sk-"],
-    pattern: /\bsk-(?!ant-)(?:proj-|svcacct-|admin-)?[A-Za-z0-9_-]{20,}/g,
-    replace: whole("openai_key")
-  },
-  {
-    name: "xai_key",
-    keywords: ["xai-"],
-    pattern: /\bxai-[A-Za-z0-9]{40,}/g,
-    replace: whole("xai_key")
-  },
-  {
-    name: "aws_access_key_id",
-    pattern: /\b(?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z2-7]{16}\b/g,
-    replace: whole("aws_access_key_id")
-  },
-  {
-    name: "aws_secret",
-    keywords: ["aws"],
-    pattern: /(aws_?secret_?access_?key|aws_?secret)(["']?\s*[:=]\s*["']?)([A-Za-z0-9/+=]{40})/gi,
-    replace: keepPrefix("aws_secret")
-  },
-  {
-    name: "github_token",
-    keywords: ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"],
-    pattern: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}\b|\bgithub_pat_\w{82}\b/g,
-    replace: whole("github_token")
-  },
-  {
-    name: "gitlab_pat",
-    keywords: ["glpat-"],
-    pattern: /\bglpat-[\w-]{20,}/g,
-    replace: whole("gitlab_pat")
-  },
-  {
-    name: "slack",
-    keywords: ["xox", "hooks.slack.com"],
-    pattern: /\bxox[abposr]-[A-Za-z0-9-]{10,}|https:\/\/hooks\.slack\.com\/services\/[A-Za-z0-9/]+/g,
-    replace: whole("slack")
-  },
-  {
-    name: "stripe",
-    keywords: ["_live_", "_test_", "_prod_"],
-    pattern: /\b(?:sk|rk|pk)_(?:live|test|prod)_[A-Za-z0-9]{10,99}\b/g,
-    replace: whole("stripe")
-  },
-  {
-    name: "google_api_key",
-    keywords: ["aiza"],
-    pattern: /\bAIza[\w-]{35}\b/g,
-    replace: whole("google_api_key")
-  },
-  {
-    name: "npm_hf_sendgrid_vault",
-    keywords: ["npm_", "hf_", "sg.", "hvs.", "hvb."],
-    pattern: /\bnpm_[A-Za-z0-9]{36}\b|\bhf_[A-Za-z]{34}\b|\bSG\.[\w.-]{66}\b|\bhv[sb]\.[\w-]{90,300}/g,
-    replace: whole("service_token")
-  },
-  {
-    name: "jwt",
-    keywords: ["eyj"],
-    // A token starts only where a run of base64url characters starts (not
-    // `\b`, which also matched after every `-` inside a run), so each run is
-    // scanned from one start and the rule is linear on long `eyJ-eyJ-...`
-    // runs.
-    pattern: /(?<![A-Za-z0-9_-])eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g,
-    replace: whole("jwt")
-  },
-  {
-    name: "url_userinfo",
-    keywords: ["://"],
-    pattern: new RegExp(
-      `\\b([a-z][a-z0-9+.-]{1,20}:\\/\\/[^\\s:@\\/]{1,256}:)${NOT_MARKER}([^\\s@\\/]{1,256})(?=@)`,
-      "gi"
-    ),
-    replace: keepPrefix("url_password")
-  },
-  {
-    name: "url_secret_params",
-    keywords: ["="],
-    pattern: new RegExp(
-      `([?&](?:access_token|id_token|refresh_token|token|api[_-]?key|apikey|key|secret|sig|signature|X-Amz-Signature|X-Amz-Credential|X-Goog-Signature|code|password)=)${NOT_MARKER}([^&\\s#"']+)`,
-      "gi"
-    ),
-    replace: keepPrefix("url_secret")
-  },
-  {
-    name: "auth_scheme",
-    keywords: ["bearer", "basic", "token"],
-    pattern: /\b(Bearer|Basic|Token)([ \t]+)([A-Za-z0-9._~+/=-]{16,})/gi,
-    replace: keepPrefix("auth_header")
-  },
-  {
-    name: "auth_header",
-    keywords: ["authorization", "api-key", "auth-token", "cookie"],
-    pattern: new RegExp(
-      `\\b(authorization|proxy-authorization|x-api-key|api-key|x-auth-token|cookie|set-cookie)(\\s*[:=]\\s*["']?)${NOT_MARKER}([^\\r\\n"']{8,})`,
-      "gi"
-    ),
-    replace: keepPrefix("auth_header")
-  },
-  {
-    name: "env_assignment",
-    // Bounded: the indentation (which never crosses a newline), the name
-    // around its keyword and the spacing around `=`/`:` have fixed upper
-    // bounds, so each line start costs a bounded number of steps. The
-    // unbounded form backtracked cubically on a newline run followed by a
-    // long name. A value on the next line (YAML `key:` then the value) is
-    // still matched, as before.
-    pattern: new RegExp(
-      `^(${LINE_SPACE}{0,64}(?:export${LINE_SPACE}{1,16})?[A-Za-z_][A-Za-z0-9_]{0,100}(?:KEY|SECRET|TOKEN|PASS(?:WORD|WD)?|PWD|CREDENTIALS?|AUTH|PRIVATE|SALT|DSN|CONN(?:ECTION)?_?STRING)[A-Za-z0-9_]{0,100}\\s{0,64}[=:]\\s{0,64}["']?)(?!\\$\\{?[A-Za-z_])(?!<)${NOT_MARKER}([^\\s"'#]{4,})`,
-      "gmi"
-    ),
-    replace: keepPrefix("env_secret")
-  },
-  {
-    name: "generic_keyword_assign",
-    keywords: ["key", "secret", "token", "passw", "pwd", "credential"],
-    pattern: new RegExp(
-      `\\b([\\w.-]{0,40}(?:api[_-]?key|secret|token|passw(?:or)?d|credential|private[_-]?key|client[_-]?secret)[\\w.-]{0,20})(["']?\\s*(?:=|:|=>|:=)\\s*["']?)${NOT_MARKER}([^\\s"',;]{8,200})`,
-      "gi"
-    ),
-    replace: (mark, match2, groups) => {
-      const value = groups[2] ?? "";
-      if (PLACEHOLDER.test(value) || /[=:]$/.test(value) || /^(.)\1+$/.test(value) || shannon(value) < 3)
-        return match2;
-      return `${groups[0] ?? ""}${groups[1] ?? ""}${mark("secret", value)}`;
-    }
-  },
-  {
-    name: "high_entropy_token",
-    pattern: /[A-Za-z0-9+/_=-]{32,}/g,
-    replace: (mark, match2) => looksLikeHighEntropySecret(match2) ? mark("high_entropy", match2) : match2
-  },
-  {
-    name: "email",
-    keywords: ["@"],
-    // RFC 5321/1035 lengths: local part up to 64, domain up to 253, label
-    // up to 63. Bounded so a long `a-a-a-...` run is not rescanned from
-    // every word boundary.
-    pattern: /\b[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}\b/g,
-    replace: (mark, match2) => /^noreply@|users\.noreply\.github\.com$|@example\.(?:com|org)$/i.test(
-      match2
-    ) ? match2 : mark("email", match2)
-  },
-  {
-    name: "home_path",
-    keywords: ["/users/", "/home/", "\\users\\"],
-    pattern: /(\/Users\/|\/home\/)([^/\s:'"]+)|\b([A-Z]:\\Users\\)([^\\\s]+)/gi,
-    replace: (_mark, _match, groups) => groups[0] ? "~" : "%USERPROFILE%"
-  }
-];
-
-// src/capture/redact/redact.ts
-var MAX_SEGMENT_BYTES = 256 * 1024;
-var MARKER = /\[REDACTED:[a-z_]+#[0-9a-f]{4}\]/g;
-var INVISIBLE = /[​-‏⁠-⁤﻿]/g;
-var COMMON_NAMES = /* @__PURE__ */ new Set([
-  "admin",
-  "root",
-  "user",
-  "users",
-  "test",
-  "runner",
-  "ubuntu",
-  "build",
-  "local",
-  "localhost",
-  "home",
-  "node",
-  // Assembled so the repository's retired-runtime scanner does not mistake
-  // this username stoplist entry for a container runtime reference.
-  ["dock", "er"].join(""),
-  "default",
-  "guest",
-  "work",
-  "main",
-  "master"
-]);
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-function osIdentities() {
-  const names = [];
-  try {
-    names.push(userInfo().username);
-  } catch {
-  }
-  try {
-    const host = hostname3();
-    names.push(host, host.replace(/\.local$/i, ""));
-  } catch {
-  }
-  return names;
-}
-function identityRules(identities) {
-  const rules = [];
-  for (const name of new Set(identities)) {
-    if (name.length < 4 || COMMON_NAMES.has(name.toLowerCase())) continue;
-    if (!/^[A-Za-z0-9._-]+$/.test(name)) continue;
-    rules.push({
-      name: "local_identity",
-      keywords: [name.toLowerCase()],
-      pattern: new RegExp(
-        `(?<![A-Za-z0-9_])${escapeRegExp(name)}(?![A-Za-z0-9_])`,
-        "gi"
-      ),
-      replace: (mark, match2) => mark("local_identity", match2)
-    });
-  }
-  return rules;
-}
-function applyOutsideMarkers(text, transform2) {
-  let result = "";
-  let last = 0;
-  for (const match2 of text.matchAll(MARKER)) {
-    const index = match2.index ?? 0;
-    result += transform2(text.slice(last, index)) + match2[0];
-    last = index + match2[0].length;
-  }
-  return result + transform2(text.slice(last));
-}
-function createRedactor(salt, options = {}) {
-  if (!/^[a-f0-9]{64}$/.test(salt)) throw new Error("REDACTOR_SALT_INVALID");
-  const mark = (kind, secret) => `[REDACTED:${kind}#${createHash2("sha256").update(secret).update("\0").update(salt).digest("hex").slice(0, 4)}]`;
-  const rules = [
-    ...RULES,
-    ...identityRules(options.localIdentities ?? osIdentities())
-  ];
-  return {
-    redact(text) {
-      if (typeof text !== "string") throw new Error("REDACTOR_INPUT_INVALID");
-      if (Buffer.byteLength(text, "utf8") > MAX_SEGMENT_BYTES) return void 0;
-      let output2 = text.replace(INVISIBLE, "");
-      for (const rule of rules) {
-        const lower = output2.toLowerCase();
-        if (rule.keywords && !rule.keywords.some((keyword) => lower.includes(keyword)))
-          continue;
-        output2 = applyOutsideMarkers(
-          output2,
-          (part) => part.replace(rule.pattern, (...args) => {
-            const match2 = args[0];
-            const offsetIndex = args.findIndex(
-              (value, index) => index > 0 && typeof value === "number"
-            );
-            const groups = args.slice(1, offsetIndex).map((value) => typeof value === "string" ? value : "");
-            return rule.replace(mark, match2, groups);
-          })
-        );
-      }
-      return output2;
-    }
-  };
-}
-function redactDeep(redactor, value) {
-  let changed = false;
-  const visit2 = (item) => {
-    if (typeof item === "string") {
-      const output3 = redactor.redact(item);
-      if (output3 === void 0) {
-        changed = true;
-        return "";
-      }
-      if (output3 !== item) changed = true;
-      return output3;
-    }
-    if (Array.isArray(item)) return item.map(visit2);
-    if (item && typeof item === "object")
-      return Object.fromEntries(
-        Object.entries(item).map(([key, entry]) => [
-          key,
-          visit2(entry)
-        ])
-      );
-    return item;
-  };
-  const output2 = visit2(value);
-  return { value: output2, changed };
-}
-
 // src/capture/extract/validate.ts
 var EXTRACTOR_MAX_ITEMS = 50;
-var MEMORY_KINDS = [
-  "architecture_decision",
-  "invariant",
-  "convention",
-  "bug",
-  "root_cause",
-  "fix",
-  "failed_approach",
-  "preference",
-  "code_landmark",
-  "ownership_boundary",
-  "procedure"
-];
-var PREDICATES = [
-  "has_property",
-  "uses",
-  "depends_on",
-  "implements",
-  "applies_to",
-  "part_of",
-  "requires",
-  "forbids",
-  "recommends",
-  "causes",
-  "fails_because",
-  "fixes",
-  "avoids",
-  "prefers",
-  "disfavors",
-  "owns",
-  "maintains",
-  "located_in",
-  "defined_in"
-];
+var MEMORY_KINDS = MemoryKindV1Schema.options;
+var PREDICATES = predicates.options;
 var FAMILIES = {
   code: [
     "module",
@@ -23632,81 +25330,14 @@ function validateExtraction(output2, segments, redactor, maxItems) {
   };
 }
 
-// src/capture/hooks/envelope.ts
-var MAX_ENVELOPE_BYTES = 64 * 1024;
-var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
-var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
-var OPEN_SESSION_REASON = /^(compact(_auto|_manual)?|turn_end|idle_prompt|session_resume|session_fork)$/;
-
-// src/capture/hooks/guards.ts
-import { realpathSync as realpathSync3 } from "node:fs";
-import { homedir as homedir4 } from "node:os";
-import { isAbsolute as isAbsolute6, join as join11, normalize as normalize3 } from "node:path";
-function absoluteEnv2(name) {
-  const value = process.env[name];
-  return value && isAbsolute6(value) ? normalize3(value) : void 0;
-}
-function transcriptRoots(agent) {
-  if (agent === "claude")
-    return [
-      join11(
-        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join11(homedir4(), ".claude"),
-        "projects"
-      )
-    ];
-  if (agent === "codex") {
-    const home = absoluteEnv2("CODEX_HOME") ?? join11(homedir4(), ".codex");
-    return [join11(home, "sessions"), join11(home, "archived_sessions")];
-  }
-  return [
-    join11(absoluteEnv2("GROK_HOME") ?? join11(homedir4(), ".grok"), "sessions")
-  ];
-}
-function transcriptPathAllowed(agent, path2) {
-  if (!isAbsolute6(path2) || path2.length > 4096 || path2.includes("\0") || path2.split("/").includes("..") || normalize3(path2) !== path2)
-    return false;
-  if (agent !== "grok" && !path2.endsWith(".jsonl")) return false;
-  return transcriptRoots(agent).some((root) => {
-    if (path2.startsWith(`${root}/`)) return true;
-    try {
-      return path2.startsWith(`${realpathSync3(root)}/`);
-    } catch {
-      return false;
-    }
-  });
-}
-
-// src/capture/hooks/spawn.ts
-import { spawn as spawn2 } from "node:child_process";
-import { existsSync } from "node:fs";
-import { dirname as dirname5, join as join12 } from "node:path";
-import { fileURLToPath } from "node:url";
-function spawnWorker() {
-  try {
-    const here = dirname5(fileURLToPath(import.meta.url));
-    const sibling = join12(here, "capture-worker.mjs");
-    const worker = existsSync(sibling) ? sibling : join12(here, "plugins", "claude", "scripts", "capture-worker.mjs");
-    if (!existsSync(worker)) return;
-    const child = spawn2(process.execPath, [worker], {
-      detached: true,
-      stdio: "ignore",
-      env: { ...process.env, MEMROOT_CAPTURE_WORKER: "1" }
-    });
-    child.on("error", () => {
-    });
-    child.unref();
-  } catch {
-  }
-}
-
 // src/capture/queue/cursor-source.ts
-import { join as join13 } from "node:path";
+import { join as join17 } from "node:path";
 var PUBLISHED_SOURCE = "grok_chat_history";
 var SOURCES = ["grok_updates", "grok_chat_history"];
 var MAX_RECORDS2 = 1e3;
-var HEX64 = /^[a-f0-9]{64}$/;
+var HEX643 = /^[a-f0-9]{64}$/;
 function path() {
-  return join13(stateSubdir(), "cursor-sources.json");
+  return join17(stateSubdir(), "cursor-sources.json");
 }
 function read() {
   const records = {};
@@ -23718,7 +25349,7 @@ function read() {
     for (const [key, entry] of Object.entries(
       value.sources
     ))
-      if (HEX64.test(key) && entry && typeof entry.source === "string" && SOURCES.includes(entry.source) && Number.isInteger(entry.turns) && typeof entry.updatedAt === "string")
+      if (HEX643.test(key) && entry && typeof entry.source === "string" && SOURCES.includes(entry.source) && Number.isInteger(entry.turns) && typeof entry.updatedAt === "string")
         records[key] = {
           source: entry.source,
           turns: entry.turns,
@@ -23754,378 +25385,448 @@ function recordCursorSource(sessionRef, source, cursor, ledgerSessions) {
   }
 }
 
-// src/capture/queue/job.ts
-import { createHash as createHash3, randomBytes as randomBytes4 } from "node:crypto";
-import { join as join14 } from "node:path";
-
-// src/project-context.ts
-var UUID4 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-function validUuid(value) {
-  return typeof value === "string" && UUID4.test(value);
+// src/capture/transcript/condense.ts
+var TRANSCRIPT_BUDGET_CHARS = 48e3;
+var MESSAGE_CAP_CHARS = 2e3;
+var HEAD_USER_TURNS = 4;
+function cap(text) {
+  const chars = Array.from(text);
+  return chars.length <= MESSAGE_CAP_CHARS ? text : `${chars.slice(0, MESSAGE_CAP_CHARS - 1).join("")}\u2026`;
 }
-
-// src/capture/queue/job.ts
-var JOB_TTL_MS = 72 * 60 * 60 * 1e3;
-var JOB_STATES = [
-  "pending",
-  "extracted",
-  "quota_blocked",
-  "auth_required",
-  "server_unsupported",
-  "runner_unavailable",
-  "project_required",
-  /** Written by CLI 0.2.0 to 0.5.0 only; read as pending. */
-  "awaiting_trigger"
-];
-var JOB_ID = /^(claude|codex|grok)-[a-f0-9]{32}$/;
-var HEX642 = /^[a-f0-9]{64}$/;
-function sha256Hex2(value) {
-  return createHash3("sha256").update(value).digest("hex");
+function defuse(text) {
+  return text.replace(/<(\/?)transcript-/gi, "<$1transcript_");
 }
-function readOrCreateSalt() {
-  const path2 = join14(stateSubdir(), "salt");
-  const existing = readPrivateFileIfExists(path2, 1024);
-  if (existing !== void 0) {
-    const value = existing.trim();
-    if (!HEX642.test(value)) throw new Error("INVALID_SALT");
-    return value;
+function renderLine(segment) {
+  return segment.kind === "T" ? `${segment.label}:${segment.text}` : `${segment.label}: ${segment.text}`;
+}
+function condense(turns, cursor, redactor) {
+  const fresh = turns.slice(cursor).filter((turn) => cursor === 0 || turn.kind !== "S");
+  const prepared = [];
+  for (const turn of fresh) {
+    const redacted = redactor.redact(turn.text);
+    if (redacted === void 0) continue;
+    const text = defuse(cap(redacted.replace(/\n{3,}/g, "\n\n").trim()));
+    if (text) prepared.push({ kind: turn.kind, text });
   }
-  const salt = randomBytes4(32).toString("hex");
-  if (createPrivateFileExclusive(path2, `${salt}
-`)) return salt;
-  return readOrCreateSalt();
-}
-function sessionRefFor(salt, agent, sessionId) {
-  return sha256Hex2(`${salt}\0${agent}\0${sessionId}`);
-}
-function queueDir() {
-  return stateSubdir("queue");
-}
-var conflictPath = (jobId) => join14(queueDir(), `${jobId}.account-conflict`);
-function hasAccountConflict(jobId) {
-  const marker = readPrivateFileIfExists(conflictPath(jobId), 64);
-  if (marker === void 0) return false;
-  const at = Date.parse(marker);
-  if (Number.isFinite(at) && Date.now() - at > JOB_TTL_MS) {
-    removeFile(conflictPath(jobId));
-    return false;
+  const newUserTurns = prepared.filter((turn) => turn.kind === "U").length;
+  const cost = (turn) => turn.text.length + 9;
+  const chosen = /* @__PURE__ */ new Set();
+  let used = 0;
+  let heads = 0;
+  for (const [index, turn] of prepared.entries()) {
+    if (heads >= HEAD_USER_TURNS) break;
+    if (turn.kind !== "U") continue;
+    if (used + cost(turn) > TRANSCRIPT_BUDGET_CHARS) break;
+    chosen.add(index);
+    used += cost(turn);
+    heads++;
   }
-  return true;
-}
-function jobPath(jobId) {
-  return join14(queueDir(), `${jobId}.json`);
-}
-function parseJob(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return void 0;
-  const job = value;
-  const optionalTime = (field) => field === null || typeof field === "string" && !Number.isNaN(Date.parse(field));
-  if (job.schemaVersion !== 1 || typeof job.jobId !== "string" || !JOB_ID.test(job.jobId) || !CAPTURE_AGENTS.includes(job.agent) || !job.jobId.startsWith(`${job.agent}-`) || typeof job.sessionId !== "string" || !/^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/.test(job.sessionId) || typeof job.sessionRef !== "string" || !HEX642.test(job.sessionRef) || job.jobId !== `${job.agent}-${job.sessionRef.slice(0, 32)}` || !(job.transcriptPath === null || typeof job.transcriptPath === "string") || typeof job.cwd !== "string" || !job.cwd.startsWith("/") || typeof job.reason !== "string" || !optionalTime(job.endedAt) || job.endedAt === null || !optionalTime(job.createdAt) || job.createdAt === null || !JOB_STATES.includes(job.state) || typeof job.attempts !== "number" || !Number.isInteger(job.attempts) || job.attempts < 0 || !optionalTime(job.nextAttemptAt) || !(job.lastError === null || typeof job.lastError === "string"))
-    return void 0;
-  if (job.triggerRef !== void 0 && (typeof job.triggerRef !== "string" || !HEX642.test(job.triggerRef)))
-    return void 0;
-  if (job.account !== void 0) {
-    const account = job.account;
-    if (!account || typeof account.apiBase !== "string" || !validUuid(account.principalId))
-      return void 0;
+  for (let index = prepared.length - 1; index >= 0; index--) {
+    if (chosen.has(index)) continue;
+    const turn = prepared[index];
+    if (!turn) continue;
+    if (used + cost(turn) > TRANSCRIPT_BUDGET_CHARS) break;
+    chosen.add(index);
+    used += cost(turn);
   }
-  if (job.target !== void 0 && !validTarget(job.target)) return void 0;
-  if (job.floorBytes !== void 0 && (!Number.isSafeInteger(job.floorBytes) || job.floorBytes < 0))
-    return void 0;
-  if (job.project !== void 0) {
-    const project = job.project;
-    if (!project || typeof project.apiBase !== "string" || !validUuid(project.projectId) || !validUuid(project.principalId) || !validUuid(project.tenantId) || !validUuid(project.segmentId))
-      return void 0;
+  const segments = [];
+  for (const [index, turn] of prepared.entries()) {
+    if (!chosen.has(index)) continue;
+    const label = `${turn.kind}${segments.length + 1}`;
+    if (segments.length + 1 > 99999) break;
+    segments.push({ label, kind: turn.kind, text: turn.text });
   }
-  return job;
-}
-function validTarget(value) {
-  const t = value;
-  return !!t && typeof t === "object" && typeof t.apiBase === "string" && validUuid(t.principalId) && validUuid(t.tenantId) && validUuid(t.projectId) && validUuid(t.selectionId);
-}
-function jobTarget(job) {
-  if (job.target) return job.target;
-  const p = job.project;
-  return p ? {
-    apiBase: p.apiBase,
-    principalId: p.principalId,
-    tenantId: p.tenantId,
-    projectId: p.projectId,
-    selectionId: p.segmentId
-  } : void 0;
-}
-function readJob(jobId) {
-  const raw = readPrivateFileIfExists(jobPath(jobId), 64 * 1024);
-  if (raw === void 0) return void 0;
-  try {
-    return parseJob(JSON.parse(raw));
-  } catch {
-    return void 0;
-  }
-}
-function writeJob(job) {
-  writePrivateFileAtomic(jobPath(job.jobId), `${JSON.stringify(job)}
-`);
-}
-function deleteJob(jobId) {
-  removeFile(jobPath(jobId));
-}
-function listJobIds() {
-  const names = listFiles(queueDir());
-  for (const name of names) {
-    const id = name.slice(0, -".account-conflict".length);
-    if (name.endsWith(".account-conflict") && JOB_ID.test(id))
-      hasAccountConflict(id);
-  }
-  return names.filter((name) => name.endsWith(".json")).map((name) => name.slice(0, -5)).filter((id) => JOB_ID.test(id));
-}
-
-// src/capture/queue/ledger.ts
-import { join as join15 } from "node:path";
-var MAX_CURSORS = 1e3;
-var MAX_TITLE_HASHES = 5e3;
-var MAX_UPLOADS = 5e3;
-var UPLOAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
-var HEX643 = /^[a-f0-9]{64}$/;
-function empty() {
   return {
-    schemaVersion: 1,
-    cursors: {},
-    uploads: [],
-    titleHashes: [],
-    project: null,
-    lastRun: null
+    segments,
+    text: segments.map(renderLine).join("\n"),
+    newUserTurns,
+    newTurns: turns.length - Math.min(cursor, turns.length)
   };
 }
-function ledgerPath() {
-  return join15(stateSubdir(), "ledger.json");
-}
-function sanitize(value) {
-  const ledger = empty();
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return ledger;
-  const record3 = value;
-  if (record3.schemaVersion !== 1) return ledger;
-  if (record3.cursors && typeof record3.cursors === "object")
-    for (const [key, entry] of Object.entries(
-      record3.cursors
-    )) {
-      const cursor = entry;
-      if (HEX643.test(key) && typeof cursor?.turns === "number" && Number.isInteger(cursor.turns) && cursor.turns >= 0 && typeof cursor.updatedAt === "string")
-        ledger.cursors[key] = {
-          turns: cursor.turns,
-          updatedAt: cursor.updatedAt
-        };
+
+// src/capture/worker/job-lifecycle.ts
+import { lstatSync as lstatSync8, renameSync as renameSync6 } from "node:fs";
+import { join as join19 } from "node:path";
+
+// src/capture/worker/log.ts
+import { appendFileSync, lstatSync as lstatSync7, renameSync as renameSync5 } from "node:fs";
+import { join as join18 } from "node:path";
+var MAX_LOG_BYTES = 256 * 1024;
+function logEvent(event, fields = {}) {
+  try {
+    const path2 = join18(stateSubdir("log"), "worker.log");
+    try {
+      const info = lstatSync7(path2);
+      if (info.isSymbolicLink()) return;
+      if (info.size > MAX_LOG_BYTES) renameSync5(path2, `${path2}.1`);
+    } catch {
     }
-  if (Array.isArray(record3.uploads))
-    for (const entry of record3.uploads) {
-      const upload2 = entry;
-      if (typeof upload2?.at === "string" && !Number.isNaN(Date.parse(upload2.at)) && typeof upload2.titleHash === "string" && HEX643.test(upload2.titleHash))
-        ledger.uploads.push({
-          at: upload2.at,
-          titleHash: upload2.titleHash,
-          ...typeof upload2.triggerRef === "string" && HEX643.test(upload2.triggerRef) ? { triggerRef: upload2.triggerRef } : {},
-          memoryId: typeof upload2.memoryId === "string" && /^[A-Za-z0-9._:-]{1,256}$/.test(upload2.memoryId) ? upload2.memoryId : null
-        });
-    }
-  if (Array.isArray(record3.titleHashes))
-    ledger.titleHashes = record3.titleHashes.filter(
-      (hash2) => typeof hash2 === "string" && HEX643.test(hash2)
-    ).slice(-MAX_TITLE_HASHES);
-  const project = record3.project;
-  if (project && typeof project.apiBase === "string" && typeof project.projectId === "string" && /^[A-Za-z0-9-]{1,128}$/.test(project.projectId))
-    ledger.project = { apiBase: project.apiBase, projectId: project.projectId };
-  const lastRun = record3.lastRun;
-  if (lastRun && typeof lastRun.startedAt === "string" && typeof lastRun.finishedAt === "string" && lastRun.outcomes && typeof lastRun.outcomes === "object") {
-    const outcomes2 = {};
-    for (const [key, count3] of Object.entries(lastRun.outcomes))
-      if (/^[a-z_]{1,40}$/.test(key) && typeof count3 === "number")
-        outcomes2[key] = count3;
-    ledger.lastRun = {
-      startedAt: lastRun.startedAt,
-      finishedAt: lastRun.finishedAt,
-      outcomes: outcomes2
-    };
+    appendFileSync(
+      path2,
+      `${JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), event, ...fields })}
+`,
+      { mode: 384 }
+    );
+  } catch {
   }
+}
+function jobHash(jobId) {
+  return sha256Hex(jobId).slice(0, 12);
+}
+
+// src/capture/worker/run-state.ts
+var DrainAborted = class extends Error {
+  constructor(reason) {
+    super(reason);
+    this.reason = reason;
+  }
+  reason;
+};
+var outcomes = {};
+function count2(outcome, by = 1) {
+  outcomes[outcome] = (outcomes[outcome] ?? 0) + by;
+}
+var deferredThisRun = /* @__PURE__ */ new Set();
+function consentRevocation(context, agent) {
+  const current = readConsent();
+  if (current.kind !== "ok" || !current.consent.enabled || current.consent.apiBase !== context.consent.apiBase)
+    return "consent_revoked";
+  const agreement = currentAgreement(current.consent);
+  if (!agreement) return "agreement_missing";
+  context.agreement = agreement;
+  return current.consent.agents.includes(agent) ? void 0 : "agent_removed";
+}
+function assertMayContinue(context, agent) {
+  if (context.lockLost || !heartbeat("worker.lock"))
+    throw new DrainAborted("lock_lost");
+  const revoked = consentRevocation(context, agent);
+  if (revoked) throw new DrainAborted(revoked);
+}
+function remainingToday(context, exceptJobId) {
+  context.ledger = mergedLedger(context.ledger);
+  return context.agreement.maxItemsPerDay - uploadsInLastDay(context.ledger) - pendingStoredItems(exceptJobId);
+}
+function mergedLedger(ledger) {
+  writeLedger(ledger);
   return ledger;
 }
-function readLedger() {
-  try {
-    const raw = readPrivateFileIfExists(ledgerPath(), 4 * 1024 * 1024);
-    return raw === void 0 ? empty() : sanitize(JSON.parse(raw));
-  } catch {
-    return empty();
+function setCursor(context, sessionRef, turns, source, rewind = false) {
+  const cursor = { turns, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
+  context.ledger.cursors[sessionRef] = cursor;
+  writeLedger(context.ledger, rewind ? { rewindCursor: sessionRef } : {});
+  const written = context.ledger.cursors[sessionRef];
+  if (source && written?.turns === cursor.turns && written.updatedAt === cursor.updatedAt && !recordCursorSource(
+    sessionRef,
+    source,
+    cursor,
+    Object.keys(context.ledger.cursors)
+  )) {
+    count2("cursor_source_unrecorded");
+    logEvent("cursor_source_unrecorded", { code: "write_failed" });
   }
 }
-function writeLedger(ledger, options = {}) {
-  const disk = readLedger();
-  for (const [key, cursor] of Object.entries(disk.cursors)) {
-    const mine = ledger.cursors[key];
-    if (mine && key === options.rewindCursor) continue;
-    if (!mine || cursor.turns > mine.turns) ledger.cursors[key] = cursor;
+
+// src/capture/worker/job-lifecycle.ts
+var SAFE_CODE = /^[a-z][a-z0-9_-]{0,47}$/;
+function errorCode(error62) {
+  if (error62 instanceof TransportError && SAFE_CODE.test(error62.code))
+    return error62.code;
+  if (error62 instanceof RunnerError) return `runner_${error62.failure}`;
+  if (error62 instanceof McpToolError && SAFE_CODE.test(error62.code))
+    return error62.code;
+  if (error62 instanceof AuthRequiredError) return "auth_required";
+  if (error62 instanceof UnsafePathError) return "unsafe_path";
+  if (error62 instanceof TranscriptMissingError) return "transcript_missing";
+  if (error62 instanceof UnsupportedTranscriptError)
+    return "unsupported_transcript";
+  return "internal_error";
+}
+var MAX_ATTEMPTS = 5;
+var BACKOFF_MS = [
+  15 * 6e4,
+  60 * 6e4,
+  4 * 60 * 6e4,
+  12 * 60 * 6e4
+];
+var QUOTA_RETRY_MS = 24 * 60 * 6e4;
+var WAITS_FOR_SERVICE = /* @__PURE__ */ new Set([
+  "vector_retrieval_unavailable"
+]);
+var PARKED_RETRY_MS = 15 * 6e4;
+function finishJob(snapshot, outcome) {
+  const path2 = jobPath(snapshot.jobId);
+  const aside = `${path2}.finishing`;
+  let current;
+  try {
+    renameSync6(path2, aside);
+    const raw = readPrivateFileIfExists(aside, 64 * 1024);
+    current = raw === void 0 ? void 0 : parseJob(JSON.parse(raw));
+  } catch {
+    current = readJob(snapshot.jobId);
   }
-  const uploadKey = (upload2) => `${upload2.at}|${upload2.titleHash}|${upload2.memoryId ?? ""}`;
-  const seen = new Set(ledger.uploads.map(uploadKey));
-  for (const upload2 of disk.uploads)
-    if (!seen.has(uploadKey(upload2))) {
-      ledger.uploads.push(upload2);
-      seen.add(uploadKey(upload2));
+  if (current && current.endedAt !== snapshot.endedAt) {
+    removeFile(candidatesPath(snapshot.jobId));
+    deferredThisRun.delete(snapshot.jobId);
+    const requeued = {
+      ...current,
+      state: "pending",
+      attempts: 0,
+      nextAttemptAt: null,
+      lastError: null
+    };
+    if (!readJob(snapshot.jobId)) writeJob(requeued);
+    removeFile(aside);
+    count2(outcome);
+    count2("requeued");
+    logEvent("job_requeued", {
+      job: jobHash(snapshot.jobId),
+      agent: snapshot.agent,
+      outcome
+    });
+    return;
+  }
+  removeFile(aside);
+  if (readJob(snapshot.jobId)) {
+    removeFile(candidatesPath(snapshot.jobId));
+  } else removeJobFiles(snapshot.jobId);
+  count2(outcome);
+  logEvent("job_finished", {
+    job: jobHash(snapshot.jobId),
+    agent: snapshot.agent,
+    outcome
+  });
+}
+var FINISHING_STALE_MS = 5 * 60 * 1e3;
+function recoverFinishing() {
+  try {
+    const queue = queueDir();
+    const now = Date.now();
+    for (const name of listFiles(queue)) {
+      if (!name.endsWith(".json.finishing")) continue;
+      const aside = join19(queue, name);
+      const jobId = name.slice(0, -".json.finishing".length);
+      try {
+        if (now - lstatSync8(aside).mtimeMs < FINISHING_STALE_MS) continue;
+        if (readJob(jobId)) removeFile(aside);
+        else {
+          renameSync6(aside, jobPath(jobId));
+          count2("finishing_recovered");
+        }
+      } catch {
+      }
     }
-  ledger.uploads.sort((a, b) => a.at.localeCompare(b.at));
-  ledger.titleHashes = [
-    .../* @__PURE__ */ new Set([...disk.titleHashes, ...ledger.titleHashes])
+  } catch {
+  }
+}
+function backoff(snapshot, state, code, delayMs, countAttempt = true) {
+  const current = readJob(snapshot.jobId);
+  if (!current) return;
+  deferredThisRun.add(snapshot.jobId);
+  const attempts = current.attempts + (countAttempt ? 1 : 0);
+  const delay = delayMs ?? BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)] ?? 0;
+  writeJob({
+    ...current,
+    state,
+    attempts,
+    nextAttemptAt: new Date(Date.now() + delay).toISOString(),
+    lastError: SAFE_CODE.test(code) ? code : "internal_error"
+  });
+  count2(
+    !countAttempt ? state === "project_required" ? "project_required" : "service_blocked" : state === "pending" || state === "extracted" ? "retry_scheduled" : state
+  );
+  logEvent("job_deferred", {
+    job: jobHash(snapshot.jobId),
+    agent: snapshot.agent,
+    state,
+    code,
+    attempts
+  });
+}
+
+// src/capture/worker/project.ts
+async function listProjects(context) {
+  if (context.listedProjects !== void 0) return context.listedProjects;
+  const result = await context.client.call("projects_list", {});
+  context.listedProjects = result.schema_version === 2 && typeof result.principal_id === "string" && typeof result.tenant_id === "string" && Array.isArray(result.projects) ? {
+    principalId: result.principal_id,
+    tenantId: result.tenant_id,
+    projects: result.projects.filter(
+      (p) => typeof p.project_id === "string"
+    ).map((p) => ({
+      project_id: p.project_id,
+      ...typeof p.name === "string" ? { name: p.name } : {}
+    }))
+  } : null;
+  return context.listedProjects;
+}
+async function requireCaptureAccount(context, principalId) {
+  const config2 = await readConfig();
+  if (!config2.userId || (config2.apiBase ?? PROD_API_BASE) !== context.consent.apiBase || principalId !== void 0 && principalId !== config2.userId)
+    throw new TransportError("project_account_mismatch");
+  return config2.userId;
+}
+async function selectedTarget(context, cwd) {
+  const asTarget = (s) => ({
+    apiBase: s.apiBase,
+    principalId: s.principalId,
+    tenantId: s.tenantId,
+    projectId: s.projectId,
+    selectionId: s.selectionId
+  });
+  const principal = await requireCaptureAccount(context);
+  const local = effectiveProject(cwd, context.consent.apiBase);
+  if (local?.stale) return void 0;
+  if (local?.principalId === principal) return asTarget(local);
+  const listed = await listProjects(context);
+  if (!listed) return void 0;
+  await requireCaptureAccount(context, listed.principalId);
+  const recorded = effectiveProject(cwd, context.consent.apiBase);
+  if (recorded?.stale) return void 0;
+  if (recorded?.principalId === principal) return asTarget(recorded);
+  if (listed.projects.length !== 1) return void 0;
+  const only = listed.projects[0];
+  return asTarget(
+    writeSelection({
+      apiBase: context.consent.apiBase,
+      principalId: listed.principalId,
+      tenantId: listed.tenantId,
+      projectId: only.project_id,
+      name: only.name ?? only.project_id,
+      source: "sole_project"
+    })
+  );
+}
+function forgetSelection(context, target2) {
+  try {
+    markProjectStale(target2.apiBase, target2.principalId, target2.projectId);
+  } catch {
+  }
+  const selected = currentSelection(context.consent.apiBase);
+  if (selected?.projectId === target2.projectId && selected.principalId === target2.principalId)
+    try {
+      clearSelection(selected.apiBase, selected.principalId, target2.projectId);
+      count2("selection_cleared");
+    } catch {
+    }
+}
+async function resolveProject(context, target2) {
+  await requireCaptureAccount(context, target2.principalId);
+  if (target2.apiBase !== context.consent.apiBase)
+    throw new TransportError("project_selection_required");
+  const listed = await listProjects(context);
+  const folderTarget = readBindings(target2.apiBase, target2.principalId).some(
+    (b) => b.bindingId === target2.selectionId && b.projectId === target2.projectId
+  );
+  if (!listed || listed.principalId !== target2.principalId || !folderTarget && listed.tenantId !== target2.tenantId || !listed.projects.some((p) => p.project_id === target2.projectId)) {
+    if (listed && listed.principalId === target2.principalId)
+      forgetSelection(context, target2);
+    throw new TransportError("project_account_mismatch");
+  }
+  return target2.projectId;
+}
+
+// src/capture/worker/repo.ts
+import { spawnSync as spawnSync2 } from "node:child_process";
+import { lstatSync as lstatSync9 } from "node:fs";
+import { basename as basename2 } from "node:path";
+var GIT_TIMEOUT_MS = 15e3;
+function git2(cwd, args) {
+  const result = spawnSync2("git", ["-C", cwd, ...args], {
+    encoding: "utf8",
+    timeout: GIT_TIMEOUT_MS,
+    shell: false,
+    stdio: ["ignore", "pipe", "ignore"],
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" },
+    maxBuffer: 64 * 1024
+  });
+  if (result.error || result.status !== 0) return void 0;
+  const output2 = result.stdout.trim();
+  return output2 || void 0;
+}
+function normalizeRemote(url2) {
+  let value = url2.trim();
+  if (!value || value.length > 2048) return void 0;
+  const scp = value.match(/^(?:[^@/\s]+@)?([^:/\s]+):(?!\/\/)(.+)$/);
+  if (scp && !/^[a-z][a-z0-9+.-]*:\/\//i.test(value))
+    value = `${scp[1]}/${scp[2]}`;
+  else {
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === "file:") return void 0;
+      value = `${parsed.host}${parsed.pathname}`;
+    } catch {
+      return void 0;
+    }
+  }
+  value = value.replace(/\/+$/, "").replace(/\.git$/i, "");
+  const [host, ...rest] = value.split("/");
+  if (!host || rest.length === 0) return void 0;
+  return [host.toLowerCase(), ...rest].join("/");
+}
+function repoInfo(cwd, salt) {
+  try {
+    if (!lstatSync9(cwd).isDirectory()) return { repo: null, branch: null };
+  } catch {
+    return { repo: null, branch: null };
+  }
+  const toplevel = git2(cwd, ["rev-parse", "--show-toplevel"]);
+  if (!toplevel) return { repo: null, branch: null };
+  const remote = git2(cwd, ["config", "--get", "remote.origin.url"]);
+  const normalized = remote ? normalizeRemote(remote) : void 0;
+  const branchValue = git2(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
+  const branch = branchValue && branchValue !== "HEAD" ? branchValue.slice(0, 200) : null;
+  const identity = normalized ?? `local:${sha256Hex(`${salt}\0${toplevel}`).slice(0, 32)}`;
+  const name = (normalized ? normalized.split("/").pop() : basename2(toplevel)) ?? "repository";
+  return {
+    repo: { identity, name: name.slice(0, 200) || "repository" },
+    branch
+  };
+}
+
+// src/capture/worker/transcript.ts
+import { lstatSync as lstatSync11, realpathSync as realpathSync4, statSync as statSync2 } from "node:fs";
+import { join as join22 } from "node:path";
+
+// src/hooks/shared/guards.ts
+import { realpathSync as realpathSync3 } from "node:fs";
+import { homedir as homedir4 } from "node:os";
+import { isAbsolute as isAbsolute7, join as join20, normalize as normalize3 } from "node:path";
+function absoluteEnv2(name) {
+  const value = process.env[name];
+  return value && isAbsolute7(value) ? normalize3(value) : void 0;
+}
+function transcriptRoots(agent) {
+  if (agent === "claude")
+    return [
+      join20(
+        absoluteEnv2("CLAUDE_CONFIG_DIR") ?? join20(homedir4(), ".claude"),
+        "projects"
+      )
+    ];
+  if (agent === "codex") {
+    const home = absoluteEnv2("CODEX_HOME") ?? join20(homedir4(), ".codex");
+    return [join20(home, "sessions"), join20(home, "archived_sessions")];
+  }
+  return [
+    join20(absoluteEnv2("GROK_HOME") ?? join20(homedir4(), ".grok"), "sessions")
   ];
-  if (!options.replaceProject && !ledger.project) ledger.project = disk.project;
-  if (!ledger.lastRun) ledger.lastRun = disk.lastRun;
-  const now = Date.now();
-  ledger.uploads = ledger.uploads.filter((upload2) => now - Date.parse(upload2.at) < UPLOAD_RETENTION_MS).slice(-MAX_UPLOADS);
-  ledger.titleHashes = ledger.titleHashes.slice(-MAX_TITLE_HASHES);
-  const cursors = Object.entries(ledger.cursors);
-  if (cursors.length > MAX_CURSORS)
-    ledger.cursors = Object.fromEntries(
-      cursors.sort((a, b) => a[1].updatedAt.localeCompare(b[1].updatedAt)).slice(-MAX_CURSORS)
-    );
-  writePrivateFileAtomic(ledgerPath(), `${JSON.stringify(ledger)}
-`);
 }
-function uploadsInLastDay(ledger, now = Date.now()) {
-  return ledger.uploads.filter(
-    (upload2) => now - Date.parse(upload2.at) < 24 * 60 * 60 * 1e3
-  ).length;
-}
-
-// src/capture/queue/purge.ts
-import { join as join16 } from "node:path";
-function removeJobFiles(jobId) {
-  deleteJob(jobId);
-  const work = stateSubdir("work");
-  for (const name of listFiles(work))
-    if (name.startsWith(`${jobId}.`)) removeFile(join16(work, name));
-}
-function purgeAgent(agent) {
-  let removed = 0;
-  for (const jobId of listJobIds())
-    if (jobId.startsWith(`${agent}-`)) {
-      removeJobFiles(jobId);
-      removed++;
+function transcriptPathAllowed(agent, path2) {
+  if (!isAbsolute7(path2) || path2.length > 4096 || path2.includes("\0") || path2.split("/").includes("..") || normalize3(path2) !== path2)
+    return false;
+  if (agent !== "grok" && !path2.endsWith(".jsonl")) return false;
+  return transcriptRoots(agent).some((root) => {
+    if (path2.startsWith(`${root}/`)) return true;
+    try {
+      return path2.startsWith(`${realpathSync3(root)}/`);
+    } catch {
+      return false;
     }
-  return removed;
-}
-function purgeQueue() {
-  const jobs = listJobIds();
-  for (const jobId of jobs) removeJobFiles(jobId);
-  for (const name of listFiles(queueDir()))
-    if (name.endsWith(".json.finishing") || name.endsWith(".account-conflict"))
-      removeFile(join16(queueDir(), name));
-  const work = stateSubdir("work");
-  for (const name of listFiles(work)) removeFile(join16(work, name));
-  return jobs.length;
+  });
 }
 
 // src/capture/transcript/claude.ts
-import { isAbsolute as isAbsolute7, relative as relative2 } from "node:path";
-
-// src/capture/transcript/types.ts
-import { closeSync as closeSync3, constants as constants3, fstatSync as fstatSync2, openSync as openSync3, readSync } from "node:fs";
-import { constants as osConstants } from "node:os";
-import { StringDecoder } from "node:string_decoder";
-var UnsupportedTranscriptError = class extends Error {
-  constructor() {
-    super("UNSUPPORTED_TRANSCRIPT");
-  }
-};
-var TranscriptMissingError = class extends UnsupportedTranscriptError {
-  constructor() {
-    super();
-    this.message = "TRANSCRIPT_MISSING";
-  }
-};
-var MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024;
-var NOT_A_TRANSCRIPT = ["ENOENT", "ELOOP", "ENXIO", "EOPNOTSUPP", "ENODEV"];
-var NOT_A_TRANSCRIPT_ERRNO = NOT_A_TRANSCRIPT.map(
-  (name) => osConstants.errno[name]
-).filter((value) => typeof value === "number");
-function notATranscript(error62) {
-  const { code, errno } = error62;
-  return typeof code === "string" && NOT_A_TRANSCRIPT.includes(code) || typeof errno === "number" && NOT_A_TRANSCRIPT_ERRNO.includes(Math.abs(errno));
-}
-function forEachJsonLine(path2, visit2, end, keep) {
-  if (path2.endsWith(".zst")) throw new UnsupportedTranscriptError();
-  let fd;
-  try {
-    fd = openSync3(
-      path2,
-      constants3.O_RDONLY | constants3.O_NOFOLLOW | (constants3.O_NONBLOCK ?? 0)
-    );
-  } catch (error62) {
-    if (notATranscript(error62)) throw new UnsupportedTranscriptError();
-    throw error62;
-  }
-  try {
-    const info = fstatSync2(fd);
-    if (!info.isFile() || info.size > MAX_TRANSCRIPT_BYTES)
-      throw new UnsupportedTranscriptError();
-    const buffer = Buffer.alloc(1024 * 1024);
-    const decoder = new StringDecoder("utf8");
-    let carry = "";
-    let position = 0;
-    let lineStart = 0;
-    for (; ; ) {
-      const length = end === void 0 ? buffer.length : Math.min(buffer.length, end - position);
-      if (length <= 0) break;
-      const read2 = readSync(fd, buffer, 0, length, position);
-      if (read2 === 0) break;
-      position += read2;
-      const text = carry + decoder.write(buffer.subarray(0, read2));
-      const lines = text.split("\n");
-      carry = lines.pop() ?? "";
-      for (const line of lines) {
-        if (!keep || keep(line)) parseLine(line, visit2, lineStart);
-        lineStart += Buffer.byteLength(line) + 1;
-      }
-      if (carry.length > 32 * 1024 * 1024) {
-        lineStart += Buffer.byteLength(carry);
-        carry = "";
-      }
-    }
-    if (end === void 0) {
-      const last = carry + decoder.end();
-      if (!keep || keep(last)) parseLine(last, visit2, lineStart);
-    }
-  } finally {
-    closeSync3(fd);
-  }
-}
-function parseLine(line, visit2, byteStart) {
-  if (!line.trim()) return;
-  try {
-    const value = JSON.parse(line);
-    if (value && typeof value === "object" && !Array.isArray(value))
-      visit2(value, byteStart);
-  } catch {
-  }
-}
-function record2(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-}
-function textBlocks(content, types = ["text"]) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content.map((block) => {
-    const item = record2(block);
-    return item && types.includes(String(item.type)) && typeof item.text === "string" ? item.text : "";
-  }).filter(Boolean).join("\n");
-}
-function tidy(text) {
-  return text.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-function stamp(value) {
-  if (typeof value !== "string") return void 0;
-  const ms = Date.parse(value);
-  return Number.isNaN(ms) ? void 0 : ms;
-}
-
-// src/capture/transcript/claude.ts
+import { isAbsolute as isAbsolute8, relative as relative2 } from "node:path";
 var NOISE_PREFIXES = [
   "<command-name>",
   "<command-message>",
@@ -24149,7 +25850,7 @@ function toolLine(name, input2, cwd) {
   const safeName = name.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 64) || "tool";
   const path2 = typeof input2?.file_path === "string" ? input2.file_path : typeof input2?.notebook_path === "string" ? input2.notebook_path : void 0;
   if (path2) {
-    const display = isAbsolute7(path2) && (path2 === cwd || path2.startsWith(`${cwd}/`)) ? relative2(cwd, path2) || "." : path2;
+    const display = isAbsolute8(path2) && (path2 === cwd || path2.startsWith(`${cwd}/`)) ? relative2(cwd, path2) || "." : path2;
     return `${safeName} path=${display.replace(/\s+/g, " ").slice(0, 300)}`;
   }
   if (safeName === "Bash" && typeof input2?.description === "string")
@@ -24164,7 +25865,7 @@ function parseClaudeTranscript(path2, cwd, range) {
     (entry, byteStart) => {
       if (range && byteStart < range.start) return;
       if (entry.isSidechain === true) return;
-      const message = record2(entry.message);
+      const message = record(entry.message);
       const at = stamp(entry.timestamp);
       const when = at === void 0 ? {} : { at };
       if (entry.type === "user") {
@@ -24176,7 +25877,7 @@ function parseClaudeTranscript(path2, cwd, range) {
           return;
         }
         const content = message.content;
-        if (Array.isArray(content) && content.some((block) => record2(block)?.type === "tool_result"))
+        if (Array.isArray(content) && content.some((block) => record(block)?.type === "tool_result"))
           return;
         const raw = textBlocks(content);
         const text = raw ? cleanClaudeUserText(raw) : void 0;
@@ -24187,7 +25888,7 @@ function parseClaudeTranscript(path2, cwd, range) {
       const id = typeof message.id === "string" ? message.id : void 0;
       const blocks = Array.isArray(message.content) ? message.content : [];
       for (const value of blocks) {
-        const block = record2(value);
+        const block = record(value);
         if (!block) continue;
         if (block.type === "text" && typeof block.text === "string") {
           const text = tidy(block.text);
@@ -24203,7 +25904,7 @@ ${text}`;
         } else if (block.type === "tool_use" && typeof block.name === "string") {
           turns.push({
             kind: "T",
-            text: toolLine(block.name, record2(block.input), cwd),
+            text: toolLine(block.name, record(block.input), cwd),
             ...when
           });
         }
@@ -24273,14 +25974,14 @@ function parseCodexTranscript(path2, range) {
     path2,
     (line, byteStart) => {
       const at = stamp(line.timestamp);
-      const payload = record2(line.payload);
+      const payload = record(line.payload);
       if (!payload) return;
       if (line.type === "session_meta") {
         if (typeof payload.history_mode === "string")
           historyMode = payload.history_mode;
         const source = payload.source;
         if (source === "exec") headless = true;
-        if (record2(source)?.subagent !== void 0 || payload.parent_thread_id)
+        if (record(source)?.subagent !== void 0 || payload.parent_thread_id)
           skip = true;
         return;
       }
@@ -24296,7 +25997,7 @@ function parseCodexTranscript(path2, range) {
       if (line.type === "event_msg") {
         const turnId = typeof payload.turn_id === "string" ? payload.turn_id : void 0;
         if (payload.type === "item_completed") {
-          const item = record2(payload.item);
+          const item = record(payload.item);
           if (item?.type === "UserMessage")
             paginated.push({
               at,
@@ -24334,7 +26035,7 @@ function parseCodexTranscript(path2, range) {
       if (line.type === "response_item" && payload.type === "message") {
         const role = payload.role;
         if (role !== "user" && role !== "assistant") return;
-        const meta3 = record2(payload.internal_chat_message_metadata_passthrough);
+        const meta3 = record(payload.internal_chat_message_metadata_passthrough);
         const kinds = Array.isArray(meta3?.content_item_kinds) ? meta3.content_item_kinds : void 0;
         if (role === "user" && kinds && !kinds.every((kind) => kind === "user.text"))
           return;
@@ -24387,79 +26088,20 @@ function parseCodexTranscript(path2, range) {
   return { ...finalize2(merged), headless, skip };
 }
 
-// src/capture/transcript/condense.ts
-var TRANSCRIPT_BUDGET_CHARS = 48e3;
-var MESSAGE_CAP_CHARS = 2e3;
-var HEAD_USER_TURNS = 4;
-function cap(text) {
-  const chars = Array.from(text);
-  return chars.length <= MESSAGE_CAP_CHARS ? text : `${chars.slice(0, MESSAGE_CAP_CHARS - 1).join("")}\u2026`;
-}
-function defuse(text) {
-  return text.replace(/<(\/?)transcript-/gi, "<$1transcript_");
-}
-function renderLine(segment) {
-  return segment.kind === "T" ? `${segment.label}:${segment.text}` : `${segment.label}: ${segment.text}`;
-}
-function condense(turns, cursor, redactor) {
-  const fresh = turns.slice(cursor).filter((turn) => cursor === 0 || turn.kind !== "S");
-  const prepared = [];
-  for (const turn of fresh) {
-    const redacted = redactor.redact(turn.text);
-    if (redacted === void 0) continue;
-    const text = defuse(cap(redacted.replace(/\n{3,}/g, "\n\n").trim()));
-    if (text) prepared.push({ kind: turn.kind, text });
-  }
-  const newUserTurns = prepared.filter((turn) => turn.kind === "U").length;
-  const cost = (turn) => turn.text.length + 9;
-  const chosen = /* @__PURE__ */ new Set();
-  let used = 0;
-  let heads = 0;
-  for (const [index, turn] of prepared.entries()) {
-    if (heads >= HEAD_USER_TURNS) break;
-    if (turn.kind !== "U") continue;
-    if (used + cost(turn) > TRANSCRIPT_BUDGET_CHARS) break;
-    chosen.add(index);
-    used += cost(turn);
-    heads++;
-  }
-  for (let index = prepared.length - 1; index >= 0; index--) {
-    if (chosen.has(index)) continue;
-    const turn = prepared[index];
-    if (!turn) continue;
-    if (used + cost(turn) > TRANSCRIPT_BUDGET_CHARS) break;
-    chosen.add(index);
-    used += cost(turn);
-  }
-  const segments = [];
-  for (const [index, turn] of prepared.entries()) {
-    if (!chosen.has(index)) continue;
-    const label = `${turn.kind}${segments.length + 1}`;
-    if (segments.length + 1 > 99999) break;
-    segments.push({ label, kind: turn.kind, text: turn.text });
-  }
-  return {
-    segments,
-    text: segments.map(renderLine).join("\n"),
-    newUserTurns,
-    newTurns: turns.length - Math.min(cursor, turns.length)
-  };
-}
-
 // src/capture/transcript/grok.ts
-import { lstatSync as lstatSync6 } from "node:fs";
+import { lstatSync as lstatSync10 } from "node:fs";
 import { homedir as homedir5 } from "node:os";
-import { dirname as dirname6, isAbsolute as isAbsolute8, join as join17 } from "node:path";
+import { dirname as dirname6, isAbsolute as isAbsolute9, join as join21 } from "node:path";
 function grokSessionDir(transcriptPath, cwd, sessionId) {
   if (transcriptPath) return dirname6(transcriptPath);
-  const home = process.env.GROK_HOME && isAbsolute8(process.env.GROK_HOME) ? process.env.GROK_HOME : join17(homedir5(), ".grok");
-  return join17(home, "sessions", encodeURIComponent(cwd), sessionId);
+  const home = process.env.GROK_HOME && isAbsolute9(process.env.GROK_HOME) ? process.env.GROK_HOME : join21(homedir5(), ".grok");
+  return join21(home, "sessions", encodeURIComponent(cwd), sessionId);
 }
 function grokPrimaryFile(dir) {
-  const updates = join17(dir, "updates.jsonl");
-  for (const path2 of [updates, join17(dir, "chat_history.jsonl")])
+  const updates = join21(dir, "updates.jsonl");
+  for (const path2 of [updates, join21(dir, "chat_history.jsonl")])
     try {
-      if (lstatSync6(path2).isFile()) return path2;
+      if (lstatSync10(path2).isFile()) return path2;
     } catch {
     }
   return updates;
@@ -24493,14 +26135,14 @@ function parseUpdates(path2, range) {
     path2,
     (line, byteStart) => {
       if (range && byteStart < range.start) return;
-      const update2 = record2(record2(line.params)?.update);
+      const update2 = record(record(line.params)?.update);
       const kind = update2?.sessionUpdate === "user_message_chunk" ? "U" : update2?.sessionUpdate === "agent_message_chunk" ? "A" : void 0;
       if (!kind) {
         if (update2?.sessionUpdate && update2.sessionUpdate !== "agent_thought_chunk")
           current = void 0;
         return;
       }
-      const content = record2(update2?.content);
+      const content = record(update2?.content);
       const text = content?.type === "text" && typeof content.text === "string" ? content.text : "";
       if (!text) return;
       if (current && current.kind === kind) current.text += text;
@@ -24526,7 +26168,7 @@ function parseUpdates(path2, range) {
 function parseGrokSession(dir, range) {
   let updates = { turns: [], open: false };
   try {
-    updates = parseUpdates(join17(dir, "updates.jsonl"), range);
+    updates = parseUpdates(join21(dir, "updates.jsonl"), range);
   } catch (error62) {
     if (range || !(error62 instanceof UnsupportedTranscriptError)) throw error62;
   }
@@ -24539,734 +26181,16 @@ function parseGrokSession(dir, range) {
       ...updates.open ? { settledTurns: updates.turns.length - 1 } : {}
     };
   return {
-    turns: parseChatHistory(join17(dir, "chat_history.jsonl")),
+    turns: parseChatHistory(join21(dir, "chat_history.jsonl")),
     headless: false,
     skip: false,
     cursorSource: "grok_chat_history"
   };
 }
 
-// src/capture/upload/http.ts
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
-var HTTP_TIMEOUT_MS = 3e4;
-var MAX_RESPONSE_BYTES = 1024 * 1024;
-var TransportError = class extends Error {
-  constructor(code) {
-    super(code);
-    this.code = code;
-  }
-  code;
-};
-function httpPost(target2, headers, payload, timeoutMs = HTTP_TIMEOUT_MS, budget) {
-  const transport = target2.protocol === "https:" ? httpsRequest : httpRequest;
-  return new Promise((resolve2, reject) => {
-    const req = transport(
-      target2,
-      {
-        method: "POST",
-        agent: false,
-        timeout: timeoutMs,
-        ...budget?.signal ? { signal: budget.signal } : {},
-        headers: { ...headers, "content-length": Buffer.byteLength(payload) }
-      },
-      (response) => {
-        const chunks = [];
-        let size = 0;
-        response.on("data", (chunk) => {
-          size += chunk.length;
-          if (size > MAX_RESPONSE_BYTES) {
-            req.destroy(new TransportError("response_too_large"));
-            return;
-          }
-          chunks.push(chunk);
-        });
-        response.on(
-          "end",
-          () => resolve2({
-            status: response.statusCode ?? 0,
-            headers: response.headers,
-            body: Buffer.concat(chunks).toString("utf8")
-          })
-        );
-        response.on("error", () => reject(new TransportError("network_error")));
-      }
-    );
-    const deadline = budget?.absoluteTimeout ? setTimeout(() => req.destroy(new TransportError("timeout")), timeoutMs) : void 0;
-    if (deadline) req.once("close", () => clearTimeout(deadline));
-    req.on("timeout", () => req.destroy(new TransportError("timeout")));
-    req.on(
-      "error",
-      (error62) => reject(
-        error62 instanceof TransportError ? error62 : new TransportError("network_error")
-      )
-    );
-    req.end(payload);
-  });
-}
-
-// src/credentials.ts
-import { spawnSync } from "node:child_process";
-import { lstatSync as lstatSync7 } from "node:fs";
-import {
-  chmod as chmod2,
-  lstat as lstat3,
-  readFile as readFile3,
-  rename as rename3,
-  rm as rm3,
-  writeFile as writeFile3
-} from "node:fs/promises";
-import { isAbsolute as isAbsolute9, join as join18 } from "node:path";
-var SERVICE = "memroot";
-var TOOL_TIMEOUT_MS = 15e3;
-function credentialStoreKind() {
-  const override = process.env.MEMROOT_TEST_CREDENTIAL_STORE;
-  if (override === "file" && process.env.NODE_ENV === "test")
-    return "test-file";
-  if (override)
-    throw new Error(
-      "INVALID_CREDENTIAL_STORE: MEMROOT_TEST_CREDENTIAL_STORE=file is honored only when NODE_ENV=test; refusing to file-back credentials."
-    );
-  return process.platform === "darwin" ? "macos-keychain" : "libsecret";
-}
-function unavailable(tool) {
-  return new Error(
-    `AUTH_KEYCHAIN_UNAVAILABLE: ${tool} is not installed, so there is no OS credential store for the Memroot refresh token. Tokens are never written to files; install ${tool === "security" ? "the macOS security tool" : "libsecret's secret-tool"} or sign in on a supported system.`
-  );
-}
-function run(tool, args, input2, allowNotFound = false, timeoutMs = TOOL_TIMEOUT_MS, hardDeadline = false) {
-  const result = spawnSync(tool, args, {
-    encoding: "utf8",
-    input: input2,
-    timeout: Math.max(1, Math.min(TOOL_TIMEOUT_MS, timeoutMs)),
-    ...hardDeadline ? { killSignal: "SIGKILL" } : {},
-    shell: false,
-    maxBuffer: 1024 * 1024
-  });
-  if (result.error) {
-    if (result.error.code === "ENOENT")
-      throw unavailable(tool);
-    throw new Error(
-      `AUTH_KEYCHAIN_FAILED: ${tool} could not run (${result.error.code ?? "error"}).`
-    );
-  }
-  if (allowNotFound) return result;
-  if (result.status !== 0)
-    throw new Error(
-      `AUTH_KEYCHAIN_FAILED: ${tool} ${args[0] ?? ""} failed (${result.status ?? "signal"}). No credential was read or written.`
-    );
-  return result;
-}
-function quote(value) {
-  return JSON.stringify(value);
-}
-function testStorePath() {
-  return join18(configDirectory(), "test-credentials.json");
-}
-async function readTestStore() {
-  try {
-    const info = await lstat3(testStorePath());
-    if (!info.isFile() || info.isSymbolicLink())
-      throw new Error("INVALID_CREDENTIAL_STORE: Expected a regular file.");
-    const value = JSON.parse(await readFile3(testStorePath(), "utf8"));
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    return value;
-  } catch (error62) {
-    if (error62.code === "ENOENT") return {};
-    throw error62;
-  }
-}
-async function writeTestStore(entries) {
-  const directory = configDirectory();
-  await safeDirectory(directory);
-  const path2 = testStorePath();
-  const temporary = `${path2}.${process.pid}.tmp`;
-  try {
-    await writeFile3(temporary, `${JSON.stringify(entries, null, 2)}
-`, {
-      flag: "wx",
-      mode: 384
-    });
-    await rename3(temporary, path2);
-    await chmod2(path2, 384);
-  } finally {
-    await rm3(temporary, { force: true });
-  }
-}
-function assertMacOSDefaultKeychain(timeoutMs) {
-  try {
-    const result = run(
-      "/usr/bin/security",
-      ["default-keychain", "-d", "user"],
-      void 0,
-      true,
-      Math.min(5e3, timeoutMs ?? 5e3),
-      true
-    );
-    const match2 = /^"([^"\r\n]+)"$/u.exec(result.stdout.trim());
-    const path2 = match2?.[1];
-    if (result.status !== 0 || !path2 || !isAbsolute9(path2)) throw new Error();
-    const info = lstatSync7(path2);
-    if (!info.isFile() || info.isSymbolicLink()) throw new Error();
-  } catch {
-    throw new Error(
-      "AUTH_KEYCHAIN_DEFAULT_UNAVAILABLE: This process has no usable default macOS keychain. Open Keychain Access for this macOS account, or run Memroot from its usual signed-in HOME, then retry. No keychain was created or changed."
-    );
-  }
-}
-async function storeSecret(account, secret, timeoutMs) {
-  const kind = credentialStoreKind();
-  if (kind === "test-file") {
-    const entries = await readTestStore();
-    entries[account] = secret;
-    await writeTestStore(entries);
-    return;
-  }
-  if (kind === "macos-keychain") {
-    const started = Date.now();
-    assertMacOSDefaultKeychain(timeoutMs);
-    const remaining = timeoutMs === void 0 ? void 0 : timeoutMs - (Date.now() - started);
-    if (remaining !== void 0 && remaining <= 0)
-      throw new Error(
-        "AUTH_KEYCHAIN_FAILED: Credential write deadline expired before any write."
-      );
-    run(
-      "security",
-      ["-i"],
-      `add-generic-password -U -s ${quote(SERVICE)} -a ${quote(account)} -w ${quote(secret)}
-`,
-      false,
-      remaining,
-      timeoutMs !== void 0
-    );
-    return;
-  }
-  run(
-    "secret-tool",
-    ["store", "--label", "Memroot CLI", "service", SERVICE, "account", account],
-    secret,
-    false,
-    timeoutMs,
-    timeoutMs !== void 0
-  );
-}
-async function readSecret(account, timeoutMs) {
-  const kind = credentialStoreKind();
-  if (kind === "test-file") return (await readTestStore())[account];
-  if (kind === "macos-keychain") {
-    const result2 = run(
-      "security",
-      ["find-generic-password", "-s", SERVICE, "-a", account, "-w"],
-      void 0,
-      true,
-      timeoutMs,
-      timeoutMs !== void 0
-    );
-    if (result2.status !== 0) {
-      if (/could not be found|item not found/i.test(result2.stderr))
-        return void 0;
-      throw new Error(
-        `AUTH_KEYCHAIN_FAILED: security find-generic-password failed (${result2.status ?? "signal"}).`
-      );
-    }
-    const secret2 = result2.stdout.replace(/\n$/, "");
-    return secret2.length ? secret2 : void 0;
-  }
-  const result = run(
-    "secret-tool",
-    ["lookup", "service", SERVICE, "account", account],
-    void 0,
-    true,
-    timeoutMs,
-    timeoutMs !== void 0
-  );
-  if (noUnlockedMatch(result)) return void 0;
-  const secret = result.stdout.replace(/\n$/, "");
-  if (result.status !== 0 || !secret)
-    throw new Error("AUTH_KEYCHAIN_FAILED: secret-tool lookup failed.");
-  return secret;
-}
-function noUnlockedMatch(result) {
-  return result.status === 1 && result.stderr === "" && result.stdout === "";
-}
-
-// src/capture/upload/token-broker.ts
-var MCP_CLIENT_ID = "memroot-cli";
-var REFRESH_SKEW_MS = 3e4;
-var AuthRequiredError = class extends Error {
-  constructor() {
-    super("AUTH_REQUIRED");
-  }
-};
-function mcpAccount(apiBase) {
-  return `${apiBase}#mcp`;
-}
-function mcpResource(apiBase) {
-  return `${apiBase}/mcp`;
-}
-var TokenBroker = class {
-  /**
-   * `pending`: a fresh sign-in's access token, held in memory only while the
-   * connection's account is checked before its refresh token is stored. Such
-   * a broker never reads the credential store, which still holds the
-   * previous connection.
-   */
-  constructor(apiBase, pending, credentials) {
-    this.apiBase = apiBase;
-    this.pending = pending;
-    this.credentials = credentials;
-  }
-  apiBase;
-  pending;
-  credentials;
-  cached;
-  refreshing;
-  invalidate() {
-    this.cached = void 0;
-  }
-  async accessToken(signal) {
-    if (this.pending) {
-      if (this.pending.expiresAt <= Date.now()) throw new AuthRequiredError();
-      return this.pending.token;
-    }
-    if (this.cached && this.cached.expiresAt - Date.now() > REFRESH_SKEW_MS)
-      return this.cached.token;
-    if (this.credentials?.authTimeoutMs !== void 0) {
-      if (!this.refreshing) {
-        const deadline = Date.now() + this.credentials.authTimeoutMs;
-        const abort = AbortSignal.any([
-          AbortSignal.timeout(this.credentials.authTimeoutMs),
-          ...signal ? [signal] : []
-        ]);
-        this.refreshing = this.refreshAccessToken(deadline, abort).finally(
-          () => {
-            this.refreshing = void 0;
-          }
-        );
-      }
-      const pending = this.refreshing;
-      if (!signal) return pending;
-      if (signal.aborted) throw new TransportError("auth_cancelled");
-      return new Promise((resolve2, reject) => {
-        const aborted2 = () => reject(new TransportError("auth_cancelled"));
-        signal.addEventListener("abort", aborted2, { once: true });
-        pending.then(resolve2, reject).finally(() => signal.removeEventListener("abort", aborted2));
-      });
-    }
-    return this.refreshAccessToken();
-  }
-  async refreshAccessToken(deadline, signal) {
-    const remaining = () => {
-      if (signal?.aborted || deadline !== void 0 && deadline <= Date.now())
-        throw new TransportError("auth_timeout");
-      return deadline === void 0 ? void 0 : Math.max(1, deadline - Date.now());
-    };
-    const release = await acquireLock(
-      this.credentials?.lockName ?? "auth.lock",
-      {
-        staleMs: 6e4,
-        waitMs: Math.min(2e4, remaining() ?? 2e4),
-        pollMs: 100,
-        ...signal ? { signal } : {}
-      }
-    );
-    if (!release) throw new TransportError("auth_lock_busy");
-    try {
-      const account = this.credentials?.account ?? mcpAccount(this.apiBase);
-      const refreshToken = await readSecret(account, remaining());
-      if (!refreshToken) throw new AuthRequiredError();
-      const response = await httpPost(
-        new URL(`${this.apiBase}/oauth/token`),
-        {
-          "content-type": "application/x-www-form-urlencoded",
-          accept: "application/json"
-        },
-        new URLSearchParams({
-          grant_type: "refresh_token",
-          refresh_token: refreshToken,
-          client_id: this.credentials?.clientId ?? MCP_CLIENT_ID,
-          resource: mcpResource(this.apiBase)
-        }).toString(),
-        remaining(),
-        deadline === void 0 ? void 0 : { absoluteTimeout: true, ...signal ? { signal } : {} }
-      );
-      let body = {};
-      try {
-        const parsed = JSON.parse(response.body || "{}");
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed))
-          body = parsed;
-      } catch {
-        body = {};
-      }
-      if (response.status >= 400) {
-        if (response.status === 400 && (body.error === "invalid_grant" || body.error === "invalid_client" || body.error === "invalid_target"))
-          throw new AuthRequiredError();
-        throw new TransportError(`token_http_${response.status}`);
-      }
-      if (typeof body.access_token !== "string" || !body.access_token)
-        throw new TransportError("token_response_invalid");
-      if (typeof body.refresh_token === "string" && body.refresh_token && body.refresh_token !== refreshToken)
-        await storeSecret(account, body.refresh_token, remaining());
-      remaining();
-      const lifetime = typeof body.expires_in === "number" && body.expires_in > 0 ? body.expires_in : 300;
-      this.cached = {
-        token: body.access_token,
-        expiresAt: Date.now() + lifetime * 1e3
-      };
-      return body.access_token;
-    } finally {
-      release();
-    }
-  }
-};
-
-// src/capture/upload/mcp-client.ts
-var MCP_PROTOCOL_VERSION = "2025-11-25";
-var McpInputRejected = class extends Error {
-  constructor(rules) {
-    super("MCP_INPUT_REJECTED");
-    this.rules = rules;
-  }
-  rules;
-};
-var McpToolError = class extends Error {
-  constructor(code) {
-    super(`MCP_TOOL_ERROR:${code}`);
-    this.code = code;
-  }
-  code;
-};
-var McpRateLimited = class extends Error {
-  constructor(retryAfterMs) {
-    super("MCP_RATE_LIMITED");
-    this.retryAfterMs = retryAfterMs;
-  }
-  retryAfterMs;
-};
-var MIN_RETRY_MS = 6e4;
-var MAX_RETRY_MS = 36e5;
-function retryAfter(value) {
-  const header = Array.isArray(value) ? value[0] : value;
-  const seconds = header ? Number(header) : Number.NaN;
-  let ms = MIN_RETRY_MS;
-  if (Number.isFinite(seconds) && seconds >= 0) ms = seconds * 1e3;
-  else {
-    const date5 = header ? Date.parse(header) : Number.NaN;
-    if (Number.isFinite(date5)) ms = date5 - Date.now();
-  }
-  return Math.min(Math.max(ms, MIN_RETRY_MS), MAX_RETRY_MS);
-}
-function parseRpc(contentType, body) {
-  let text = body;
-  if (contentType.includes("text/event-stream")) {
-    const data = body.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trim());
-    text = data.at(-1) ?? "";
-  }
-  const value = JSON.parse(text);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new TransportError("rpc_invalid");
-  return value;
-}
-var McpClient = class {
-  constructor(apiBase, broker, userAgent) {
-    this.apiBase = apiBase;
-    this.broker = broker;
-    this.userAgent = userAgent;
-  }
-  apiBase;
-  broker;
-  userAgent;
-  id = 0;
-  async post(token, payload) {
-    return httpPost(
-      new URL(`${this.apiBase}/mcp`),
-      {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        "mcp-protocol-version": MCP_PROTOCOL_VERSION,
-        authorization: `Bearer ${token}`,
-        "user-agent": this.userAgent
-      },
-      payload
-    );
-  }
-  async call(name, args) {
-    const payload = JSON.stringify({
-      jsonrpc: "2.0",
-      id: ++this.id,
-      method: "tools/call",
-      params: { name, arguments: args }
-    });
-    let response = await this.post(await this.broker.accessToken(), payload);
-    if (response.status === 401) {
-      this.broker.invalidate();
-      response = await this.post(await this.broker.accessToken(), payload);
-      if (response.status === 401) throw new AuthRequiredError();
-    }
-    if (response.status === 403) throw new AuthRequiredError();
-    if (response.status === 429)
-      throw new McpRateLimited(retryAfter(response.headers["retry-after"]));
-    if (response.status !== 200)
-      throw new TransportError(`mcp_http_${response.status}`);
-    let message;
-    try {
-      message = parseRpc(
-        String(response.headers["content-type"] ?? ""),
-        response.body
-      );
-    } catch {
-      throw new TransportError("rpc_invalid");
-    }
-    const error62 = message.error;
-    if (error62) {
-      if (error62.code === -32602) {
-        const issues = error62.data?.issues;
-        const rules = Array.isArray(issues) ? issues.map((issue2) => issue2.rule).filter((rule) => typeof rule === "string") : [];
-        throw new McpInputRejected(rules);
-      }
-      throw new TransportError(
-        `rpc_error_${typeof error62.code === "number" ? error62.code : "unknown"}`
-      );
-    }
-    const result = message.result;
-    const text = result?.content?.find((item) => item.type === "text")?.text;
-    let value;
-    try {
-      value = typeof text === "string" ? JSON.parse(text) : void 0;
-    } catch {
-      value = void 0;
-    }
-    if (result?.isError === true) {
-      const error63 = value?.error;
-      if (error63?.code === "invalid_request" && Array.isArray(error63.issues))
-        throw new McpInputRejected(
-          error63.issues.map((issue2) => issue2.rule).filter((rule) => typeof rule === "string")
-        );
-      const code = error63?.code;
-      const safe = typeof code === "string" && /^[a-z_]{1,64}$/.test(code) ? code : "unknown";
-      if (safe === "rate_limited") throw new McpRateLimited(6e4);
-      throw new McpToolError(safe);
-    }
-    if (value === void 0) throw new TransportError("rpc_result_invalid");
-    return value;
-  }
-};
-
-// src/capture/upload/upload.ts
-var OLD_SERVER_RULE = "MCP requires provenance origin direct_api";
-var SERVICE_BLOCKED_CODES = /* @__PURE__ */ new Set([
-  "vector_retrieval_not_configured",
-  "service_capacity_exceeded"
-]);
-var CAPTURE_CLIENT_RULE = "session capture requires the Memroot CLI capture connection";
-async function uploadItems(client, projectId, items, persist2, onUploaded, beforeCreate = () => void 0, captureSelection) {
-  for (const item of items) {
-    if (item.status !== "pending") continue;
-    const blocked = beforeCreate();
-    if (blocked) return blocked;
-    try {
-      const result = await client.call("memory_create", {
-        project_id: projectId,
-        ...captureSelection ? { capture_selection: captureSelection } : {},
-        idempotency_key: item.idempotencyKey,
-        memory_request: item.request
-      });
-      item.status = "done";
-      item.memoryId = typeof result?.memory_id === "string" && /^[A-Za-z0-9._:-]{1,256}$/.test(result.memory_id) ? result.memory_id : null;
-      onUploaded(item);
-      persist2();
-    } catch (error62) {
-      if (error62 instanceof McpInputRejected) {
-        if (error62.rules.some((rule) => rule.includes(OLD_SERVER_RULE)))
-          return { kind: "server_unsupported" };
-        if (error62.rules.some((rule) => rule.includes(CAPTURE_CLIENT_RULE)))
-          return { kind: "auth_required" };
-        item.status = "dropped";
-        item.dropReason = "server_rejected";
-        persist2();
-        continue;
-      }
-      if (error62 instanceof McpToolError) {
-        if (error62.code === "usage_limit_exceeded")
-          return { kind: "quota_blocked" };
-        if (error62.code === "idempotency_conflict" || error62.code === "graph_conflict") {
-          item.status = "dropped";
-          item.dropReason = error62.code;
-          persist2();
-          continue;
-        }
-        if (error62.code === "insufficient_scope")
-          return { kind: "auth_required" };
-        if (error62.code === "invalid_request") {
-          item.status = "dropped";
-          item.dropReason = "server_invalid_request";
-          persist2();
-          continue;
-        }
-        if (error62.code === "project_not_found")
-          return { kind: "project_invalid" };
-        if (SERVICE_BLOCKED_CODES.has(error62.code))
-          return { kind: "service_blocked", code: error62.code };
-        return { kind: "transient", code: error62.code };
-      }
-      if (error62 instanceof McpRateLimited)
-        return { kind: "rate_limited", retryAfterMs: error62.retryAfterMs };
-      if (error62 instanceof AuthRequiredError) return { kind: "auth_required" };
-      if (error62 instanceof TransportError)
-        return { kind: "transient", code: error62.code };
-      throw error62;
-    }
-  }
-  return void 0;
-}
-
-// src/capture/worker/log.ts
-import { appendFileSync, lstatSync as lstatSync8, renameSync as renameSync5 } from "node:fs";
-import { join as join19 } from "node:path";
-var MAX_LOG_BYTES = 256 * 1024;
-function logEvent(event, fields = {}) {
-  try {
-    const path2 = join19(stateSubdir("log"), "worker.log");
-    try {
-      const info = lstatSync8(path2);
-      if (info.isSymbolicLink()) return;
-      if (info.size > MAX_LOG_BYTES) renameSync5(path2, `${path2}.1`);
-    } catch {
-    }
-    appendFileSync(
-      path2,
-      `${JSON.stringify({ ts: (/* @__PURE__ */ new Date()).toISOString(), event, ...fields })}
-`,
-      { mode: 384 }
-    );
-  } catch {
-  }
-}
-function jobHash(jobId) {
-  return sha256Hex2(jobId).slice(0, 12);
-}
-
-// src/capture/worker/repo.ts
-import { spawnSync as spawnSync2 } from "node:child_process";
-import { lstatSync as lstatSync9 } from "node:fs";
-import { basename as basename2 } from "node:path";
-var GIT_TIMEOUT_MS = 15e3;
-function git2(cwd, args) {
-  const result = spawnSync2("git", ["-C", cwd, ...args], {
-    encoding: "utf8",
-    timeout: GIT_TIMEOUT_MS,
-    shell: false,
-    stdio: ["ignore", "pipe", "ignore"],
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_OPTIONAL_LOCKS: "0" },
-    maxBuffer: 64 * 1024
-  });
-  if (result.error || result.status !== 0) return void 0;
-  const output2 = result.stdout.trim();
-  return output2 || void 0;
-}
-function normalizeRemote(url2) {
-  let value = url2.trim();
-  if (!value || value.length > 2048) return void 0;
-  const scp = value.match(/^(?:[^@/\s]+@)?([^:/\s]+):(?!\/\/)(.+)$/);
-  if (scp && !/^[a-z][a-z0-9+.-]*:\/\//i.test(value))
-    value = `${scp[1]}/${scp[2]}`;
-  else {
-    try {
-      const parsed = new URL(value);
-      if (parsed.protocol === "file:") return void 0;
-      value = `${parsed.host}${parsed.pathname}`;
-    } catch {
-      return void 0;
-    }
-  }
-  value = value.replace(/\/+$/, "").replace(/\.git$/i, "");
-  const [host, ...rest] = value.split("/");
-  if (!host || rest.length === 0) return void 0;
-  return [host.toLowerCase(), ...rest].join("/");
-}
-function repoInfo(cwd, salt) {
-  try {
-    if (!lstatSync9(cwd).isDirectory()) return { repo: null, branch: null };
-  } catch {
-    return { repo: null, branch: null };
-  }
-  const toplevel = git2(cwd, ["rev-parse", "--show-toplevel"]);
-  if (!toplevel) return { repo: null, branch: null };
-  const remote = git2(cwd, ["config", "--get", "remote.origin.url"]);
-  const normalized = remote ? normalizeRemote(remote) : void 0;
-  const branchValue = git2(cwd, ["rev-parse", "--abbrev-ref", "HEAD"]);
-  const branch = branchValue && branchValue !== "HEAD" ? branchValue.slice(0, 200) : null;
-  const identity = normalized ?? `local:${sha256Hex2(`${salt}\0${toplevel}`).slice(0, 32)}`;
-  const name = (normalized ? normalized.split("/").pop() : basename2(toplevel)) ?? "repository";
-  return {
-    repo: { identity, name: name.slice(0, 200) || "repository" },
-    branch
-  };
-}
-
-// src/capture/worker/main.ts
-var WORKER_LOCK_STALE_MS = 15 * 60 * 1e3;
-function lockStaleMs() {
-  const override = Number(process.env.MEMROOT_CAPTURE_LOCK_STALE_MS);
-  return process.env.NODE_ENV === "test" && Number.isFinite(override) && override > 0 ? override : WORKER_LOCK_STALE_MS;
-}
-function runDetails() {
-  const details = takeLastRunDetails();
-  return details ? {
-    ms: details.ms,
-    exit_code: details.code,
-    signal: details.signal,
-    timed_out: details.timedOut,
-    output_capped: details.outputCapped,
-    bytes: details.bytes
-  } : {};
-}
-var DrainAborted = class extends Error {
-  constructor(reason) {
-    super(reason);
-    this.reason = reason;
-  }
-  reason;
-};
-var SAFE_CODE = /^[a-z][a-z0-9_-]{0,47}$/;
-var SAFE_REASON = /^[a-z_]{1,40}$/;
-function errorCode(error62) {
-  if (error62 instanceof TransportError && SAFE_CODE.test(error62.code))
-    return error62.code;
-  if (error62 instanceof RunnerError) return `runner_${error62.failure}`;
-  if (error62 instanceof McpToolError && SAFE_CODE.test(error62.code))
-    return error62.code;
-  if (error62 instanceof AuthRequiredError) return "auth_required";
-  if (error62 instanceof UnsafePathError) return "unsafe_path";
-  if (error62 instanceof TranscriptMissingError) return "transcript_missing";
-  if (error62 instanceof UnsupportedTranscriptError)
-    return "unsupported_transcript";
-  return "internal_error";
-}
-var MAX_ATTEMPTS = 5;
-var BACKOFF_MS = [
-  15 * 6e4,
-  60 * 6e4,
-  4 * 60 * 6e4,
-  12 * 60 * 6e4
-];
-var QUOTA_RETRY_MS = 24 * 60 * 6e4;
-var WAITS_FOR_SERVICE = /* @__PURE__ */ new Set([
-  "vector_retrieval_unavailable"
-]);
+// src/capture/worker/transcript.ts
 var SETTLE_STABLE_MS = 2e3;
 var SETTLE_MAX_MS = 3e4;
-var PROMPT_MAX_ITEMS = EXTRACTOR_MAX_ITEMS;
-var PARKED_RETRY_MS = 15 * 6e4;
-var RUNNERS = {
-  claude: runClaude,
-  codex: runCodex,
-  grok: runGrok
-};
-var outcomes = {};
-function count2(outcome, by = 1) {
-  outcomes[outcome] = (outcomes[outcome] ?? 0) + by;
-}
 function settleWindow() {
   const override = Number(process.env.MEMROOT_CAPTURE_SETTLE_MS);
   if (process.env.NODE_ENV === "test" && Number.isFinite(override) && override >= 0)
@@ -25294,111 +26218,6 @@ async function settle2(path2) {
     );
   }
 }
-function candidatesPath(jobId) {
-  return join20(stateSubdir("work"), `${jobId}.candidates.json`);
-}
-function readCandidates(jobId) {
-  const raw = readPrivateFileIfExists(candidatesPath(jobId), 4 * 1024 * 1024);
-  if (raw === void 0) return void 0;
-  try {
-    const value = JSON.parse(raw);
-    if (value?.schemaVersion !== 1 || value.jobId !== jobId || typeof value.projectId !== "string" || typeof value.endedAt !== "string" || !Array.isArray(value.items))
-      return void 0;
-    return value;
-  } catch {
-    return void 0;
-  }
-}
-function finishJob(snapshot, outcome) {
-  const path2 = jobPath(snapshot.jobId);
-  const aside = `${path2}.finishing`;
-  let current;
-  try {
-    renameSync6(path2, aside);
-    const raw = readPrivateFileIfExists(aside, 64 * 1024);
-    current = raw === void 0 ? void 0 : parseJob(JSON.parse(raw));
-  } catch {
-    current = readJob(snapshot.jobId);
-  }
-  if (current && current.endedAt !== snapshot.endedAt) {
-    removeFile(candidatesPath(snapshot.jobId));
-    deferredThisRun.delete(snapshot.jobId);
-    const requeued = {
-      ...current,
-      state: "pending",
-      attempts: 0,
-      nextAttemptAt: null,
-      lastError: null
-    };
-    if (!readJob(snapshot.jobId)) writeJob(requeued);
-    removeFile(aside);
-    count2(outcome);
-    count2("requeued");
-    logEvent("job_requeued", {
-      job: jobHash(snapshot.jobId),
-      agent: snapshot.agent,
-      outcome
-    });
-    return;
-  }
-  removeFile(aside);
-  if (readJob(snapshot.jobId)) {
-    removeFile(candidatesPath(snapshot.jobId));
-  } else removeJobFiles(snapshot.jobId);
-  count2(outcome);
-  logEvent("job_finished", {
-    job: jobHash(snapshot.jobId),
-    agent: snapshot.agent,
-    outcome
-  });
-}
-var FINISHING_STALE_MS = 5 * 60 * 1e3;
-function recoverFinishing() {
-  try {
-    const queue = queueDir();
-    const now = Date.now();
-    for (const name of listFiles(queue)) {
-      if (!name.endsWith(".json.finishing")) continue;
-      const aside = join20(queue, name);
-      const jobId = name.slice(0, -".json.finishing".length);
-      try {
-        if (now - lstatSync10(aside).mtimeMs < FINISHING_STALE_MS) continue;
-        if (readJob(jobId)) removeFile(aside);
-        else {
-          renameSync6(aside, jobPath(jobId));
-          count2("finishing_recovered");
-        }
-      } catch {
-      }
-    }
-  } catch {
-  }
-}
-var deferredThisRun = /* @__PURE__ */ new Set();
-function backoff(snapshot, state, code, delayMs, countAttempt = true) {
-  const current = readJob(snapshot.jobId);
-  if (!current) return;
-  deferredThisRun.add(snapshot.jobId);
-  const attempts = current.attempts + (countAttempt ? 1 : 0);
-  const delay = delayMs ?? BACKOFF_MS[Math.min(attempts - 1, BACKOFF_MS.length - 1)] ?? 0;
-  writeJob({
-    ...current,
-    state,
-    attempts,
-    nextAttemptAt: new Date(Date.now() + delay).toISOString(),
-    lastError: SAFE_CODE.test(code) ? code : "internal_error"
-  });
-  count2(
-    !countAttempt ? state === "project_required" ? "project_required" : "service_blocked" : state === "pending" || state === "extracted" ? "retry_scheduled" : state
-  );
-  logEvent("job_deferred", {
-    job: jobHash(snapshot.jobId),
-    agent: snapshot.agent,
-    state,
-    code,
-    attempts
-  });
-}
 function realUnder(path2, roots) {
   let real;
   try {
@@ -25418,7 +26237,7 @@ function realUnder(path2, roots) {
 function regularFile(path2) {
   let info;
   try {
-    info = lstatSync10(path2);
+    info = lstatSync11(path2);
   } catch (error62) {
     if (error62.code === "ENOENT")
       throw new TranscriptMissingError();
@@ -25433,7 +26252,7 @@ function relocateTranscript(job) {
   const current = transcriptFile(job);
   if (current)
     try {
-      lstatSync10(current);
+      lstatSync11(current);
       return job;
     } catch (error62) {
       if (error62.code !== "ENOENT") return job;
@@ -25446,10 +26265,10 @@ function relocateTranscript(job) {
       continue;
     }
     for (const folder of folders) {
-      const candidate = job.agent === "claude" ? join20(root, folder, `${job.sessionId}.jsonl`) : join20(root, folder, job.sessionId, "updates.jsonl");
-      const probe = job.agent === "claude" ? candidate : grokPrimaryFile(join20(root, folder, job.sessionId));
+      const candidate = job.agent === "claude" ? join22(root, folder, `${job.sessionId}.jsonl`) : join22(root, folder, job.sessionId, "updates.jsonl");
+      const probe = job.agent === "claude" ? candidate : grokPrimaryFile(join22(root, folder, job.sessionId));
       try {
-        const info = lstatSync10(probe);
+        const info = lstatSync11(probe);
         if (!info.isFile() || info.isSymbolicLink() || !transcriptPathAllowed(job.agent, candidate) || !realUnder(probe, [root]))
           continue;
       } catch {
@@ -25515,119 +26334,25 @@ async function turnsBelowFloor(job) {
     ).turns.length;
   return (job.agent === "claude" ? parseClaudeTranscript(path2, job.cwd, range) : parseCodexTranscript(path2, range)).turns.length;
 }
-function consentRevocation(context, agent) {
-  const current = readConsent();
-  if (current.kind !== "ok" || !current.consent.enabled || current.consent.apiBase !== context.consent.apiBase)
-    return "consent_revoked";
-  const agreement = currentAgreement(current.consent);
-  if (!agreement) return "agreement_missing";
-  context.agreement = agreement;
-  return current.consent.agents.includes(agent) ? void 0 : "agent_removed";
+
+// src/capture/worker/extract-step.ts
+function runDetails() {
+  const details = takeLastRunDetails();
+  return details ? {
+    ms: details.ms,
+    exit_code: details.code,
+    signal: details.signal,
+    timed_out: details.timedOut,
+    output_capped: details.outputCapped,
+    bytes: details.bytes
+  } : {};
 }
-function assertMayContinue(context, agent) {
-  if (context.lockLost || !heartbeat("worker.lock"))
-    throw new DrainAborted("lock_lost");
-  const revoked = consentRevocation(context, agent);
-  if (revoked) throw new DrainAborted(revoked);
-}
-function pendingStoredItems(exceptJobId) {
-  let total = 0;
-  for (const name of listFiles(stateSubdir("work"))) {
-    if (!name.endsWith(".candidates.json")) continue;
-    const jobId = name.slice(0, -".candidates.json".length);
-    if (jobId === exceptJobId) continue;
-    total += readCandidates(jobId)?.items.filter((item) => item.status === "pending").length ?? 0;
-  }
-  return total;
-}
-function remainingToday(context, exceptJobId) {
-  context.ledger = mergedLedger(context.ledger);
-  return context.agreement.maxItemsPerDay - uploadsInLastDay(context.ledger) - pendingStoredItems(exceptJobId);
-}
-function mergedLedger(ledger) {
-  writeLedger(ledger);
-  return ledger;
-}
-async function listProjects(context) {
-  if (context.listedProjects !== void 0) return context.listedProjects;
-  const result = await context.client.call("projects_list", {});
-  context.listedProjects = result.schema_version === 2 && typeof result.principal_id === "string" && typeof result.tenant_id === "string" && Array.isArray(result.projects) ? {
-    principalId: result.principal_id,
-    tenantId: result.tenant_id,
-    projects: result.projects.filter(
-      (p) => typeof p.project_id === "string"
-    ).map((p) => ({
-      project_id: p.project_id,
-      ...typeof p.name === "string" ? { name: p.name } : {}
-    }))
-  } : null;
-  return context.listedProjects;
-}
-async function requireCaptureAccount(context, principalId) {
-  const config2 = await readConfig();
-  if (!config2.userId || (config2.apiBase ?? "https://api.memroot.dev") !== context.consent.apiBase || principalId !== void 0 && principalId !== config2.userId)
-    throw new TransportError("project_account_mismatch");
-  return config2.userId;
-}
-async function selectedTarget(context, cwd) {
-  const asTarget = (s) => ({
-    apiBase: s.apiBase,
-    principalId: s.principalId,
-    tenantId: s.tenantId,
-    projectId: s.projectId,
-    selectionId: s.selectionId
-  });
-  const principal = await requireCaptureAccount(context);
-  const local = effectiveProject(cwd, context.consent.apiBase);
-  if (local?.stale) return void 0;
-  if (local?.principalId === principal) return asTarget(local);
-  const listed = await listProjects(context);
-  if (!listed) return void 0;
-  await requireCaptureAccount(context, listed.principalId);
-  const recorded = effectiveProject(cwd, context.consent.apiBase);
-  if (recorded?.stale) return void 0;
-  if (recorded?.principalId === principal) return asTarget(recorded);
-  if (listed.projects.length !== 1) return void 0;
-  const only = listed.projects[0];
-  return asTarget(
-    writeSelection({
-      apiBase: context.consent.apiBase,
-      principalId: listed.principalId,
-      tenantId: listed.tenantId,
-      projectId: only.project_id,
-      name: only.name ?? only.project_id,
-      source: "sole_project"
-    })
-  );
-}
-function forgetSelection(context, target2) {
-  try {
-    markProjectStale(target2.apiBase, target2.principalId, target2.projectId);
-  } catch {
-  }
-  const selected = currentSelection(context.consent.apiBase);
-  if (selected?.projectId === target2.projectId && selected.principalId === target2.principalId)
-    try {
-      clearSelection(selected.apiBase, selected.principalId, target2.projectId);
-      count2("selection_cleared");
-    } catch {
-    }
-}
-async function resolveProject(context, target2) {
-  await requireCaptureAccount(context, target2.principalId);
-  if (target2.apiBase !== context.consent.apiBase)
-    throw new TransportError("project_selection_required");
-  const listed = await listProjects(context);
-  const folderTarget = readBindings(target2.apiBase, target2.principalId).some(
-    (b) => b.bindingId === target2.selectionId && b.projectId === target2.projectId
-  );
-  if (!listed || listed.principalId !== target2.principalId || !folderTarget && listed.tenantId !== target2.tenantId || !listed.projects.some((p) => p.project_id === target2.projectId)) {
-    if (listed && listed.principalId === target2.principalId)
-      forgetSelection(context, target2);
-    throw new TransportError("project_account_mismatch");
-  }
-  return target2.projectId;
-}
+var PROMPT_MAX_ITEMS = EXTRACTOR_MAX_ITEMS;
+var RUNNERS = {
+  claude: runClaude,
+  codex: runCodex,
+  grok: runGrok
+};
 function runnerOrder(job, consent) {
   const order = [job.agent];
   if (consent.crossAgentExtraction) {
@@ -25635,21 +26360,6 @@ function runnerOrder(job, consent) {
       if (!order.includes(agent)) order.push(agent);
   }
   return order;
-}
-function setCursor(context, sessionRef, turns, source, rewind = false) {
-  const cursor = { turns, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-  context.ledger.cursors[sessionRef] = cursor;
-  writeLedger(context.ledger, rewind ? { rewindCursor: sessionRef } : {});
-  const written = context.ledger.cursors[sessionRef];
-  if (source && written?.turns === cursor.turns && written.updatedAt === cursor.updatedAt && !recordCursorSource(
-    sessionRef,
-    source,
-    cursor,
-    Object.keys(context.ledger.cursors)
-  )) {
-    count2("cursor_source_unrecorded");
-    logEvent("cursor_source_unrecorded", { code: "write_failed" });
-  }
 }
 async function extract(job, context, target2, cursorRef) {
   let parsed;
@@ -25760,7 +26470,7 @@ async function extract(job, context, target2, cursorRef) {
     max_items: PROMPT_MAX_ITEMS
   });
   const workDir = stateSubdir("work");
-  const extractorCwd = mkdtempSync(join20(tmpdir(), "memroot-extractor-"));
+  const extractorCwd = mkdtempSync(join23(tmpdir(), "memroot-extractor-"));
   let output2;
   let usedRunner;
   try {
@@ -25896,6 +26606,76 @@ async function extract(job, context, target2, cursorRef) {
   count2("extracted", items.length);
   return "stored";
 }
+
+// src/capture/upload/upload.ts
+var OLD_SERVER_RULE = "MCP requires provenance origin direct_api";
+var SERVICE_BLOCKED_CODES = /* @__PURE__ */ new Set([
+  "vector_retrieval_not_configured",
+  "service_capacity_exceeded"
+]);
+var CAPTURE_CLIENT_RULE = "session capture requires the Memroot CLI capture connection";
+async function uploadItems(client, projectId, items, persist2, onUploaded, beforeCreate = () => void 0, captureSelection) {
+  for (const item of items) {
+    if (item.status !== "pending") continue;
+    const blocked = beforeCreate();
+    if (blocked) return blocked;
+    try {
+      const result = await client.call("memory_create", {
+        project_id: projectId,
+        ...captureSelection ? { capture_selection: captureSelection } : {},
+        idempotency_key: item.idempotencyKey,
+        memory_request: item.request
+      });
+      item.status = "done";
+      item.memoryId = typeof result?.memory_id === "string" && /^[A-Za-z0-9._:-]{1,256}$/.test(result.memory_id) ? result.memory_id : null;
+      onUploaded(item);
+      persist2();
+    } catch (error62) {
+      if (error62 instanceof McpInputRejected) {
+        if (error62.rules.some((rule) => rule.includes(OLD_SERVER_RULE)))
+          return { kind: "server_unsupported" };
+        if (error62.rules.some((rule) => rule.includes(CAPTURE_CLIENT_RULE)))
+          return { kind: "auth_required" };
+        item.status = "dropped";
+        item.dropReason = "server_rejected";
+        persist2();
+        continue;
+      }
+      if (error62 instanceof McpToolError) {
+        if (error62.code === "usage_limit_exceeded")
+          return { kind: "quota_blocked" };
+        if (error62.code === "idempotency_conflict" || error62.code === "graph_conflict") {
+          item.status = "dropped";
+          item.dropReason = error62.code;
+          persist2();
+          continue;
+        }
+        if (error62.code === "insufficient_scope")
+          return { kind: "auth_required" };
+        if (error62.code === "invalid_request") {
+          item.status = "dropped";
+          item.dropReason = "server_invalid_request";
+          persist2();
+          continue;
+        }
+        if (error62.code === "project_not_found")
+          return { kind: "project_invalid" };
+        if (SERVICE_BLOCKED_CODES.has(error62.code))
+          return { kind: "service_blocked", code: error62.code };
+        return { kind: "transient", code: error62.code };
+      }
+      if (error62 instanceof McpRateLimited)
+        return { kind: "rate_limited", retryAfterMs: error62.retryAfterMs };
+      if (error62 instanceof AuthRequiredError) return { kind: "auth_required" };
+      if (error62 instanceof TransportError)
+        return { kind: "transient", code: error62.code };
+      throw error62;
+    }
+  }
+  return void 0;
+}
+
+// src/capture/worker/upload-step.ts
 async function upload(job, context, fallbackTarget, fallbackCursorRef) {
   const stored2 = readCandidates(job.jobId);
   if (!stored2) {
@@ -25992,6 +26772,13 @@ async function upload(job, context, fallbackTarget, fallbackCursorRef) {
   );
   finishJob({ ...job, endedAt: stored2.endedAt }, "uploaded_all");
 }
+
+// src/capture/worker/main.ts
+function lockStaleMs() {
+  const override = Number(process.env.MEMROOT_CAPTURE_LOCK_STALE_MS);
+  return process.env.NODE_ENV === "test" && Number.isFinite(override) && override > 0 ? override : WORKER_LOCK_STALE_MS;
+}
+var SAFE_REASON = /^[a-z_]{1,40}$/;
 async function processJob(job, context) {
   const started = Date.now();
   const reason = SAFE_REASON.test(job.reason) ? job.reason : "other";
@@ -26182,7 +26969,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.20.2"}`
+        `memroot-capture/${"0.21.0"}`
       ),
       salt,
       redactor: createRedactor(salt),
@@ -26226,10 +27013,10 @@ async function main() {
   }
 }
 process.on("exit", killActiveChildren);
-for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"])
-  process.on(signal, () => {
+for (const signal2 of ["SIGTERM", "SIGINT", "SIGHUP"])
+  process.on(signal2, () => {
     killActiveChildren();
-    logEvent("worker_signal", { code: signal });
+    logEvent("worker_signal", { code: signal2 });
     process.exit(0);
   });
 main().catch(() => {

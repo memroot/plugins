@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-// src/capture/hooks/failure-nudge.ts
+// src/hooks/failure-nudge.ts
 import { createHash as createHash2 } from "node:crypto";
 
-// src/api-base.ts
+// src/connection/api-base.ts
 function isLoopbackHostname(hostname) {
   return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1" || hostname === "[::1]";
 }
@@ -17,8 +17,9 @@ function isAllowedApiBase(value) {
     return false;
   }
 }
+var PROD_API_BASE = "https://api.memroot.dev";
 
-// src/project-folders.ts
+// src/project/folders.ts
 import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
 import {
   basename,
@@ -31,7 +32,24 @@ import {
   sep
 } from "node:path";
 
-// src/capture/paths.ts
+// src/state/config-store.ts
+import { randomBytes } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join2 } from "node:path";
+
+// src/state/paths.ts
 import {
   chmodSync,
   closeSync,
@@ -151,22 +169,7 @@ function listFiles(path) {
   }
 }
 
-// src/config-store.ts
-import { randomBytes } from "node:crypto";
-import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
-  writeSync
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+// src/state/config-store.ts
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
@@ -246,14 +249,13 @@ function persistConfigJson(fileName2, value) {
   }
 }
 
-// src/project-selection.ts
+// src/project/selection.ts
 import { randomUUID } from "node:crypto";
 import { lstatSync as lstatSync3, renameSync as renameSync3 } from "node:fs";
 import { join as join3 } from "node:path";
 var PROJECT_SELECTION_FILE = "project-selection.json";
 var MAX_FILE_BYTES = 256 * 1024;
 var MAX_RECORDS = 64;
-var PRODUCTION_API_BASE = "https://api.memroot.dev";
 var UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectSelectionPath() {
   return join3(memrootConfigDir(), PROJECT_SELECTION_FILE);
@@ -389,7 +391,7 @@ function upsert(store, input) {
   return record2;
 }
 function offlineIdentity(recordedOnly = false) {
-  let apiBase = PRODUCTION_API_BASE;
+  let apiBase = PROD_API_BASE;
   let userId;
   try {
     const raw = readPrivateFileIfExists(
@@ -413,7 +415,7 @@ function offlineIdentity(recordedOnly = false) {
   return userId ? { apiBase, userId } : { apiBase };
 }
 
-// src/project-folders.ts
+// src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
 var MAX_BINDINGS = 256;
 var MAX_FILE_BYTES2 = 512 * 1024;
@@ -570,7 +572,7 @@ function bindingMatchFor(apiBase, principalId, cwd) {
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
 
-// src/project-scope.ts
+// src/project/scope.ts
 function effectiveProject(cwd, apiBase) {
   const identity = offlineIdentity();
   const base = apiBase ?? identity.apiBase;
@@ -601,61 +603,7 @@ function eventFolder(event) {
   return typeof event.workspaceRoot === "string" ? event.workspaceRoot : void 0;
 }
 
-// src/capture/hooks/envelope.ts
-var MAX_ENVELOPE_BYTES = 64 * 1024;
-var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
-var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
-var STDIN_DEADLINE_MS = 500;
-function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
-  return new Promise((resolve2) => {
-    let bytes = 0;
-    let chunks = [];
-    let settled = false;
-    const finish = (value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(deadline);
-      chunks = [];
-      process.stdin.removeAllListeners("data");
-      if (bytes > maxBytes) process.stdin.on("data", () => {
-      });
-      else process.stdin.destroy();
-      resolve2(value);
-    };
-    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
-    process.stdin.on("error", () => finish(void 0));
-    process.stdin.on("data", (chunk) => {
-      bytes += chunk.length;
-      if (bytes <= maxBytes) chunks.push(chunk);
-    });
-    process.stdin.on("end", () => {
-      if (bytes > maxBytes) return finish(void 0);
-      try {
-        const value = JSON.parse(
-          Buffer.concat(chunks).toString("utf8")
-        );
-        finish(
-          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
-        );
-      } catch {
-        finish(void 0);
-      }
-    });
-  });
-}
-var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
-function isPostToolUseEvent(record2) {
-  return record2.hook_event_name === "PostToolUse" || record2.hookEventName === "post_tool_use" || record2.hookEventName === "PostToolUse";
-}
-function hookSessionId(record2) {
-  const value = typeof record2.session_id === "string" ? record2.session_id : record2.sessionId;
-  return typeof value === "string" && SESSION_ID.test(value) ? value : void 0;
-}
-function isRealSubagentEvent(record2) {
-  return record2.agent_id !== void 0 || record2.subagent_type !== void 0 || record2.subagentType !== void 0;
-}
-
-// src/capture/hooks/failure-signal.ts
+// src/hooks/failure-signal.ts
 var EXIT_CODE_LINE = /^Exit code (\d{1,3})\b/;
 function record(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
@@ -859,21 +807,7 @@ function commandHead(input) {
   return commandWords(record(input)?.command, 1)[0] ?? "";
 }
 
-// src/capture/hooks/guards.ts
-function inertProcess() {
-  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
-  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
-  return false;
-}
-function processGuard() {
-  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
-}
-function hostAgent(bundled) {
-  return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
-}
-
-// src/capture/hooks/markers.ts
-import { lstatSync as lstatSync5 } from "node:fs";
+// src/hooks/recall/recall-state.ts
 import { join as join6 } from "node:path";
 
 // src/capture/queue/job.ts
@@ -901,43 +835,10 @@ function sessionRefFor(salt, agent2, sessionId) {
   return sha256Hex(`${salt}\0${agent2}\0${sessionId}`);
 }
 
-// src/capture/hooks/markers.ts
-var MARKER_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
-var MAX_CLEANUP = 512;
-function cleanup(directory, keep, pattern) {
-  const cutoff = Date.now() - MARKER_TTL_MS;
-  for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
-    if (name === keep || !pattern.test(name)) continue;
-    try {
-      const path = join6(directory, name);
-      const info = lstatSync5(path);
-      if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
-    } catch {
-    }
-  }
+// src/hooks/recall/recall-state.ts
+function optedOutThisPrompt(counts) {
+  return counts !== void 0 && counts.prompts > 0 && counts.optOut >= counts.prompts;
 }
-function markerName(agent2, sessionId) {
-  return `${agent2}-${sessionRefFor(readOrCreateSalt(), agent2, sessionId).slice(0, 32)}`;
-}
-function claimSessionMarker(subdir, agent2, sessionId) {
-  const directory = stateSubdir(subdir);
-  const name = markerName(agent2, sessionId);
-  if (!createPrivateFileExclusive(join6(directory, name), "")) return false;
-  try {
-    cleanup(directory, name, new RegExp(`^${agent2}-[a-f0-9]{32}$`));
-  } catch {
-  }
-  return true;
-}
-function releaseSessionMarker(subdir, agent2, sessionId) {
-  try {
-    removeFile(join6(stateSubdir(subdir), markerName(agent2, sessionId)));
-  } catch {
-  }
-}
-
-// src/capture/hooks/recall-state.ts
-import { join as join7 } from "node:path";
 var DIRECTORY = "recall-state";
 var STATE_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
 function fileName(agent2, key) {
@@ -965,7 +866,7 @@ function readRecallState(agent2, key) {
   try {
     return parse(
       readPrivateFileIfExists(
-        join7(stateSubdir(DIRECTORY), fileName(agent2, key)),
+        join6(stateSubdir(DIRECTORY), fileName(agent2, key)),
         1024
       )
     );
@@ -1033,7 +934,7 @@ function recallGuidance2(...clauses) {
   return clauses.map((clause) => RECALL_CLAUSES2[clause]).join(" ");
 }
 
-// src/capture/hooks/session-context.ts
+// src/hooks/session-context.ts
 var SESSION_START_CONTEXT = recallGuidance2(
   "primary",
   "rule",
@@ -1055,12 +956,111 @@ var PROMPT_NUDGE = [
 ].join(" ");
 var FAILURE_NUDGE = FAILURE_RECALL_NUDGE;
 
-// src/capture/hooks/recall-text.ts
-function optedOutThisPrompt(counts) {
-  return counts !== void 0 && counts.prompts > 0 && counts.optOut >= counts.prompts;
+// src/hooks/shared/envelope.ts
+var MAX_ENVELOPE_BYTES = 64 * 1024;
+var MAX_CAPTURE_ENVELOPE_BYTES = 1024 * 1024;
+var MAX_TOOL_ENVELOPE_BYTES = 4 * 1024 * 1024;
+var STDIN_DEADLINE_MS = 500;
+function readEnvelope(maxBytes = MAX_ENVELOPE_BYTES) {
+  return new Promise((resolve2) => {
+    let bytes = 0;
+    let chunks = [];
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      chunks = [];
+      process.stdin.removeAllListeners("data");
+      if (bytes > maxBytes) process.stdin.on("data", () => {
+      });
+      else process.stdin.destroy();
+      resolve2(value);
+    };
+    const deadline = setTimeout(() => finish(void 0), STDIN_DEADLINE_MS);
+    process.stdin.on("error", () => finish(void 0));
+    process.stdin.on("data", (chunk) => {
+      bytes += chunk.length;
+      if (bytes <= maxBytes) chunks.push(chunk);
+    });
+    process.stdin.on("end", () => {
+      if (bytes > maxBytes) return finish(void 0);
+      try {
+        const value = JSON.parse(
+          Buffer.concat(chunks).toString("utf8")
+        );
+        finish(
+          value && typeof value === "object" && !Array.isArray(value) ? value : void 0
+        );
+      } catch {
+        finish(void 0);
+      }
+    });
+  });
+}
+var SESSION_ID = /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/;
+function isPostToolUseEvent(record2) {
+  return record2.hook_event_name === "PostToolUse" || record2.hookEventName === "post_tool_use" || record2.hookEventName === "PostToolUse";
+}
+function hookSessionId(record2) {
+  const value = typeof record2.session_id === "string" ? record2.session_id : record2.sessionId;
+  return typeof value === "string" && SESSION_ID.test(value) ? value : void 0;
+}
+function isRealSubagentEvent(record2) {
+  return record2.agent_id !== void 0 || record2.subagent_type !== void 0 || record2.subagentType !== void 0;
 }
 
-// src/capture/hooks/registration.ts
+// src/hooks/shared/guards.ts
+function inertProcess() {
+  if (process.env.MEMROOT_CAPTURE_WORKER === "1") return true;
+  if (process.env.CLAUDE_CODE_REMOTE === "true") return true;
+  return false;
+}
+function processGuard() {
+  return inertProcess() || process.env.MEMROOT_IMPORT_RUN === "1";
+}
+function hostAgent(bundled) {
+  return process.env.GROK_HOOK_EVENT ? "grok" : bundled;
+}
+
+// src/hooks/shared/markers.ts
+import { lstatSync as lstatSync5 } from "node:fs";
+import { join as join7 } from "node:path";
+var MARKER_TTL_MS = 14 * 24 * 60 * 60 * 1e3;
+var MAX_CLEANUP = 512;
+function cleanup(directory, keep, pattern) {
+  const cutoff = Date.now() - MARKER_TTL_MS;
+  for (const name of listFiles(directory).slice(0, MAX_CLEANUP)) {
+    if (name === keep || !pattern.test(name)) continue;
+    try {
+      const path = join7(directory, name);
+      const info = lstatSync5(path);
+      if (info.isFile() && info.mtimeMs < cutoff) removeFile(path);
+    } catch {
+    }
+  }
+}
+function markerName(agent2, sessionId) {
+  return `${agent2}-${sessionRefFor(readOrCreateSalt(), agent2, sessionId).slice(0, 32)}`;
+}
+function claimSessionMarker(subdir, agent2, sessionId) {
+  const directory = stateSubdir(subdir);
+  const name = markerName(agent2, sessionId);
+  if (!createPrivateFileExclusive(join7(directory, name), "")) return false;
+  try {
+    cleanup(directory, name, new RegExp(`^${agent2}-[a-f0-9]{32}$`));
+  } catch {
+  }
+  return true;
+}
+function releaseSessionMarker(subdir, agent2, sessionId) {
+  try {
+    removeFile(join7(stateSubdir(subdir), markerName(agent2, sessionId)));
+  } catch {
+  }
+}
+
+// src/hooks/shared/registration.ts
 import { join as join8 } from "node:path";
 function mcpRegistered(agent2) {
   try {
@@ -1076,7 +1076,7 @@ function mcpRegistered(agent2) {
   }
 }
 
-// src/capture/hooks/failure-nudge.ts
+// src/hooks/failure-nudge.ts
 var agent = hostAgent("claude");
 var MAX_PER_SESSION = 5;
 var GROK_SHELL_TOOLS = /* @__PURE__ */ new Set([
