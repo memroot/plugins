@@ -1459,7 +1459,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.21.0"} project`;
+  return `npx -y memroot@${"0.21.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -5306,7 +5306,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.21.0"}`;
+  const userAgent = `memroot-cli/${"0.21.1"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;

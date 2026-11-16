@@ -381,7 +381,7 @@ var selected = currentSelection();
 process.stdout.write(
   `${JSON.stringify({
     plugin: "memroot",
-    version: "0.21.0",
+    version: "0.21.1",
     agent: "agy",
     connection: "not_checked",
     capabilities: {
