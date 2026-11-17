@@ -103,7 +103,41 @@ export function catalogs(version) {
   };
 }
 
+// Files that first ship in a given release are required from that release on.
+// The release that first ships one sets its constant to its own version; an
+// unreleased checkout below it may carry the file (optional there), and
+// published tarballs before it never do.
+// skills/memroot-help/SKILL.md, the capability index, for all four agents.
+export const HELP_SKILL_SINCE = "0.22.0";
+// The project skill's references/authorization.md (the sign-in repair text,
+// moved out of SKILL.md), for Claude Code, Codex and Grok.
+export const AUTHORIZATION_REFERENCE_SINCE = "0.22.0";
+
+const atLeast = (version, since) => {
+  const [a, b] = [releaseParts(version), releaseParts(since)];
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  // An alpha of the same release comes before it.
+  return a.length === 3 || b.length === 4;
+};
+
+const projectSkill = (agent) =>
+  `skills/${agent === "claude" ? "project" : "memroot-project"}`;
+
+/** Files a release may carry but need not (see the *_SINCE constants). */
+const optionalPluginFiles = (agent, version) => [
+  ...(atLeast(version, HELP_SKILL_SINCE)
+    ? []
+    : ["skills/memroot-help/SKILL.md"]),
+  ...(agent !== "agy" && !atLeast(version, AUTHORIZATION_REFERENCE_SINCE)
+    ? [`${projectSkill(agent)}/references/authorization.md`]
+    : []),
+];
+
 const pluginFiles = (agent, version) => {
+  const [major, minor, patch] = releaseParts(version);
+  const help = atLeast(version, HELP_SKILL_SINCE)
+    ? ["skills/memroot-help/SKILL.md"]
+    : [];
   if (agent === "agy")
     return [
       "plugin.json",
@@ -115,6 +149,7 @@ const pluginFiles = (agent, version) => {
       "skills/memroot-memory/references/save.md",
       "skills/memroot-status/SKILL.md",
       "skills/memroot-project/SKILL.md",
+      ...help,
       "scripts/agy-hook.mjs",
       "scripts/mcp-stdio.mjs",
       "scripts/status.mjs",
@@ -123,7 +158,6 @@ const pluginFiles = (agent, version) => {
   // scripts/memory-mirror.mjs and scripts/prompt-nudge.mjs first ship in
   // 0.3.0; published tarballs before it do not carry the hooks and must still
   // export cleanly.
-  const [major, minor, patch] = releaseParts(version);
   const memoryHooks = major > 0n || (major === 0n && minor >= 3n);
   // scripts/snapshot-worker.mjs sealed per-session project segments in
   // 0.2.0 through 0.5.0; the machine-wide project selection removed it.
@@ -149,6 +183,7 @@ const pluginFiles = (agent, version) => {
     "skills/memroot-memory/SKILL.md",
     "skills/memroot-memory/references/save.md",
     "skills/memroot-status/SKILL.md",
+    ...help,
     "scripts/capture-worker.mjs",
     "scripts/session-end.mjs",
     "scripts/status.mjs",
@@ -161,7 +196,10 @@ const pluginFiles = (agent, version) => {
           "scripts/project.mjs",
           "scripts/project-guard.mjs",
           ...(snapshotWorker ? ["scripts/snapshot-worker.mjs"] : []),
-          `skills/${agent === "claude" ? "project" : "memroot-project"}/SKILL.md`,
+          `${projectSkill(agent)}/SKILL.md`,
+          ...(atLeast(version, AUTHORIZATION_REFERENCE_SINCE)
+            ? [`${projectSkill(agent)}/references/authorization.md`]
+            : []),
         ]),
     ...(memoryHooks
       ? ["scripts/memory-mirror.mjs", "scripts/prompt-nudge.mjs"]
@@ -250,11 +288,20 @@ export async function exportTarball({
       ]),
     ),
   );
+  const optional = new Map(
+    exportedAgents.flatMap((agent) =>
+      optionalPluginFiles(agent, version).map((path) => [
+        `package/dist/plugins/${agent}/${path}`,
+        `plugins/${agent}/${path}`,
+      ]),
+    ),
+  );
   for (const path of names) {
     if (
       path.startsWith("package/dist/plugins/") &&
       !path.endsWith("/") &&
-      !expected.has(path)
+      !expected.has(path) &&
+      !optional.has(path)
     )
       throw new Error(
         "Unexpected plugin file: explicit public allowlist requires review",
@@ -287,6 +334,8 @@ export async function exportTarball({
   const files = new Map([["LICENSE", extract("package/LICENSE")]]);
   for (const [source, destination] of expected)
     files.set(destination, extract(source));
+  for (const [source, destination] of optional)
+    if (names.includes(source)) files.set(destination, extract(source));
   for (const agent of exportedAgents) {
     const prefix = `plugins/${agent}/`;
     const manifest = JSON.parse(
