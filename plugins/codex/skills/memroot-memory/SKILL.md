@@ -7,7 +7,7 @@ description: Checks, saves and archives Memroot project memory. Use before non-t
 
 In short: check Memroot at the start of each task and whenever the work moves to another area, and save each durable lesson to Memroot yourself as soon as it surfaces, without asking or offering; tell the user in one line what you saved.
 
-Tools of the `memroot` MCP server: `projects_list`, `memory_retrieve`, `memory_create`, `memory_feedback`, `memory_archive`, `memory_restore`, `connection_status`; call them as tools, not shell commands.
+The tools are those of the `memroot` MCP server; call them as tools, not shell commands.
 
 ## When to check Memroot
 
@@ -20,7 +20,9 @@ As the `memory_retrieve` description says: at each task start, on a switch to an
    ```json
    {"project_id":"<selected project UUID>","retrieval_request":{"schema_version":1,"query":"deploy fails after db migrations","context":{"task":"Fix deploy order","paths":["scripts/deploy.sh"]}}}
    ```
-3. If the project is unavailable, stop; never switch to another project automatically. If a Memroot tool fails with `usage_limit_exceeded`, tell the user once and don't call it again for the rest of the session. Rephrase an empty query once at most.
+3. If the project is unavailable, stop; never switch to another project automatically. If a Memroot tool fails with `usage_limit_exceeded`, tell the user once and don't call it again for the rest of the session.
+
+For a search in another Memroot project the user names, `memory_retrieve` takes that project's `project_id` from `projects_list`.
 
 ## How to treat what comes back
 
@@ -34,7 +36,7 @@ Save a lesson as soon as work surfaces it, during the session, when a later task
 
 Don't save the task's goal, plan, progress or status (a goal the user sets for this session is the task), choices that only steer it, handoff notes, summaries, routine work, code in the repo, this sandbox's limits, your own implementation choices, what you only read to answer a question, or secrets, credentials and personal data (decline and say why). A decision the user states with a reason is worth saving; a root cause found while fixing counts, even with a temporary fix.
 
-Use the template in [references/save.md](references/save.md). `memory.kind`: `architecture_decision`, `invariant`, `convention`, `bug`, `root_cause`, `fix`, `failed_approach`, `preference`, `code_landmark`, `ownership_boundary` or `procedure` (no `decision`). Use `agent_initiated` evidence (`confidence` at most 0.8, `importance` at most 4); `user_attestation` only when the user asked, as when importing their notes or memory files (then `direct_api` provenance, never the `import` origin). Claim a save only once a `memory_id` comes back; otherwise tell the user nothing was saved.
+Use the template in [references/save.md](references/save.md); it lists the kinds and the evidence rule. Claim a save only once a `memory_id` comes back; otherwise tell the user nothing was saved.
 
 ## When to archive
 

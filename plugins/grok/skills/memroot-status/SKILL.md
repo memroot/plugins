@@ -12,10 +12,10 @@ Answer from live checks rather than assumptions, because an installed plugin doe
    node "<plugin root>/scripts/status.mjs"
    ```
    The plugin root is two directories above this SKILL.md, so the script is `../../scripts/status.mjs` relative to this file.
-2. Call the memroot MCP server's `connection_status` tool for the account, authorized project, and retrieval mode. In Grok the memroot tools are `memroot__projects_list`, `memroot__memory_retrieve`, `memroot__memory_create`, `memroot__memory_feedback`, `memroot__memory_archive`, `memroot__memory_restore` and `memroot__connection_status`, called through `use_tool` (the name as `tool_name`, the arguments as `tool_input`); if they are not listed, find them with `search_tool`.
+2. Call `memroot__connection_status` through `use_tool` (the name as `tool_name`; find it with `search_tool` if it is not listed): it shows whether this session is connected, and the account.
 3. Run the bundled project script's `status` command (`scripts/project.mjs status`, run from the session's folder, beside the status script) for this session's project: the folder's bound project, else the one selected on this computer. A connection with authorized projects does not itself select a project.
-4. Report briefly: plugin version, connected or not, project id, retrieval mode, and whether session capture is on.
+4. Report briefly: plugin version, connected or not, project, and whether session capture is on.
 
-If the memroot tools aren't available or `connection_status` fails, say that Memroot isn't connected in this session and suggest `npx memroot setup --agent grok --yes`, then authorizing memroot in Grok's `/mcps` panel (select memroot, press `i`), then `npx memroot doctor` for diagnostics. A successful connection check doesn't prove a memory was saved; only a save followed by a retrieval in a fresh session does.
+If the memroot tools aren't available or `connection_status` fails, say that Memroot isn't connected in this session and suggest `npx memroot setup --agent grok --yes`, then authorizing memroot in Grok's `/mcps` panel (select memroot, press `i`), then `npx memroot doctor` for diagnostics.
 
 Don't read transcripts or credential files to answer, and don't invent endpoints.

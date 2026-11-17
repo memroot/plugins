@@ -22999,7 +22999,7 @@ var TMP_STALE_MS = 6e4;
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function withConfigLock(fileName, update) {
+function withConfigLock(fileName, update2) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname2(directory), false);
   const lock = `${join2(directory, fileName)}.lock`;
@@ -23022,7 +23022,7 @@ function withConfigLock(fileName, update) {
     }
   }
   try {
-    return update();
+    return update2();
   } finally {
     if (held2)
       try {
@@ -23094,8 +23094,8 @@ function normalizeApiBase(apiBase) {
 function selectionKey(apiBase, principalId) {
   return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
 }
-function withLock(update) {
-  return withConfigLock(PROJECT_SELECTION_FILE, update);
+function withLock(update2) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update2);
 }
 function persist(store) {
   persistConfigJson(PROJECT_SELECTION_FILE, {
@@ -23213,6 +23213,30 @@ function upsert(store, input) {
       delete store[old];
   return record2;
 }
+function offlineIdentity(recordedOnly = false) {
+  let apiBase = PROD_API_BASE;
+  let userId;
+  try {
+    const raw = readPrivateFileIfExists(
+      join3(memrootConfigDir(), "config.json"),
+      64 * 1024
+    );
+    if (raw !== void 0) {
+      const config2 = JSON.parse(raw);
+      if (config2.schemaVersion === 1) {
+        if (typeof config2.apiBase === "string" && config2.apiBase)
+          apiBase = config2.apiBase;
+        if (typeof config2.userId === "string" && config2.userId)
+          userId = config2.userId;
+      }
+    }
+  } catch {
+  }
+  apiBase = normalizeApiBase(
+    recordedOnly ? apiBase : process.env.MEMROOT_API_BASE ?? apiBase
+  );
+  return userId ? { apiBase, userId } : { apiBase };
+}
 
 // src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
@@ -23260,6 +23284,167 @@ function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
 
+// src/project/guard-mode.ts
+function otherProjectSearchedNote(selectedId) {
+  return `Memroot searched another project, not the selected one (project_id ${selectedId}).`;
+}
+var AGY_UNKNOWN_PROJECT_NOTE = "Memroot searched the selected project instead: that project_id is not one of this connection's Memroot projects.";
+
+// src/project/list.ts
+import { join as join5 } from "node:path";
+
+// src/project/target.ts
+var UUID3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+var NIL = "00000000-0000-0000-0000-000000000000";
+var MAX = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+function projectIdShape(value) {
+  if (typeof value !== "string" || !UUID3.test(value)) return false;
+  const id = value.toLowerCase();
+  return id !== NIL && id !== MAX;
+}
+function knownProjectIds(input) {
+  const ids = [
+    input.computer,
+    ...input.bindings.filter((b) => !b.stale).map((b) => b.projectId),
+    ...input.listed
+  ];
+  return new Set(ids.filter(projectIdShape).map((id) => id.toLowerCase()));
+}
+function classifyProjectId(value, selectedId, known) {
+  if (typeof value !== "string" || !UUID3.test(value)) return "malformed";
+  const id = value.toLowerCase();
+  if (id === selectedId.toLowerCase()) return "selected";
+  if (id === NIL || id === MAX) return "nil";
+  return known.has(id) ? "known_other" : "unknown";
+}
+
+// src/project/list.ts
+var PROJECT_LIST_FILE = "project-list.json";
+var SOURCES = ["cli", "agy"];
+var MAX_FILE_BYTES3 = 128 * 1024;
+var MAX_LISTED_IDS = 100;
+var MAX_IDS = MAX_LISTED_IDS;
+var FUTURE_SKEW_MS = 5 * 6e4;
+var MAX_ACCOUNTS = 64;
+var PROJECT_LIST_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+function freshListing(listedAt, now) {
+  const age = now - Date.parse(listedAt);
+  return age >= -FUTURE_SKEW_MS && age <= PROJECT_LIST_MAX_AGE_MS;
+}
+function projectListPath() {
+  return join5(memrootConfigDir(), PROJECT_LIST_FILE);
+}
+function validSource(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.listedAt === "string" && !Number.isNaN(Date.parse(v.listedAt)) && Array.isArray(v.projectIds) && v.projectIds.length <= MAX_IDS && v.projectIds.every(projectIdShape);
+}
+function readStore3() {
+  let raw;
+  try {
+    raw = readPrivateFileIfExists(projectListPath(), MAX_FILE_BYTES3);
+  } catch {
+    return void 0;
+  }
+  if (raw === void 0) return { store: {}, present: false };
+  try {
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.lists || typeof value.lists !== "object" || Array.isArray(value.lists))
+      return void 0;
+    const store = {};
+    for (const [key, entry] of Object.entries(
+      value.lists
+    )) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const account = {};
+      for (const source of SOURCES) {
+        const list = entry[source];
+        if (validSource(list))
+          account[source] = {
+            listedAt: list.listedAt,
+            projectIds: list.projectIds.map((id) => id.toLowerCase())
+          };
+      }
+      store[key] = account;
+    }
+    return { store, present: true };
+  } catch {
+    return void 0;
+  }
+}
+function readListedProjectIds(apiBase, principalId, now = Date.now()) {
+  if (!principalId || !isAllowedApiBase(apiBase)) return [];
+  const account = readStore3()?.store[selectionKey(apiBase, principalId)];
+  if (!account) return [];
+  const ids = /* @__PURE__ */ new Set();
+  for (const source of SOURCES) {
+    const list = account[source];
+    if (list && freshListing(list.listedAt, now))
+      for (const id of list.projectIds) ids.add(id);
+  }
+  return [...ids];
+}
+function update(change) {
+  withConfigLock(PROJECT_LIST_FILE, () => {
+    const store = readStore3()?.store ?? {};
+    if (!change(store)) return;
+    for (const key of Object.keys(store))
+      if (Object.keys(store[key] ?? {}).length === 0) delete store[key];
+    const keys = Object.keys(store);
+    for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ACCOUNTS)))
+      delete store[key];
+    persistConfigJson(PROJECT_LIST_FILE, { schemaVersion: 1, lists: store });
+  });
+}
+function writeProjectList(apiBase, principalId, source, projectIds) {
+  if (!isAllowedApiBase(apiBase) || !projectIdShape(principalId)) return;
+  const ids = [
+    ...new Set(projectIds.filter(projectIdShape).map((id) => id.toLowerCase()))
+  ];
+  const key = selectionKey(apiBase, principalId);
+  update((store) => {
+    const { [source]: _replaced, ...prior } = store[key] ?? {};
+    delete store[key];
+    store[key] = ids.length > MAX_IDS ? prior : {
+      ...prior,
+      [source]: { listedAt: (/* @__PURE__ */ new Date()).toISOString(), projectIds: ids }
+    };
+    return true;
+  });
+}
+function listedIdsOf(value, principalId) {
+  const v = value;
+  if (!v || typeof v !== "object" || v.schema_version !== 2 || typeof v.principal_id !== "string" || v.principal_id.toLowerCase() !== principalId.toLowerCase() || !Array.isArray(v.projects) || v.projects.length > MAX_IDS)
+    return void 0;
+  const ids = [];
+  for (const project of v.projects) {
+    const id = project?.project_id;
+    if (!projectIdShape(id)) return void 0;
+    ids.push(id.toLowerCase());
+  }
+  return ids;
+}
+function localKnownProjectIds(apiBase) {
+  try {
+    const identity = offlineIdentity();
+    const base = normalizeApiBase(apiBase ?? identity.apiBase);
+    if (!identity.userId || !isAllowedApiBase(base)) return /* @__PURE__ */ new Set();
+    const read = (value, fallback) => {
+      try {
+        return value();
+      } catch {
+        return fallback;
+      }
+    };
+    return knownProjectIds({
+      computer: read(() => readSelection(base, identity.userId), void 0)?.projectId,
+      bindings: read(() => readBindings(base, identity.userId), []),
+      listed: readListedProjectIds(base, identity.userId)
+    });
+  } catch {
+    return /* @__PURE__ */ new Set();
+  }
+}
+
 // src/state/config.ts
 import {
   chmod,
@@ -23269,7 +23454,7 @@ import {
   rm as rm2,
   writeFile as writeFile2
 } from "node:fs/promises";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 
 // src/state/lock.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
@@ -23280,9 +23465,9 @@ import {
   rmSync as rmSync3,
   writeFileSync as writeFileSync3
 } from "node:fs";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 function lockPath(name) {
-  return join5(stateSubdir("locks"), name);
+  return join6(stateSubdir("locks"), name);
 }
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -23294,7 +23479,7 @@ function processAlive(pid) {
   }
 }
 function readOwnerFile(path) {
-  return readPrivateFile(join5(path, "owner.json"), 64 * 1024);
+  return readPrivateFile(join6(path, "owner.json"), 64 * 1024);
 }
 function readOwner(path) {
   try {
@@ -23339,7 +23524,7 @@ function tryMkdir(path) {
   return true;
 }
 function writeOwner(path, createdAt, token) {
-  const temporary = join5(path, `owner.${process.pid}.${token}.tmp`);
+  const temporary = join6(path, `owner.${process.pid}.${token}.tmp`);
   writeFileSync3(
     temporary,
     JSON.stringify({
@@ -23350,7 +23535,7 @@ function writeOwner(path, createdAt, token) {
     }),
     { mode: 384 }
   );
-  renameSync4(temporary, join5(path, "owner.json"));
+  renameSync4(temporary, join6(path, "owner.json"));
 }
 function readToken(path) {
   try {
@@ -23421,14 +23606,14 @@ import {
   writeFile
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname4, isAbsolute as isAbsolute3, join as join6 } from "node:path";
+import { dirname as dirname4, isAbsolute as isAbsolute3, join as join7 } from "node:path";
 function dataDirectory() {
-  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join6(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join6(homedir2(), ".local", "share");
+  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join7(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join7(homedir2(), ".local", "share");
   if (!isAbsolute3(base))
     throw new Error(
       "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
     );
-  return join6(base, "memroot");
+  return join7(base, "memroot");
 }
 async function safeDirectory(path) {
   const boundary = dataDirectory();
@@ -23445,7 +23630,7 @@ function configDirectory() {
   return memrootConfigDir();
 }
 function configPath() {
-  return join7(configDirectory(), "config.json");
+  return join8(configDirectory(), "config.json");
 }
 function optionalString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -24481,7 +24666,7 @@ import {
   rm as rm3,
   writeFile as writeFile3
 } from "node:fs/promises";
-import { isAbsolute as isAbsolute4, join as join8 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join9 } from "node:path";
 var SERVICE = "memroot";
 var TOOL_TIMEOUT_MS = 15e3;
 function credentialStoreKind() {
@@ -24526,7 +24711,7 @@ function quote(value) {
   return JSON.stringify(value);
 }
 function testStorePath() {
-  return join8(configDirectory(), "test-credentials.json");
+  return join9(configDirectory(), "test-credentials.json");
 }
 async function readTestStore() {
   try {
@@ -41248,7 +41433,7 @@ function boundedFetch(endpoint, shutdown2) {
 async function connectAgyMcp(apiBase, broker, signal2) {
   const endpoint = new URL(`${apiBase}/mcp`);
   const client = new Client(
-    { name: "Memroot Antigravity adapter", version: "0.21.1" },
+    { name: "Memroot Antigravity adapter", version: "0.22.0" },
     {
       capabilities: {},
       supportedProtocolVersions: ["2025-11-25"],
@@ -41333,6 +41518,9 @@ function agyBroker(base, config2) {
 }
 
 // src/agents/agy/mcp-stdio.ts
+var LIVE_LIST_TTL_MS = 5 * 6e4;
+var LIVE_FAILURE_TTL_MS = 3e4;
+var LIVE_LIST_TIMEOUT_MS = 5e3;
 var shutdown = new AbortController();
 var clients = /* @__PURE__ */ new Set();
 var transport = new StdioServerTransport(process.stdin, process.stdout, {
@@ -41397,16 +41585,66 @@ var handle = serveStdio(
       }
       const instructions = remote.getInstructions();
       const server = new Server(
-        { name: "memroot", version: "0.21.1" },
+        { name: "memroot", version: "0.22.0" },
         {
           capabilities: { tools: {} },
           ...instructions ? { instructions } : {}
         }
       );
       const currentAccount = async () => {
-        const live = await readConfig();
-        if (live.userId !== principal || live.agyMcpClient?.principalId !== principal || live.agyMcpClient.clientId !== config2.agyMcpClient?.clientId || live.agyMcpClient.apiBase !== base || normalizeApiBase(resolveApiBase({}, live)) !== normalizeApiBase(base) || live.apiBase && normalizeApiBase(live.apiBase) !== normalizeApiBase(base))
+        const live2 = await readConfig();
+        if (live2.userId !== principal || live2.agyMcpClient?.principalId !== principal || live2.agyMcpClient.clientId !== config2.agyMcpClient?.clientId || live2.agyMcpClient.apiBase !== base || normalizeApiBase(resolveApiBase({}, live2)) !== normalizeApiBase(base) || live2.apiBase && normalizeApiBase(live2.apiBase) !== normalizeApiBase(base))
           throw new Error("AGY_ACCOUNT_CHANGED");
+      };
+      let live;
+      const remember = (ids) => {
+        if (ids)
+          try {
+            writeProjectList(base, principal, "agy", ids);
+          } catch {
+          }
+        live = {
+          at: Date.now(),
+          ttl: ids ? LIVE_LIST_TTL_MS : LIVE_FAILURE_TTL_MS,
+          ids: new Set(ids ?? [])
+        };
+        return live.ids;
+      };
+      const idsOf = (result) => {
+        try {
+          const text = result.isError ? void 0 : result.content?.find((item) => item.type === "text");
+          return text?.type === "text" ? listedIdsOf(JSON.parse(text.text), principal) : void 0;
+        } catch {
+          return void 0;
+        }
+      };
+      let pending;
+      const liveProjects = () => {
+        if (live && Date.now() - live.at < live.ttl)
+          return Promise.resolve(live.ids);
+        pending ??= (async () => {
+          let ids;
+          try {
+            const result = await withAgyRequest(
+              shutdown.signal,
+              () => remote.callTool(
+                { name: "projects_list", arguments: {} },
+                {
+                  signal: shutdown.signal,
+                  timeout: LIVE_LIST_TIMEOUT_MS,
+                  maxTotalTimeout: LIVE_LIST_TIMEOUT_MS
+                }
+              )
+            );
+            ids = idsOf(result);
+          } catch {
+            ids = void 0;
+          }
+          return remember(ids);
+        })().finally(() => {
+          pending = void 0;
+        });
+        return pending;
       };
       server.onerror = () => {
       };
@@ -41443,6 +41681,7 @@ var handle = serveStdio(
           ))
             throw new Error("AGY_MCP_TOOL_UNSUPPORTED");
           let params = request.params;
+          let note;
           if (MCP_PROJECT_TOOL_NAMES_V1.includes(
             params.name
           )) {
@@ -41477,11 +41716,26 @@ var handle = serveStdio(
                   }
                 ]
               };
+            let projectId = selected.projectId;
+            if (params.name === "memory_retrieve") {
+              const named = params.arguments?.project_id;
+              let target = classifyProjectId(
+                named,
+                selected.projectId,
+                localKnownProjectIds(base)
+              );
+              if (target === "unknown" && (await liveProjects()).has(String(named).toLowerCase()))
+                target = "known_other";
+              if (target === "known_other") {
+                projectId = String(named).toLowerCase();
+                note = otherProjectSearchedNote(selected.projectId);
+              } else if (target === "unknown") note = AGY_UNKNOWN_PROJECT_NOTE;
+            }
             params = {
               ...params,
               arguments: withClientVersion(
-                { ...params.arguments, project_id: selected.projectId },
-                strictClientVersion("0.21.1")
+                { ...params.arguments, project_id: projectId },
+                strictClientVersion("0.22.0")
               )
             };
           }
@@ -41493,6 +41747,15 @@ var handle = serveStdio(
               maxTotalTimeout: AGY_REQUEST_TIMEOUT_MS
             })
           );
+          if (params.name === "projects_list") {
+            const ids = idsOf(result);
+            if (ids) remember(ids);
+          }
+          if (note && !result.isError)
+            result.content = [
+              ...result.content ?? [],
+              { type: "text", text: note }
+            ];
           return server.projectCallToolResult(result, void 0);
         })
       );

@@ -613,7 +613,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.21.1"} project`;
+  return `npx -y memroot@${"0.22.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -623,6 +623,131 @@ function staleBindingText(project) {
   const folder = project.folder ?? "";
   const option = folderOption(folder);
   return `Memroot project "${clip(project.name, 80)}" bound to folder "${clip(folder, 300)}" is no longer available, so Memroot calls here are refused. Bind another: ${command} use "<name>" ${option}; or use the project selected on this computer: ${command} unbind ${option}.`;
+}
+
+// src/project/guard-mode.ts
+function otherProjectNote(selectedId) {
+  return `Memroot search in another project; the selected one is project_id ${selectedId}.`;
+}
+function unknownProjectNote(command) {
+  return `Memroot searched the selected project instead: that project_id is not in this computer's Memroot project list. Running ${command} list refreshes that list.`;
+}
+function unknownProjectDenyReason(command, selectedId) {
+  return `That project_id is not in this computer's Memroot project list. If the user named another project, run ${command} list, then retry with its project_id; otherwise retry with the selected project_id "${selectedId}".`;
+}
+
+// src/project/list.ts
+import { join as join6 } from "node:path";
+
+// src/project/target.ts
+var UUID3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+var NIL = "00000000-0000-0000-0000-000000000000";
+var MAX = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+function projectIdShape(value) {
+  if (typeof value !== "string" || !UUID3.test(value)) return false;
+  const id = value.toLowerCase();
+  return id !== NIL && id !== MAX;
+}
+function knownProjectIds(input) {
+  const ids = [
+    input.computer,
+    ...input.bindings.filter((b) => !b.stale).map((b) => b.projectId),
+    ...input.listed
+  ];
+  return new Set(ids.filter(projectIdShape).map((id) => id.toLowerCase()));
+}
+function classifyProjectId(value, selectedId, known) {
+  if (typeof value !== "string" || !UUID3.test(value)) return "malformed";
+  const id = value.toLowerCase();
+  if (id === selectedId.toLowerCase()) return "selected";
+  if (id === NIL || id === MAX) return "nil";
+  return known.has(id) ? "known_other" : "unknown";
+}
+
+// src/project/list.ts
+var PROJECT_LIST_FILE = "project-list.json";
+var SOURCES = ["cli", "agy"];
+var MAX_FILE_BYTES3 = 128 * 1024;
+var MAX_LISTED_IDS = 100;
+var MAX_IDS = MAX_LISTED_IDS;
+var FUTURE_SKEW_MS = 5 * 6e4;
+var PROJECT_LIST_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+function freshListing(listedAt, now) {
+  const age = now - Date.parse(listedAt);
+  return age >= -FUTURE_SKEW_MS && age <= PROJECT_LIST_MAX_AGE_MS;
+}
+function projectListPath() {
+  return join6(memrootConfigDir(), PROJECT_LIST_FILE);
+}
+function validSource(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.listedAt === "string" && !Number.isNaN(Date.parse(v.listedAt)) && Array.isArray(v.projectIds) && v.projectIds.length <= MAX_IDS && v.projectIds.every(projectIdShape);
+}
+function readStore3() {
+  let raw;
+  try {
+    raw = readPrivateFileIfExists(projectListPath(), MAX_FILE_BYTES3);
+  } catch {
+    return void 0;
+  }
+  if (raw === void 0) return { store: {}, present: false };
+  try {
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.lists || typeof value.lists !== "object" || Array.isArray(value.lists))
+      return void 0;
+    const store = {};
+    for (const [key, entry] of Object.entries(
+      value.lists
+    )) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const account = {};
+      for (const source of SOURCES) {
+        const list = entry[source];
+        if (validSource(list))
+          account[source] = {
+            listedAt: list.listedAt,
+            projectIds: list.projectIds.map((id) => id.toLowerCase())
+          };
+      }
+      store[key] = account;
+    }
+    return { store, present: true };
+  } catch {
+    return void 0;
+  }
+}
+function readListedProjectIds(apiBase, principalId, now = Date.now()) {
+  if (!principalId || !isAllowedApiBase(apiBase)) return [];
+  const account = readStore3()?.store[selectionKey(apiBase, principalId)];
+  if (!account) return [];
+  const ids = /* @__PURE__ */ new Set();
+  for (const source of SOURCES) {
+    const list = account[source];
+    if (list && freshListing(list.listedAt, now))
+      for (const id of list.projectIds) ids.add(id);
+  }
+  return [...ids];
+}
+function localKnownProjectIds(apiBase) {
+  try {
+    const identity = offlineIdentity();
+    const base = normalizeApiBase(apiBase ?? identity.apiBase);
+    if (!identity.userId || !isAllowedApiBase(base)) return /* @__PURE__ */ new Set();
+    const read = (value, fallback) => {
+      try {
+        return value();
+      } catch {
+        return fallback;
+      }
+    };
+    return knownProjectIds({
+      computer: read(() => readSelection(base, identity.userId), void 0)?.projectId,
+      bindings: read(() => readBindings(base, identity.userId), []),
+      listed: readListedProjectIds(base, identity.userId)
+    });
+  } catch {
+    return /* @__PURE__ */ new Set();
+  }
 }
 
 // src/hooks/shared/envelope.ts
@@ -689,19 +814,21 @@ var IMPORT_TOOL = new RegExp(
   "u"
 );
 var MEMORY_TOOL = named(MCP_PROJECT_TOOL_NAMES_V1);
+var RETRIEVE_TOOL = named(["memory_retrieve"]);
 var record = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
-function decide(decision, reason, input) {
-  process.stdout.write(
-    `${JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: decision,
-        permissionDecisionReason: reason,
-        ...input ? { updatedInput: input } : {}
-      }
-    })}
-`
-  );
+var replied = Promise.resolve();
+function decide(decision, reason, input, context) {
+  const text = `${JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: decision,
+      permissionDecisionReason: reason,
+      ...input ? { updatedInput: input } : {},
+      ...context ? { additionalContext: context } : {}
+    }
+  })}
+`;
+  replied = new Promise((done) => process.stdout.write(text, done));
 }
 function grokArguments(input) {
   if (typeof input.tool_name !== "string" || !("tool_input" in input))
@@ -763,9 +890,52 @@ async function main() {
   }
   const folder = selected.scope === "folder";
   const reason = folder ? `Memroot memory call for the project bound to this folder (${selected.projectId}).` : `Memroot memory call for the project selected on this computer (${selected.projectId}).`;
-  if (hostAgent("grok") === "grok") {
-    if (grokArguments(input)?.project_id === selected.projectId)
-      decide("allow", reason);
+  const grok = hostAgent("grok") === "grok";
+  const args = grok ? grokArguments(input) : input;
+  const target = RETRIEVE_TOOL.test(tool) ? classifyProjectId(
+    args?.project_id,
+    selected.projectId,
+    localKnownProjectIds(selected.apiBase)
+  ) : void 0;
+  const kept = String(args?.project_id).toLowerCase();
+  const other = "Memroot search of another project of this account.";
+  const note = target === "unknown" ? unknownProjectNote(command) : void 0;
+  const corrected = (call) => withClientVersion(
+    { ...call, project_id: selected.projectId },
+    grok ? void 0 : strictClientVersion("0.22.0")
+  );
+  if (target === "known_other" && !grok) {
+    decide(
+      "allow",
+      other,
+      withClientVersion(
+        { ...input, project_id: kept },
+        strictClientVersion("0.22.0")
+      ),
+      otherProjectNote(selected.projectId)
+    );
+    return;
+  }
+  const inline = grok && target !== void 0 && Object.keys(input).length === 2 && typeof input.tool_name === "string" && RETRIEVE_TOOL.test(input.tool_name) && record(input.tool_input) !== void 0;
+  if (inline && target === "known_other" && args?.project_id === kept) {
+    decide("allow", other, void 0, otherProjectNote(selected.projectId));
+    return;
+  }
+  if (inline && target !== "selected" && target !== "known_other") {
+    decide(
+      "allow",
+      reason,
+      { tool_name: input.tool_name, tool_input: corrected(args ?? {}) },
+      note
+    );
+    return;
+  }
+  if (target === "unknown" && grok) {
+    decide("deny", unknownProjectDenyReason(command, selected.projectId));
+    return;
+  }
+  if (grok) {
+    if (args?.project_id === selected.projectId) decide("allow", reason);
     else
       decide(
         "deny",
@@ -773,14 +943,7 @@ async function main() {
       );
     return;
   }
-  decide(
-    "allow",
-    reason,
-    withClientVersion(
-      { ...input, project_id: selected.projectId },
-      strictClientVersion("0.21.1")
-    )
-  );
+  decide("allow", reason, corrected(input), note);
 }
 main().catch(() => {
   if (!memroot) return;
@@ -788,4 +951,5 @@ main().catch(() => {
     "deny",
     "Memroot could not read the project selected on this computer. Run the Memroot project command with use, then retry."
   );
-}).finally(() => process.exit(0));
+}).finally(() => replied.finally(() => process.exit(0)));
+process.stdout.on("error", () => process.exit(0));

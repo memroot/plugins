@@ -12,10 +12,10 @@ Answer from live checks rather than assumptions, because an installed plugin doe
    node "<plugin root>/scripts/status.mjs"
    ```
    The plugin root is two directories above this SKILL.md, so the script is `../../scripts/status.mjs` relative to this file.
-2. Call the memroot MCP server's `connection_status` tool for the account, authorized project, and retrieval mode. In Codex these are the tools of the `memroot` MCP server: `projects_list`, `memory_retrieve`, `memory_create`, `memory_feedback`, `memory_archive`, `memory_restore` and `connection_status`.
+2. Call the `memroot` MCP server's `connection_status` tool: it shows whether this session is connected, and the account.
 3. Run the bundled project script's `status` command (`scripts/project.mjs status`, run from the session's folder, beside the status script) for this session's project: the folder's bound project, else the one selected on this computer. A connection with authorized projects does not itself select a project.
-4. Report briefly: plugin version, connected or not, project id, retrieval mode, and whether session capture is on.
+4. Report briefly: plugin version, connected or not, project, and whether session capture is on.
 
-If the memroot tools aren't available or `connection_status` fails, say that Memroot isn't connected in this session and suggest `npx memroot setup --agent codex --yes`, then `npx memroot doctor` for diagnostics. A successful connection check doesn't prove a memory was saved; only a save followed by a retrieval in a fresh session does.
+If the memroot tools aren't available or `connection_status` fails, say that Memroot isn't connected in this session and suggest `npx memroot setup --agent codex --yes`, then `npx memroot doctor` for diagnostics.
 
 Don't read transcripts or credential files to answer, and don't invent endpoints.

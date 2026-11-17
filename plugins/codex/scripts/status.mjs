@@ -663,7 +663,7 @@ var capture = consent.kind === "ok" ? {
 process.stdout.write(
   `${JSON.stringify({
     plugin: "memroot",
-    version: "0.21.1",
+    version: "0.22.0",
     agent,
     connection: "not_checked",
     capabilities: {

@@ -576,7 +576,7 @@ var require_valid = __commonJS({
 // src/project/command.ts
 import { randomUUID as randomUUID4 } from "node:crypto";
 import { existsSync as existsSync3, lstatSync as lstatSync7, rmSync as rmSync5, statSync } from "node:fs";
-import { join as join13, normalize as normalize3, resolve as resolve2 } from "node:path";
+import { join as join14, normalize as normalize3, resolve as resolve2 } from "node:path";
 
 // src/plugin/node-util-compat.ts
 var node_util_compat_exports = {};
@@ -966,7 +966,7 @@ var TMP_STALE_MS = 6e4;
 function pause(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
-function withConfigLock(fileName, update2) {
+function withConfigLock(fileName, update3) {
   const directory = memrootConfigDir();
   ensurePrivateDir(directory, dirname3(directory), false);
   const lock = `${join3(directory, fileName)}.lock`;
@@ -989,7 +989,7 @@ function withConfigLock(fileName, update2) {
     }
   }
   try {
-    return update2();
+    return update3();
   } finally {
     if (held2)
       try {
@@ -1061,8 +1061,8 @@ function normalizeApiBase(apiBase) {
 function selectionKey(apiBase, principalId) {
   return `${normalizeApiBase(apiBase)}|${principalId.toLowerCase()}`;
 }
-function withLock(update2) {
-  return withConfigLock(PROJECT_SELECTION_FILE, update2);
+function withLock(update3) {
+  return withConfigLock(PROJECT_SELECTION_FILE, update3);
 }
 function persist(store) {
   persistConfigJson(PROJECT_SELECTION_FILE, {
@@ -1459,7 +1459,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.21.1"} project`;
+  return `npx -y memroot@${"0.22.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -1502,7 +1502,7 @@ import { mkdtempSync, rmSync as rmSync4, writeFileSync as writeFileSync4 } from 
 import { createServer, request as httpRequest2 } from "node:http";
 import { request as httpsRequest2 } from "node:https";
 import { tmpdir } from "node:os";
-import { join as join12 } from "node:path";
+import { join as join13 } from "node:path";
 
 // ../../node_modules/.pnpm/@clack+core@1.6.0/node_modules/@clack/core/dist/index.mjs
 import { stdout, stdin } from "node:process";
@@ -4328,6 +4328,97 @@ var MAX_STDERR_BYTES = 8 * 1024;
 // src/capture/queue/ledger.ts
 var UPLOAD_RETENTION_MS = 7 * 24 * 60 * 60 * 1e3;
 
+// src/project/list.ts
+import { join as join12 } from "node:path";
+
+// src/project/target.ts
+var UUID4 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+var NIL = "00000000-0000-0000-0000-000000000000";
+var MAX = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+function projectIdShape(value) {
+  if (typeof value !== "string" || !UUID4.test(value)) return false;
+  const id = value.toLowerCase();
+  return id !== NIL && id !== MAX;
+}
+
+// src/project/list.ts
+var PROJECT_LIST_FILE = "project-list.json";
+var SOURCES = ["cli", "agy"];
+var MAX_FILE_BYTES3 = 128 * 1024;
+var MAX_LISTED_IDS = 100;
+var MAX_IDS = MAX_LISTED_IDS;
+var FUTURE_SKEW_MS = 5 * 6e4;
+var MAX_ACCOUNTS2 = 64;
+var PROJECT_LIST_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+function projectListPath() {
+  return join12(memrootConfigDir(), PROJECT_LIST_FILE);
+}
+function validSource(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.listedAt === "string" && !Number.isNaN(Date.parse(v.listedAt)) && Array.isArray(v.projectIds) && v.projectIds.length <= MAX_IDS && v.projectIds.every(projectIdShape);
+}
+function readStore3() {
+  let raw;
+  try {
+    raw = readPrivateFileIfExists(projectListPath(), MAX_FILE_BYTES3);
+  } catch {
+    return void 0;
+  }
+  if (raw === void 0) return { store: {}, present: false };
+  try {
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.lists || typeof value.lists !== "object" || Array.isArray(value.lists))
+      return void 0;
+    const store = {};
+    for (const [key, entry] of Object.entries(
+      value.lists
+    )) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const account = {};
+      for (const source of SOURCES) {
+        const list = entry[source];
+        if (validSource(list))
+          account[source] = {
+            listedAt: list.listedAt,
+            projectIds: list.projectIds.map((id) => id.toLowerCase())
+          };
+      }
+      store[key] = account;
+    }
+    return { store, present: true };
+  } catch {
+    return void 0;
+  }
+}
+function update2(change) {
+  withConfigLock(PROJECT_LIST_FILE, () => {
+    const store = readStore3()?.store ?? {};
+    if (!change(store)) return;
+    for (const key of Object.keys(store))
+      if (Object.keys(store[key] ?? {}).length === 0) delete store[key];
+    const keys = Object.keys(store);
+    for (const key of keys.slice(0, Math.max(0, keys.length - MAX_ACCOUNTS2)))
+      delete store[key];
+    persistConfigJson(PROJECT_LIST_FILE, { schemaVersion: 1, lists: store });
+  });
+}
+function writeProjectList(apiBase, principalId, source, projectIds) {
+  if (!isAllowedApiBase(apiBase) || !projectIdShape(principalId)) return;
+  const ids = [
+    ...new Set(projectIds.filter(projectIdShape).map((id) => id.toLowerCase()))
+  ];
+  const key = selectionKey(apiBase, principalId);
+  update2((store) => {
+    const { [source]: _replaced, ...prior } = store[key] ?? {};
+    delete store[key];
+    store[key] = ids.length > MAX_IDS ? prior : {
+      ...prior,
+      [source]: { listedAt: (/* @__PURE__ */ new Date()).toISOString(), projectIds: ids }
+    };
+    return true;
+  });
+}
+
 // src/connection/auth.ts
 var CALLBACK_PATH = "/callback";
 var LOGIN_TIMEOUT_MS = 18e4;
@@ -4741,11 +4832,11 @@ function openBrowser(url) {
     process.off("SIGTERM", onSignal);
   };
   try {
-    directory = mkdtempSync(join12(tmpdir(), "memroot-login-"));
+    directory = mkdtempSync(join13(tmpdir(), "memroot-login-"));
     process.on("exit", cleanup);
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
-    const file = join12(directory, "sign-in.html");
+    const file = join13(directory, "sign-in.html");
     const target = htmlAttribute(url);
     writeFileSync4(
       file,
@@ -5066,7 +5157,7 @@ function parseProjectList(value) {
 }
 var PENDING_FILE = "project-create-pending.json";
 function pendingPath() {
-  return join13(memrootConfigDir(), PENDING_FILE);
+  return join14(memrootConfigDir(), PENDING_FILE);
 }
 function readPending() {
   try {
@@ -5084,7 +5175,7 @@ function removeLegacySessionRecords() {
     const info = lstatSync7(dir);
     if (!info.isDirectory() || info.isSymbolicLink()) return;
     const records = listFiles(dir).filter((name) => /^[a-f0-9]{64}\.json$/.test(name)).map((name) => {
-      const path = join13(dir, name);
+      const path = join14(dir, name);
       try {
         const value = JSON.parse(
           readPrivateFileIfExists(path, 16 * 1024) ?? "null"
@@ -5119,8 +5210,8 @@ function removeLegacySessionRecords() {
     const cutoff = Date.now() - LEGACY_RECORD_TTL_MS;
     for (const name of listFiles(dir))
       try {
-        if (lstatSync7(join13(dir, name)).mtimeMs < cutoff)
-          rmSync5(join13(dir, name), { force: true });
+        if (lstatSync7(join14(dir, name)).mtimeMs < cutoff)
+          rmSync5(join14(dir, name), { force: true });
       } catch {
       }
     if (listFiles(dir).length === 0)
@@ -5233,10 +5324,18 @@ function bindingToRemove(base, principalId, folder) {
     (b) => forms.some((form) => sameFolder2(b.folder, form))
   ) ?? bindingFor(base, principalId, folder);
 }
+var PROJECT_ACTIONS = [
+  "list",
+  "use",
+  "create",
+  "status",
+  "unbind",
+  "login"
+];
+var FOLDER_PROJECT_ACTIONS = ["unbind"];
 async function projectCommand(args, _bundledAgent, transport) {
   const requested = args.shift() ?? "status";
-  const actions = ["list", "use", "create", "status", "unbind", "login"];
-  const action = actions.includes(requested) ? requested : "use";
+  const action = PROJECT_ACTIONS.includes(requested) ? requested : "use";
   if (action === "use" && requested !== "use") args.unshift(requested);
   const parsed = (0, node_util_compat_exports.parseArgs)({
     args,
@@ -5275,7 +5374,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     throw new Error(
       "INVALID_ARGUMENT: --here and --folder apply to use, create, status and unbind."
     );
-  if (transport && (folder !== void 0 || action === "unbind"))
+  if (transport && (folder !== void 0 || FOLDER_PROJECT_ACTIONS.includes(action)))
     throw new Error(
       "AGY_PROJECT_SCOPE_UNSUPPORTED: Antigravity uses the computer-wide Memroot project."
     );
@@ -5306,7 +5405,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.21.1"}`;
+  const userAgent = `memroot-cli/${"0.22.0"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;
@@ -5321,12 +5420,22 @@ async function projectCommand(args, _bundledAgent, transport) {
     }
     return projects2;
   };
+  const remember = (projects2, extra = []) => {
+    try {
+      writeProjectList(base, projects2.principal_id, transport ? "agy" : "cli", [
+        ...projects2.projects.map((p) => p.project_id),
+        ...extra
+      ]);
+    } catch {
+    }
+  };
   const listProjects = async (via = client) => {
     if (transport) {
       const projects2 = await fetchProjects(via);
       const current = await readConfig();
       if (current.apiBase !== base || current.userId !== projects2.principal_id)
         throw new Error("AGY_ACCOUNT_MISMATCH");
+      remember(projects2);
       return projects2;
     }
     let listed;
@@ -5338,6 +5447,7 @@ async function projectCommand(args, _bundledAgent, transport) {
       },
       { switchAccount }
     );
+    remember(listed);
     return listed;
   };
   if (action === "login") {
@@ -5352,6 +5462,7 @@ async function projectCommand(args, _bundledAgent, transport) {
         return projects2.principal_id;
       });
     if (!projects2) throw new Error("PROJECT_LOGIN_FAILED");
+    if (!transport) remember(projects2);
     const { selection } = resolveSelection(base, projects2);
     console.log(
       selection ? `Project for this computer: ${JSON.stringify(selection.name)} (${selection.projectId}).` : `No project is selected on this computer yet. Choose one: ${command} use "<name>".`
@@ -5500,6 +5611,7 @@ async function projectCommand(args, _bundledAgent, transport) {
         "PROJECT_RESPONSE_INVALID: The server did not confirm this account's new project."
       );
     const createdId = created.project_id;
+    remember(projects, [createdId]);
     try {
       if (folder !== void 0) {
         bind({ project_id: createdId, name });

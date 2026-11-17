@@ -1,9 +1,577 @@
 #!/usr/bin/env node
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __commonJS = (cb, mod) => function __require() {
+  try {
+    return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
+  } catch (e) {
+    throw mod = 0, e;
+  }
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/debug.js
+var require_debug = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/debug.js"(exports, module) {
+    "use strict";
+    var debug = typeof process === "object" && process.env && process.env.NODE_DEBUG && /\bsemver\b/i.test(process.env.NODE_DEBUG) ? (...args) => console.error("SEMVER", ...args) : () => {
+    };
+    module.exports = debug;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/constants.js
+var require_constants = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/constants.js"(exports, module) {
+    "use strict";
+    var SEMVER_SPEC_VERSION = "2.0.0";
+    var MAX_LENGTH = 256;
+    var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER || /* istanbul ignore next */
+    9007199254740991;
+    var MAX_SAFE_COMPONENT_LENGTH = 16;
+    var MAX_SAFE_BUILD_LENGTH = MAX_LENGTH - 6;
+    var WHITESPACE_CHARACTERS = [
+      "	",
+      "\n",
+      "\v",
+      "\f",
+      "\r",
+      " ",
+      "\xA0",
+      "\u1680",
+      "\u2000",
+      "\u2001",
+      "\u2002",
+      "\u2003",
+      "\u2004",
+      "\u2005",
+      "\u2006",
+      "\u2007",
+      "\u2008",
+      "\u2009",
+      "\u200A",
+      "\u2028",
+      "\u2029",
+      "\u202F",
+      "\u205F",
+      "\u3000",
+      "\uFEFF"
+    ];
+    var RELEASE_TYPES = [
+      "major",
+      "premajor",
+      "minor",
+      "preminor",
+      "patch",
+      "prepatch",
+      "prerelease"
+    ];
+    module.exports = {
+      MAX_LENGTH,
+      MAX_SAFE_COMPONENT_LENGTH,
+      MAX_SAFE_BUILD_LENGTH,
+      MAX_SAFE_INTEGER,
+      WHITESPACE_CHARACTERS,
+      RELEASE_TYPES,
+      SEMVER_SPEC_VERSION,
+      FLAG_INCLUDE_PRERELEASE: 1,
+      FLAG_LOOSE: 2
+    };
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/re.js
+var require_re = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/re.js"(exports, module) {
+    "use strict";
+    var {
+      MAX_SAFE_COMPONENT_LENGTH,
+      MAX_SAFE_BUILD_LENGTH,
+      MAX_LENGTH
+    } = require_constants();
+    var debug = require_debug();
+    exports = module.exports = {};
+    var re = exports.re = [];
+    var safeRe = exports.safeRe = [];
+    var src = exports.src = [];
+    var safeSrc = exports.safeSrc = [];
+    var t = exports.t = {};
+    var R = 0;
+    var LETTERDASHNUMBER = "[a-zA-Z0-9-]";
+    var safeRegexReplacements = [
+      ["\\s", 1],
+      ["\\d", MAX_LENGTH],
+      [LETTERDASHNUMBER, MAX_SAFE_BUILD_LENGTH]
+    ];
+    var makeSafeRegex = (value) => {
+      for (const [token2, max] of safeRegexReplacements) {
+        value = value.split(`${token2}*`).join(`${token2}{0,${max}}`).split(`${token2}+`).join(`${token2}{1,${max}}`);
+      }
+      return value;
+    };
+    var createToken = (name, value, isGlobal) => {
+      const safe = makeSafeRegex(value);
+      const index = R++;
+      debug(name, index, value);
+      t[name] = index;
+      src[index] = value;
+      safeSrc[index] = safe;
+      re[index] = new RegExp(value, isGlobal ? "g" : void 0);
+      safeRe[index] = new RegExp(safe, isGlobal ? "g" : void 0);
+    };
+    createToken("NUMERICIDENTIFIER", "0|[1-9]\\d*");
+    createToken("NUMERICIDENTIFIERLOOSE", "\\d+");
+    createToken("NONNUMERICIDENTIFIER", `\\d*[a-zA-Z-]${LETTERDASHNUMBER}*`);
+    createToken("MAINVERSION", `(${src[t.NUMERICIDENTIFIER]})\\.(${src[t.NUMERICIDENTIFIER]})\\.(${src[t.NUMERICIDENTIFIER]})`);
+    createToken("MAINVERSIONLOOSE", `(${src[t.NUMERICIDENTIFIERLOOSE]})\\.(${src[t.NUMERICIDENTIFIERLOOSE]})\\.(${src[t.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASEIDENTIFIER", `(?:${src[t.NONNUMERICIDENTIFIER]}|${src[t.NUMERICIDENTIFIER]})`);
+    createToken("PRERELEASEIDENTIFIERLOOSE", `(?:${src[t.NONNUMERICIDENTIFIER]}|${src[t.NUMERICIDENTIFIERLOOSE]})`);
+    createToken("PRERELEASE", `(?:-(${src[t.PRERELEASEIDENTIFIER]}(?:\\.${src[t.PRERELEASEIDENTIFIER]})*))`);
+    createToken("PRERELEASELOOSE", `(?:-?(${src[t.PRERELEASEIDENTIFIERLOOSE]}(?:\\.${src[t.PRERELEASEIDENTIFIERLOOSE]})*))`);
+    createToken("BUILDIDENTIFIER", `${LETTERDASHNUMBER}+`);
+    createToken("BUILD", `(?:\\+(${src[t.BUILDIDENTIFIER]}(?:\\.${src[t.BUILDIDENTIFIER]})*))`);
+    createToken("FULLPLAIN", `v?${src[t.MAINVERSION]}${src[t.PRERELEASE]}?${src[t.BUILD]}?`);
+    createToken("FULL", `^${src[t.FULLPLAIN]}$`);
+    createToken("LOOSEPLAIN", `[v=\\s]*${src[t.MAINVERSIONLOOSE]}${src[t.PRERELEASELOOSE]}?${src[t.BUILD]}?`);
+    createToken("LOOSE", `^${src[t.LOOSEPLAIN]}$`);
+    createToken("GTLT", "((?:<|>)?=?)");
+    createToken("XRANGEIDENTIFIERLOOSE", `${src[t.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`);
+    createToken("XRANGEIDENTIFIER", `${src[t.NUMERICIDENTIFIER]}|x|X|\\*`);
+    createToken("XRANGEPLAIN", `[v=\\s]*(${src[t.XRANGEIDENTIFIER]})(?:\\.(${src[t.XRANGEIDENTIFIER]})(?:\\.(${src[t.XRANGEIDENTIFIER]})(?:${src[t.PRERELEASE]})?${src[t.BUILD]}?)?)?`);
+    createToken("XRANGEPLAINLOOSE", `[v=\\s]*(${src[t.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})(?:\\.(${src[t.XRANGEIDENTIFIERLOOSE]})(?:${src[t.PRERELEASELOOSE]})?${src[t.BUILD]}?)?)?`);
+    createToken("XRANGE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAIN]}$`);
+    createToken("XRANGELOOSE", `^${src[t.GTLT]}\\s*${src[t.XRANGEPLAINLOOSE]}$`);
+    createToken("COERCEPLAIN", `${"(^|[^\\d])(\\d{1,"}${MAX_SAFE_COMPONENT_LENGTH}})(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?(?:\\.(\\d{1,${MAX_SAFE_COMPONENT_LENGTH}}))?`);
+    createToken("COERCE", `${src[t.COERCEPLAIN]}(?:$|[^\\d])`);
+    createToken("COERCEFULL", src[t.COERCEPLAIN] + `(?:${src[t.PRERELEASE]})?(?:${src[t.BUILD]})?(?:$|[^\\d])`);
+    createToken("COERCERTL", src[t.COERCE], true);
+    createToken("COERCERTLFULL", src[t.COERCEFULL], true);
+    createToken("LONETILDE", "(?:~>?)");
+    createToken("TILDETRIM", `(\\s*)${src[t.LONETILDE]}\\s+`, true);
+    exports.tildeTrimReplace = "$1~";
+    createToken("TILDE", `^${src[t.LONETILDE]}${src[t.XRANGEPLAIN]}$`);
+    createToken("TILDELOOSE", `^${src[t.LONETILDE]}${src[t.XRANGEPLAINLOOSE]}$`);
+    createToken("LONECARET", "(?:\\^)");
+    createToken("CARETTRIM", `(\\s*)${src[t.LONECARET]}\\s+`, true);
+    exports.caretTrimReplace = "$1^";
+    createToken("CARET", `^${src[t.LONECARET]}${src[t.XRANGEPLAIN]}$`);
+    createToken("CARETLOOSE", `^${src[t.LONECARET]}${src[t.XRANGEPLAINLOOSE]}$`);
+    createToken("COMPARATORLOOSE", `^${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]})$|^$`);
+    createToken("COMPARATOR", `^${src[t.GTLT]}\\s*(${src[t.FULLPLAIN]})$|^$`);
+    createToken("COMPARATORTRIM", `(\\s*)${src[t.GTLT]}\\s*(${src[t.LOOSEPLAIN]}|${src[t.XRANGEPLAIN]})`, true);
+    exports.comparatorTrimReplace = "$1$2$3";
+    createToken("HYPHENRANGE", `^\\s*(${src[t.XRANGEPLAIN]})\\s+-\\s+(${src[t.XRANGEPLAIN]})\\s*$`);
+    createToken("HYPHENRANGELOOSE", `^\\s*(${src[t.XRANGEPLAINLOOSE]})\\s+-\\s+(${src[t.XRANGEPLAINLOOSE]})\\s*$`);
+    createToken("STAR", "(<|>)?=?\\s*\\*");
+    createToken("GTE0", "^\\s*>=\\s*0\\.0\\.0\\s*$");
+    createToken("GTE0PRE", "^\\s*>=\\s*0\\.0\\.0-0\\s*$");
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/parse-options.js
+var require_parse_options = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/parse-options.js"(exports, module) {
+    "use strict";
+    var looseOption = Object.freeze({ loose: true });
+    var emptyOpts = Object.freeze({});
+    var parseOptions = (options) => {
+      if (!options) {
+        return emptyOpts;
+      }
+      if (typeof options !== "object") {
+        return looseOption;
+      }
+      return options;
+    };
+    module.exports = parseOptions;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/identifiers.js
+var require_identifiers = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/internal/identifiers.js"(exports, module) {
+    "use strict";
+    var numeric = /^[0-9]+$/;
+    var compareIdentifiers = (a, b) => {
+      if (typeof a === "number" && typeof b === "number") {
+        return a === b ? 0 : a < b ? -1 : 1;
+      }
+      const anum = numeric.test(a);
+      const bnum = numeric.test(b);
+      if (anum && bnum) {
+        a = +a;
+        b = +b;
+      }
+      return a === b ? 0 : anum && !bnum ? -1 : bnum && !anum ? 1 : a < b ? -1 : 1;
+    };
+    var rcompareIdentifiers = (a, b) => compareIdentifiers(b, a);
+    module.exports = {
+      compareIdentifiers,
+      rcompareIdentifiers
+    };
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/classes/semver.js
+var require_semver = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/classes/semver.js"(exports, module) {
+    "use strict";
+    var debug = require_debug();
+    var { MAX_LENGTH, MAX_SAFE_INTEGER } = require_constants();
+    var { safeRe: re, t } = require_re();
+    var parseOptions = require_parse_options();
+    var { compareIdentifiers } = require_identifiers();
+    var isPrereleaseIdentifier = (prerelease, identifier) => {
+      const identifiers = identifier.split(".");
+      if (identifiers.length > prerelease.length) {
+        return false;
+      }
+      for (let i = 0; i < identifiers.length; i++) {
+        if (compareIdentifiers(prerelease[i], identifiers[i]) !== 0) {
+          return false;
+        }
+      }
+      return true;
+    };
+    var SemVer = class _SemVer {
+      constructor(version2, options) {
+        options = parseOptions(options);
+        if (version2 instanceof _SemVer) {
+          if (version2.loose === !!options.loose && version2.includePrerelease === !!options.includePrerelease) {
+            return version2;
+          } else {
+            version2 = version2.version;
+          }
+        } else if (typeof version2 !== "string") {
+          throw new TypeError(`Invalid version. Must be a string. Got type "${typeof version2}".`);
+        }
+        if (version2.length > MAX_LENGTH) {
+          throw new TypeError(
+            `version is longer than ${MAX_LENGTH} characters`
+          );
+        }
+        debug("SemVer", version2, options);
+        this.options = options;
+        this.loose = !!options.loose;
+        this.includePrerelease = !!options.includePrerelease;
+        const m = version2.trim().match(options.loose ? re[t.LOOSE] : re[t.FULL]);
+        if (!m) {
+          throw new TypeError(`Invalid Version: ${version2}`);
+        }
+        this.raw = version2;
+        this.major = +m[1];
+        this.minor = +m[2];
+        this.patch = +m[3];
+        if (this.major > MAX_SAFE_INTEGER || this.major < 0) {
+          throw new TypeError("Invalid major version");
+        }
+        if (this.minor > MAX_SAFE_INTEGER || this.minor < 0) {
+          throw new TypeError("Invalid minor version");
+        }
+        if (this.patch > MAX_SAFE_INTEGER || this.patch < 0) {
+          throw new TypeError("Invalid patch version");
+        }
+        if (!m[4]) {
+          this.prerelease = [];
+        } else {
+          this.prerelease = m[4].split(".").map((id) => {
+            if (/^[0-9]+$/.test(id)) {
+              const num = +id;
+              if (num >= 0 && num < MAX_SAFE_INTEGER) {
+                return num;
+              }
+            }
+            return id;
+          });
+        }
+        this.build = m[5] ? m[5].split(".") : [];
+        this.format();
+      }
+      format() {
+        this.version = `${this.major}.${this.minor}.${this.patch}`;
+        if (this.prerelease.length) {
+          this.version += `-${this.prerelease.join(".")}`;
+        }
+        return this.version;
+      }
+      toString() {
+        return this.version;
+      }
+      compare(other) {
+        debug("SemVer.compare", this.version, this.options, other);
+        if (!(other instanceof _SemVer)) {
+          if (typeof other === "string" && other === this.version) {
+            return 0;
+          }
+          other = new _SemVer(other, this.options);
+        }
+        if (other.version === this.version) {
+          return 0;
+        }
+        return this.compareMain(other) || this.comparePre(other);
+      }
+      compareMain(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        if (this.major < other.major) {
+          return -1;
+        }
+        if (this.major > other.major) {
+          return 1;
+        }
+        if (this.minor < other.minor) {
+          return -1;
+        }
+        if (this.minor > other.minor) {
+          return 1;
+        }
+        if (this.patch < other.patch) {
+          return -1;
+        }
+        if (this.patch > other.patch) {
+          return 1;
+        }
+        return 0;
+      }
+      comparePre(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        if (this.prerelease.length && !other.prerelease.length) {
+          return -1;
+        } else if (!this.prerelease.length && other.prerelease.length) {
+          return 1;
+        } else if (!this.prerelease.length && !other.prerelease.length) {
+          return 0;
+        }
+        let i = 0;
+        do {
+          const a = this.prerelease[i];
+          const b = other.prerelease[i];
+          debug("prerelease compare", i, a, b);
+          if (a === void 0 && b === void 0) {
+            return 0;
+          } else if (b === void 0) {
+            return 1;
+          } else if (a === void 0) {
+            return -1;
+          } else if (a === b) {
+            continue;
+          } else {
+            return compareIdentifiers(a, b);
+          }
+        } while (++i);
+      }
+      compareBuild(other) {
+        if (!(other instanceof _SemVer)) {
+          other = new _SemVer(other, this.options);
+        }
+        let i = 0;
+        do {
+          const a = this.build[i];
+          const b = other.build[i];
+          debug("build compare", i, a, b);
+          if (a === void 0 && b === void 0) {
+            return 0;
+          } else if (b === void 0) {
+            return 1;
+          } else if (a === void 0) {
+            return -1;
+          } else if (a === b) {
+            continue;
+          } else {
+            return compareIdentifiers(a, b);
+          }
+        } while (++i);
+      }
+      // preminor will bump the version up to the next minor release, and immediately
+      // down to pre-release. premajor and prepatch work the same way.
+      inc(release, identifier, identifierBase) {
+        if (release.startsWith("pre")) {
+          if (!identifier && identifierBase === false) {
+            throw new Error("invalid increment argument: identifier is empty");
+          }
+          if (identifier) {
+            const match2 = `-${identifier}`.match(this.options.loose ? re[t.PRERELEASELOOSE] : re[t.PRERELEASE]);
+            if (!match2 || match2[1] !== identifier) {
+              throw new Error(`invalid identifier: ${identifier}`);
+            }
+          }
+        }
+        switch (release) {
+          case "premajor":
+            this.prerelease.length = 0;
+            this.patch = 0;
+            this.minor = 0;
+            this.major++;
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "preminor":
+            this.prerelease.length = 0;
+            this.patch = 0;
+            this.minor++;
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "prepatch":
+            this.prerelease.length = 0;
+            this.inc("patch", identifier, identifierBase);
+            this.inc("pre", identifier, identifierBase);
+            break;
+          // If the input is a non-prerelease version, this acts the same as
+          // prepatch.
+          case "prerelease":
+            if (this.prerelease.length === 0) {
+              this.inc("patch", identifier, identifierBase);
+            }
+            this.inc("pre", identifier, identifierBase);
+            break;
+          case "release":
+            if (this.prerelease.length === 0) {
+              throw new Error(`version ${this.raw} is not a prerelease`);
+            }
+            this.prerelease.length = 0;
+            break;
+          case "major":
+            if (this.minor !== 0 || this.patch !== 0 || this.prerelease.length === 0) {
+              this.major++;
+            }
+            this.minor = 0;
+            this.patch = 0;
+            this.prerelease = [];
+            break;
+          case "minor":
+            if (this.patch !== 0 || this.prerelease.length === 0) {
+              this.minor++;
+            }
+            this.patch = 0;
+            this.prerelease = [];
+            break;
+          case "patch":
+            if (this.prerelease.length === 0) {
+              this.patch++;
+            }
+            this.prerelease = [];
+            break;
+          // This probably shouldn't be used publicly.
+          // 1.0.0 'pre' would become 1.0.0-0 which is the wrong direction.
+          case "pre": {
+            const base = Number(identifierBase) ? 1 : 0;
+            if (this.prerelease.length === 0) {
+              this.prerelease = [base];
+            } else {
+              let i = this.prerelease.length;
+              while (--i >= 0) {
+                if (typeof this.prerelease[i] === "number") {
+                  this.prerelease[i]++;
+                  i = -2;
+                }
+              }
+              if (i === -1) {
+                if (identifier === this.prerelease.join(".") && identifierBase === false) {
+                  throw new Error("invalid increment argument: identifier already exists");
+                }
+                this.prerelease.push(base);
+              }
+            }
+            if (identifier) {
+              let prerelease = [identifier, base];
+              if (identifierBase === false) {
+                prerelease = [identifier];
+              }
+              if (isPrereleaseIdentifier(this.prerelease, identifier)) {
+                const prereleaseBase = this.prerelease[identifier.split(".").length];
+                if (isNaN(prereleaseBase)) {
+                  this.prerelease = prerelease;
+                }
+              } else {
+                this.prerelease = prerelease;
+              }
+            }
+            break;
+          }
+          default:
+            throw new Error(`invalid increment argument: ${release}`);
+        }
+        this.raw = this.format();
+        if (this.build.length) {
+          this.raw += `+${this.build.join(".")}`;
+        }
+        return this;
+      }
+    };
+    module.exports = SemVer;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/compare.js
+var require_compare = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/compare.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var compare2 = (a, b, loose) => new SemVer(a, loose).compare(new SemVer(b, loose));
+    module.exports = compare2;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/parse.js
+var require_parse = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/parse.js"(exports, module) {
+    "use strict";
+    var SemVer = require_semver();
+    var parse3 = (version2, options, throwErrors = false) => {
+      if (version2 instanceof SemVer) {
+        return version2;
+      }
+      try {
+        return new SemVer(version2, options);
+      } catch (er) {
+        if (!throwErrors) {
+          return null;
+        }
+        throw er;
+      }
+    };
+    module.exports = parse3;
+  }
+});
+
+// ../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/valid.js
+var require_valid = __commonJS({
+  "../../node_modules/.pnpm/semver@7.8.6/node_modules/semver/functions/valid.js"(exports, module) {
+    "use strict";
+    var parse3 = require_parse();
+    var valid3 = (version2, options) => {
+      const v = parse3(version2, options);
+      return v ? v.version : null;
+    };
+    module.exports = valid3;
+  }
+});
 
 // src/agents/agy/hooks.ts
-import { lstatSync as lstatSync7 } from "node:fs";
-import { homedir as homedir3, tmpdir } from "node:os";
-import { isAbsolute as isAbsolute3, join as join11, normalize as normalize4 } from "node:path";
+import { lstatSync as lstatSync8 } from "node:fs";
+import { homedir as homedir4, tmpdir } from "node:os";
+import { isAbsolute as isAbsolute4, join as join15, normalize as normalize4 } from "node:path";
 
 // ../../packages/contracts/src/mcp-tool-names-v1.ts
 var MCP_PROJECT_TOOL_NAMES_V1 = [
@@ -408,7 +976,7 @@ function upsert(store, input) {
   const key = selectionKey(input.apiBase, input.principalId);
   const prior = store[key];
   const same = prior?.projectId === input.projectId && prior.tenantId === input.tenantId;
-  const record2 = {
+  const record3 = {
     apiBase: normalizeApiBase(input.apiBase),
     principalId: input.principalId.toLowerCase(),
     tenantId: input.tenantId,
@@ -418,16 +986,16 @@ function upsert(store, input) {
     selectedAt: (/* @__PURE__ */ new Date()).toISOString(),
     source: input.source
   };
-  if (!valid(record2))
+  if (!valid(record3))
     throw new Error("PROJECT_SELECTION_INVALID: Refusing an invalid record.");
-  store[key] = record2;
+  store[key] = record3;
   const keys = Object.keys(store);
   if (keys.length > MAX_RECORDS)
     for (const old of keys.sort(
       (x, y) => (store[x]?.selectedAt ?? "").localeCompare(store[y]?.selectedAt ?? "")
     ).slice(0, keys.length - MAX_RECORDS))
       delete store[old];
-  return record2;
+  return record3;
 }
 function offlineIdentity(recordedOnly = false) {
   let apiBase = PROD_API_BASE;
@@ -655,7 +1223,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.21.1"} project`;
+  return `npx -y memroot@${"0.22.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -1831,10 +2399,10 @@ function patchText(value) {
 function editTargets(input) {
   if (!input || typeof input !== "object" || Array.isArray(input))
     return void 0;
-  const record2 = input;
-  const path = record2.file_path ?? record2.notebook_path;
+  const record3 = input;
+  const path = record3.file_path ?? record3.notebook_path;
   if (typeof path === "string" && path) return [path];
-  const patch = patchText(record2.command) ?? patchText(record2.input);
+  const patch = patchText(record3.command) ?? patchText(record3.input);
   if (patch === void 0) return void 0;
   const files = patchedFiles(patch).map((file) => file.path);
   return files.length > 0 ? files : void 0;
@@ -1876,22 +2444,380 @@ function mutatingShellCommand(command, scope2 = { tempDirs: DEFAULT_TEMP_DIRS })
   return INLINE_SCRIPT.test(command) && WRITE_API.test(command);
 }
 
-// src/agents/agy/config.ts
-import { homedir as homedir2 } from "node:os";
+// src/project/list.ts
 import { join as join10 } from "node:path";
+
+// src/project/target.ts
+var UUID3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+var NIL = "00000000-0000-0000-0000-000000000000";
+var MAX = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+function projectIdShape(value) {
+  if (typeof value !== "string" || !UUID3.test(value)) return false;
+  const id = value.toLowerCase();
+  return id !== NIL && id !== MAX;
+}
+function knownProjectIds(input) {
+  const ids = [
+    input.computer,
+    ...input.bindings.filter((b) => !b.stale).map((b) => b.projectId),
+    ...input.listed
+  ];
+  return new Set(ids.filter(projectIdShape).map((id) => id.toLowerCase()));
+}
+function classifyProjectId(value, selectedId, known) {
+  if (typeof value !== "string" || !UUID3.test(value)) return "malformed";
+  const id = value.toLowerCase();
+  if (id === selectedId.toLowerCase()) return "selected";
+  if (id === NIL || id === MAX) return "nil";
+  return known.has(id) ? "known_other" : "unknown";
+}
+
+// src/project/list.ts
+var PROJECT_LIST_FILE = "project-list.json";
+var SOURCES = ["cli", "agy"];
+var MAX_FILE_BYTES3 = 128 * 1024;
+var MAX_LISTED_IDS = 100;
+var MAX_IDS = MAX_LISTED_IDS;
+var FUTURE_SKEW_MS = 5 * 6e4;
+var PROJECT_LIST_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1e3;
+function freshListing(listedAt, now) {
+  const age = now - Date.parse(listedAt);
+  return age >= -FUTURE_SKEW_MS && age <= PROJECT_LIST_MAX_AGE_MS;
+}
+function projectListPath() {
+  return join10(memrootConfigDir(), PROJECT_LIST_FILE);
+}
+function validSource(value) {
+  const v = value;
+  return !!v && typeof v === "object" && typeof v.listedAt === "string" && !Number.isNaN(Date.parse(v.listedAt)) && Array.isArray(v.projectIds) && v.projectIds.length <= MAX_IDS && v.projectIds.every(projectIdShape);
+}
+function readStore3() {
+  let raw;
+  try {
+    raw = readPrivateFileIfExists(projectListPath(), MAX_FILE_BYTES3);
+  } catch {
+    return void 0;
+  }
+  if (raw === void 0) return { store: {}, present: false };
+  try {
+    const value = JSON.parse(raw);
+    if (value?.schemaVersion !== 1 || !value.lists || typeof value.lists !== "object" || Array.isArray(value.lists))
+      return void 0;
+    const store = {};
+    for (const [key, entry] of Object.entries(
+      value.lists
+    )) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+      const account = {};
+      for (const source of SOURCES) {
+        const list = entry[source];
+        if (validSource(list))
+          account[source] = {
+            listedAt: list.listedAt,
+            projectIds: list.projectIds.map((id) => id.toLowerCase())
+          };
+      }
+      store[key] = account;
+    }
+    return { store, present: true };
+  } catch {
+    return void 0;
+  }
+}
+function readListedProjectIds(apiBase, principalId, now = Date.now()) {
+  if (!principalId || !isAllowedApiBase(apiBase)) return [];
+  const account = readStore3()?.store[selectionKey(apiBase, principalId)];
+  if (!account) return [];
+  const ids = /* @__PURE__ */ new Set();
+  for (const source of SOURCES) {
+    const list = account[source];
+    if (list && freshListing(list.listedAt, now))
+      for (const id of list.projectIds) ids.add(id);
+  }
+  return [...ids];
+}
+function localKnownProjectIds(apiBase) {
+  try {
+    const identity = offlineIdentity();
+    const base = normalizeApiBase(apiBase ?? identity.apiBase);
+    if (!identity.userId || !isAllowedApiBase(base)) return /* @__PURE__ */ new Set();
+    const read = (value, fallback) => {
+      try {
+        return value();
+      } catch {
+        return fallback;
+      }
+    };
+    return knownProjectIds({
+      computer: read(() => readSelection(base, identity.userId), void 0)?.projectId,
+      bindings: read(() => readBindings(base, identity.userId), []),
+      listed: readListedProjectIds(base, identity.userId)
+    });
+  } catch {
+    return /* @__PURE__ */ new Set();
+  }
+}
+function retrieveTarget(args, cwd) {
+  try {
+    const selected = effectiveProject(cwd);
+    if (!selected || selected.stale) return void 0;
+    return classifyProjectId(
+      args?.project_id,
+      selected.projectId,
+      localKnownProjectIds(selected.apiBase)
+    );
+  } catch {
+    return void 0;
+  }
+}
+
+// src/agents/agy/config.ts
+import { lstatSync as lstatSync7 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { join as join11 } from "node:path";
 function agyGeminiDir() {
-  return join10(homedir2(), ".gemini");
+  return join11(homedir2(), ".gemini");
 }
 function agyConfigDir() {
-  return join10(agyGeminiDir(), "config");
+  return join11(agyGeminiDir(), "config");
+}
+function assertAgyConfigDirectories() {
+  for (const path of [
+    agyGeminiDir(),
+    agyConfigDir(),
+    join11(agyConfigDir(), "plugins")
+  ]) {
+    try {
+      const info = lstatSync7(path);
+      if (!info.isDirectory() || info.isSymbolicLink()) throw new Error();
+    } catch (error) {
+      if (error.code !== "ENOENT")
+        throw new Error(
+          "UNSAFE_PATH: Antigravity config must use real directories."
+        );
+    }
+  }
+}
+
+// src/agents/agy/install.ts
+import { join as join14 } from "node:path";
+
+// src/state/config.ts
+import {
+  chmod,
+  lstat as lstat2,
+  readFile as readFile2,
+  rename as rename2,
+  rm as rm2,
+  writeFile as writeFile2
+} from "node:fs/promises";
+import { join as join13 } from "node:path";
+
+// src/state/storage.ts
+import {
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  writeFile
+} from "node:fs/promises";
+import { homedir as homedir3 } from "node:os";
+import { dirname as dirname5, isAbsolute as isAbsolute3, join as join12 } from "node:path";
+function dataDirectory() {
+  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join12(homedir3(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join12(homedir3(), ".local", "share");
+  if (!isAbsolute3(base))
+    throw new Error(
+      "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
+    );
+  return join12(base, "memroot");
+}
+async function safeDirectory(path) {
+  const boundary = dataDirectory();
+  if (path !== boundary && path.startsWith(`${boundary}/`))
+    await safeDirectory(dirname5(path));
+  await mkdir(path, { recursive: true, mode: 448 });
+  const info = await lstat(path);
+  if (!info.isDirectory() || info.isSymbolicLink())
+    throw new Error(`UNSAFE_PATH: Expected a real directory at ${path}.`);
+}
+
+// src/state/config.ts
+function configDirectory() {
+  return memrootConfigDir();
+}
+function configPath() {
+  return join13(configDirectory(), "config.json");
+}
+function optionalString(value) {
+  return typeof value === "string" && value.length > 0 ? value : void 0;
+}
+function containsCredential(value) {
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(
+    ([key, entry]) => /token|secret|password|credential|api[_-]?key/i.test(key) || containsCredential(entry)
+  );
+}
+async function migrateLegacy(record3, raw) {
+  if (!(typeof record3.user_id === "string" || typeof record3.email === "string") || containsCredential(record3) || record3.apiBase !== void 0 && (typeof record3.apiBase !== "string" || !isAllowedApiBase(record3.apiBase)))
+    throw new Error(
+      "INVALID_CONFIG: Legacy config cannot be safely migrated. No credentials were imported."
+    );
+  await safeDirectory(configDirectory());
+  const backup = `${configPath()}.legacy-backup`;
+  try {
+    await writeFile2(backup, raw, { flag: "wx", mode: 384 });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    const info = await lstat2(backup);
+    if (!info.isFile() || info.isSymbolicLink() || await readFile2(backup, "utf8") !== raw)
+      throw new Error(
+        "INVALID_CONFIG: Legacy backup differs or is unsafe. Original config was preserved."
+      );
+    await chmod(backup, 384);
+  }
+  return { schemaVersion: 1 };
+}
+async function readConfig() {
+  const path = configPath();
+  let raw;
+  try {
+    const info = await lstat2(path);
+    if (!info.isFile() || info.isSymbolicLink())
+      throw new Error("INVALID_CONFIG: Expected a regular config file.");
+    raw = await readFile2(path, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT")
+      return { schemaVersion: 1 };
+    throw error;
+  }
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error(
+      "INVALID_CONFIG: ~/.memroot/config.json is not valid JSON. Fix or remove it."
+    );
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("INVALID_CONFIG: Cannot safely read CLI config.");
+  const record3 = value;
+  if (record3.schemaVersion === void 0) return migrateLegacy(record3, raw);
+  const apiBase = optionalString(record3.apiBase);
+  if (record3.schemaVersion !== 1 || apiBase && !isAllowedApiBase(apiBase))
+    throw new Error("INVALID_CONFIG: Cannot safely read CLI config.");
+  const config = { schemaVersion: 1 };
+  if (apiBase) config.apiBase = apiBase;
+  const clientId = optionalString(record3.clientId);
+  if (clientId) config.clientId = clientId;
+  const clientIdApiBase = optionalString(record3.clientIdApiBase);
+  if (clientIdApiBase) config.clientIdApiBase = clientIdApiBase;
+  const userId = optionalString(record3.userId);
+  if (userId) config.userId = userId;
+  const mcp = record3.mcpRegistered;
+  if (mcp && typeof mcp === "object" && !Array.isArray(mcp)) {
+    const registered = {};
+    if (mcp.claude === true)
+      registered.claude = true;
+    if (mcp.codex === true)
+      registered.codex = true;
+    if (mcp.grok === true) registered.grok = true;
+    if (mcp.agy === true) registered.agy = true;
+    if (registered.claude || registered.codex || registered.grok || registered.agy)
+      config.mcpRegistered = registered;
+  }
+  const stamps = record3.instructionsInstalled;
+  if (stamps && typeof stamps === "object" && !Array.isArray(stamps)) {
+    const installed = {};
+    for (const key of ["claude", "codex", "grok", "agy"]) {
+      const value2 = optionalString(stamps[key]);
+      if (value2) installed[key] = value2;
+    }
+    if (installed.claude || installed.codex || installed.grok || installed.agy)
+      config.instructionsInstalled = installed;
+  }
+  const banner = optionalString(record3.importBannerShown);
+  if (banner) config.importBannerShown = banner;
+  const agy = record3.agyMcpClient;
+  if (agy && typeof agy === "object" && !Array.isArray(agy)) {
+    const value2 = agy;
+    if (typeof value2.apiBase === "string" && isAllowedApiBase(value2.apiBase) && typeof value2.clientId === "string" && /^[A-Za-z0-9._:-]{1,256}$/u.test(value2.clientId) && typeof value2.principalId === "string" && /^[a-f0-9-]{36}$/iu.test(value2.principalId))
+      config.agyMcpClient = {
+        apiBase: value2.apiBase,
+        clientId: value2.clientId,
+        principalId: value2.principalId
+      };
+  }
+  const registration = record3.agyMcpRegistration;
+  if (registration && typeof registration === "object" && !Array.isArray(registration)) {
+    const value2 = registration;
+    if (typeof value2.command === "string" && value2.command.startsWith("/") && value2.command.length <= 4096 && !value2.command.includes("\0") && typeof value2.script === "string" && value2.script.startsWith("/") && value2.script.length <= 4096 && !value2.script.includes("\0"))
+      config.agyMcpRegistration = {
+        command: value2.command,
+        script: value2.script
+      };
+  }
+  return config;
+}
+
+// src/commands/global-cli.ts
+var import_compare = __toESM(require_compare(), 1);
+var import_valid = __toESM(require_valid(), 1);
+
+// ../../node_modules/.pnpm/smol-toml@1.9.1/node_modules/smol-toml/dist/stringify.js
+var HAS_WELLFORMED = !!"".isWellFormed;
+
+// src/agents/agy/install.ts
+function record(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+}
+function readAgyServers() {
+  assertAgyConfigDirectories();
+  const raw = readPrivateFileIfExists(
+    join14(agyConfigDir(), "mcp_config.json"),
+    1024 * 1024
+  );
+  if (raw === void 0) return {};
+  let config;
+  try {
+    config = record(JSON.parse(raw));
+  } catch {
+  }
+  if (!config || config.mcpServers !== void 0 && !record(config.mcpServers))
+    throw new Error(
+      "MCP_CONFLICT: Antigravity MCP config is malformed; no settings changed."
+    );
+  return record(config.mcpServers) ?? {};
+}
+var nativeStdioKeys = ["command", "args", "disabled"];
+function stdioMatch(server, registration) {
+  const row = record(server);
+  const same = Boolean(
+    row && row.command === registration.command && Array.isArray(row.args) && row.args.length === 1 && row.args[0] === registration.script && (row.disabled === void 0 || row.disabled === false)
+  );
+  return {
+    same,
+    extra: same && row ? Object.keys(row).filter((key) => !nativeStdioKeys.includes(key)).sort() : []
+  };
+}
+async function managedAgyStdioActive() {
+  try {
+    const recorded = (await readConfig()).agyMcpRegistration;
+    if (!recorded?.script.startsWith(`${join14(dataDirectory(), "releases")}/`) || !recorded.script.endsWith("/agy/scripts/mcp-stdio.mjs"))
+      return false;
+    return stdioMatch(readAgyServers().memroot, recorded).same;
+  } catch {
+    return false;
+  }
 }
 
 // src/agents/agy/hooks.ts
 var eventName = process.argv[2];
-var record = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
+var record2 = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : void 0;
 var token = (value) => typeof value === "string" && /^(?!\.+$)[A-Za-z0-9._:-]{1,128}$/u.test(value);
 function turnFile(session) {
-  return join11(
+  return join15(
     stateSubdir("agy-turn"),
     `${sessionRefFor(readOrCreateSalt(), "agy", session).slice(0, 32)}.json`
   );
@@ -1899,7 +2825,7 @@ function turnFile(session) {
 function readTurn(session) {
   const raw = readPrivateFileIfExists(turnFile(session), 1024);
   if (raw) {
-    const value = record(JSON.parse(raw));
+    const value = record2(JSON.parse(raw));
     if (value?.v === 1 && typeof value.open === "boolean" && typeof value.failure === "boolean" && typeof value.mirror === "boolean" && typeof value.gate === "boolean" && Number.isSafeInteger(value.lastStartStep) && value.lastStartStep >= -1)
       return {
         v: 1,
@@ -1926,10 +2852,10 @@ function writeTurn(session, turn) {
   const directory = stateSubdir("agy-turn");
   for (const name of listFiles(directory).slice(0, 512)) {
     if (!/^[a-f0-9]{32}\.json$/u.test(name)) continue;
-    const path = join11(directory, name);
+    const path = join15(directory, name);
     if (path === target) continue;
     try {
-      if (lstatSync7(path).mtimeMs < Date.now() - 14 * 864e5)
+      if (lstatSync8(path).mtimeMs < Date.now() - 14 * 864e5)
         removeFile(path);
     } catch {
     }
@@ -1949,21 +2875,32 @@ function decision(value, reason, overwrite) {
   );
 }
 function memrootCall(event) {
-  const call = record(event.toolCall);
-  const args = record(call?.args);
+  const call = record2(event.toolCall);
+  const args = record2(call?.args);
   if (!call || typeof call.name !== "string") return void 0;
   if (call.name === "call_mcp_tool") {
     if (args?.ServerName !== "memroot" || typeof args.ToolName !== "string")
       return void 0;
-    return { name: args.ToolName, args: record(args.Arguments), lazy: true };
+    return { name: args.ToolName, args: record2(args.Arguments), lazy: true };
   }
   const match2 = call.name.match(/^mcp_memroot_([a-z_]+)$/u);
   return match2 ? { name: match2[1], args, lazy: false } : void 0;
 }
+function checksThisProject(args) {
+  return retrieveTarget(args, void 0) !== "known_other";
+}
+function otherProjectId(args) {
+  try {
+    const selected = currentSelection();
+    return projectIdShape(args.project_id) && args.project_id.toLowerCase() !== selected?.projectId.toLowerCase();
+  } catch {
+    return false;
+  }
+}
 function unparsed(args) {
   return "__unparsedToolInput" in args || "raw" in args && "len" in args;
 }
-function guard(event) {
+async function guard(event) {
   const tool = memrootCall(event);
   if (!tool) return false;
   const known = [
@@ -2006,6 +2943,13 @@ function guard(event) {
     );
     return true;
   }
+  if (tool.name === "memory_retrieve" && projectIdShape(tool.args.project_id) && tool.args.project_id.toLowerCase() !== selected.projectId.toLowerCase() && await managedAgyStdioActive()) {
+    decision(
+      "auto_approve",
+      "Memroot search; the Memroot connection checks the project it names."
+    );
+    return true;
+  }
   const args = { ...tool.args, project_id: selected.projectId };
   decision(
     "auto_approve",
@@ -2015,7 +2959,7 @@ function guard(event) {
   return true;
 }
 function absolute2(value) {
-  return typeof value === "string" && value.length <= 4096 && !value.includes("\0") && isAbsolute3(value) ? value : void 0;
+  return typeof value === "string" && value.length <= 4096 && !value.includes("\0") && isAbsolute4(value) ? value : void 0;
 }
 function ownMemory(path, event) {
   const target = normalize4(path);
@@ -2025,7 +2969,7 @@ function ownMemory(path, event) {
     [agyConfigDir(), true],
     ...workspaces.flatMap((root) => [
       [root, false],
-      [join11(root, ".agents"), true]
+      [join15(root, ".agents"), true]
     ])
   ];
   for (const [root, extended] of roots) {
@@ -2048,10 +2992,10 @@ function scope(event, args) {
     scratchpadDir: absolute2(event.artifactDirectoryPath),
     tempDirs: usableTempRoots(
       [tmpdir(), process.env.TMPDIR],
-      homedir3(),
+      homedir4(),
       projectDir
     ),
-    home: homedir3(),
+    home: homedir4(),
     ownMemory: (path) => ownMemory(path, event)
   };
 }
@@ -2064,8 +3008,8 @@ var FILE_WRITES = /* @__PURE__ */ new Set([
   "notebook_edit"
 ]);
 function isChange(event) {
-  const call = record(event.toolCall);
-  const args = record(call?.args) ?? {};
+  const call = record2(event.toolCall);
+  const args = record2(call?.args) ?? {};
   if (call?.name === "run_command")
     return mutatingShellCommand(
       typeof args.CommandLine === "string" ? args.CommandLine : void 0,
@@ -2077,8 +3021,8 @@ function isChange(event) {
   );
 }
 function mirrorWrite(event) {
-  const call = record(event.toolCall);
-  const args = record(call?.args) ?? {};
+  const call = record2(event.toolCall);
+  const args = record2(call?.args) ?? {};
   if (typeof event.error === "string" && event.error) return false;
   const writeScope = scope(event, args);
   if (call?.name === "run_command" && typeof args.CommandLine === "string")
@@ -2093,9 +3037,9 @@ function mirrorWrite(event) {
 async function main() {
   const event = await readEnvelope();
   if (!event || inertProcess()) return;
-  if (eventName === "PreToolUse" && guard(event)) {
+  if (eventName === "PreToolUse" && await guard(event)) {
     const tool = memrootCall(event);
-    if (!processGuard() && mcpRegistered("agy") && token(event.conversationId) && tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args))
+    if (!processGuard() && mcpRegistered("agy") && token(event.conversationId) && tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args) && !otherProjectId(tool.args))
       noteCheck("agy", event.conversationId, { started: true });
     return;
   }
@@ -2174,13 +3118,13 @@ async function main() {
   }
   if (eventName === "PostToolUse") {
     const tool = memrootCall(event);
-    if (tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args))
+    if (tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args) && checksThisProject(tool.args))
       noteCheck("agy", session, {
         failed: Boolean(event.error),
         quotaExhausted: typeof event.error === "string" && /usage_limit_exceeded/u.test(event.error)
       });
     if (!mainTurn) return;
-    const failed = record(event.toolCall)?.name === "run_command" && typeof event.error === "string" && event.error.length > 0;
+    const failed = record2(event.toolCall)?.name === "run_command" && typeof event.error === "string" && event.error.length > 0;
     writeTurn(session, {
       ...turn,
       failure: turn.failure || failed,
@@ -2216,3 +3160,42 @@ async function main() {
 process.stdout.on("error", () => process.exit(0));
 main().catch(() => {
 }).finally(() => process.exit(0));
+/*! Bundled license information:
+
+smol-toml/dist/error.js:
+smol-toml/dist/primitive.js:
+smol-toml/dist/date.js:
+smol-toml/dist/extract.js:
+smol-toml/dist/util.js:
+smol-toml/dist/struct.js:
+smol-toml/dist/parse.js:
+smol-toml/dist/stringify.js:
+smol-toml/dist/index.js:
+  (*!
+   * Copyright (c) Squirrel Chat et al., All rights reserved.
+   * SPDX-License-Identifier: BSD-3-Clause
+   *
+   * Redistribution and use in source and binary forms, with or without
+   * modification, are permitted provided that the following conditions are met:
+   *
+   * 1. Redistributions of source code must retain the above copyright notice, this
+   *    list of conditions and the following disclaimer.
+   * 2. Redistributions in binary form must reproduce the above copyright notice,
+   *    this list of conditions and the following disclaimer in the
+   *    documentation and/or other materials provided with the distribution.
+   * 3. Neither the name of the copyright holder nor the names of its contributors
+   *    may be used to endorse or promote products derived from this software without
+   *    specific prior written permission.
+   *
+   * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+   * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+   * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+   * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+   * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+   * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+   * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+   * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+   * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+   * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+   *)
+*/
