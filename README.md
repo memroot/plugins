@@ -4,7 +4,7 @@
 
 Persistent engineering memory for Claude Code, Codex, Grok and Antigravity CLI. Keep project decisions, conventions, root causes and lessons available across coding sessions and agents.
 
-This is Memroot's official **plugin distribution repository**. It contains the built plugins from the published `memroot` npm package, three native marketplace catalogs, and the tooling that verifies and publishes them. The application source is maintained separately.
+This is Memroot's official **plugin distribution repository**. It contains the built plugins from the published `memroot` npm package (Claude Code, Codex, Grok and Antigravity CLI), three native marketplace catalogs for Claude Code, Codex and Grok, and the tooling that verifies and publishes them. The application source is maintained separately.
 
 ## Quick start
 
@@ -21,6 +21,7 @@ Setup detects your agents, previews the installation, registers this remote mark
 | Claude Code | Run `/mcp` and authorize `memroot`. |
 | Codex | Complete the browser sign-in during setup, then review and trust the Memroot hooks in `/hooks`. |
 | Grok | Run `/mcps`, select `memroot`, and press `i` to authorize. |
+| Antigravity CLI | Run `npx memroot@latest agy login` in a terminal for its separate Memroot browser consent. Requires agy 1.4.12 or later. See [Antigravity CLI](#antigravity-cli). |
 
 > **Codex:** plugin support is a Codex feature and must be enabled. If `codex plugin list` fails or setup cannot find the plugin manager, run `codex features enable plugins` and restart Codex, then re-run `npx memroot@latest setup`.
 
@@ -35,22 +36,23 @@ An existing disabled plugin or explicit update opt-out stays disabled. A conflic
 
 ## Antigravity CLI
 
-Install Antigravity CLI 1.4.12 or later and Node.js 22 or later on macOS or Linux. Install [Memroot 0.18.0](https://www.npmjs.com/package/memroot/v/0.18.0), set up its verified npm-bundled plugin, then authorize the separate Memroot connection in a terminal:
+Install Antigravity CLI 1.4.12 or later and Node.js 22 or later on macOS or Linux. Setup installs the verified npm-bundled plugin (`plugins/agy`) with Antigravity's native plugin manager, not from a marketplace catalog. Then authorize the separate Memroot connection in a terminal:
 
 ```sh
-npm install -g memroot@0.18.0
-memroot setup --agent agy --yes
-memroot agy login
+npx memroot@latest setup --agent agy --yes
+npx memroot@latest agy login
 ```
 
-Start a new Antigravity session after signing in. The bundled adapter uses your computer-wide Memroot project for project-bound tools. It refuses those calls if your account has a stale binding, a binding to a different project, or unreadable binding data. Some child contexts omit plugin hooks, and shell-failure reminders depend on errors reported by Antigravity. Session capture and memory import are unavailable for Antigravity.
+Restart Antigravity after signing in. The bundled adapter uses your computer-wide Memroot project for project-bound tools. It refuses those calls if your account has a stale binding, a binding to a different project, or unreadable binding data. Some child contexts omit plugin hooks, and shell-failure reminders depend on errors reported by Antigravity. Session capture and memory import are unavailable for Antigravity.
+
+Antigravity and its logo are trademarks of Google LLC.
 
 ## What the plugin adds
 
 - **Recall:** guidance to retrieve relevant project memory before substantive work.
 - **Automatic saves:** the agent saves durable lessons to Memroot and tells you in one line (shown as "Agent save"). Memories are archived, not hard-deleted.
 - **Status:** a skill for inspecting the connection and capture state.
-- **Session capture:** on by default after a disclosure at setup or update; hooks for session ends and compaction, with a bundled local worker.
+- **Session capture:** on by default after a disclosure at setup or update; hooks for session ends and compaction, with a bundled local worker. Unavailable for Antigravity.
 
 The plugin and the MCP connection serve different purposes: installing a plugin alone does not authorize access to your memories. After connecting, ask your agent to check Memroot `connection_status`, save a small test memory, and retrieve it in a fresh session.
 
@@ -85,11 +87,12 @@ grok plugin install memroot@memroot/plugins --trust
 
 ## Updates
 
-All three agents now fetch from this Git repository instead of a version-specific local npm directory. Running `npx memroot@latest setup` migrates older local installations. Use the native update commands below to refresh an existing remote installation immediately.
+Claude Code, Codex and Grok fetch from this Git repository instead of a version-specific local npm directory. Running `npx memroot@latest setup` migrates older local installations. Use the native update commands below to refresh an existing remote installation immediately.
 
 - **Claude Code:** its native marketplace supports automatic updates. Setup enables them for Memroot unless you explicitly disabled them; for a manual installation, check the marketplace's auto-update setting in `/plugin`.
 - **Codex:** its native plugin manager refreshes Git marketplaces and installed plugins. Hook trust is separate; review new or changed hooks in `/hooks`.
 - **Grok:** checks for plugin updates when a session starts, unless you disabled `plugin_auto_update` or your administrator pinned a version. Setup preserves that choice.
+- **Antigravity CLI:** `npx memroot@latest update --agent agy` reinstalls and verifies the npm version's bundle.
 
 To refresh immediately with the native CLIs:
 
@@ -111,7 +114,7 @@ npx memroot@latest capture status
 npx memroot@latest capture off
 ```
 
-Capture runs after session ends and after a session is compacted. A local worker redacts the transcript, runs your agent CLI without tools to extract typed memories, and uploads those memories with limited evidence. Raw transcripts are not uploaded. Extraction uses your agent quota and sends the redacted excerpt to that agent's model provider. See the [npm README](https://www.npmjs.com/package/memroot) for the full disclosure, limits and verification status, and the [privacy notice](https://memroot.dev/privacy).
+Session capture and memory import are unavailable for Antigravity. Capture runs after session ends and after a session is compacted. A local worker redacts the transcript, runs your agent CLI without tools to extract typed memories, and uploads those memories with limited evidence. Raw transcripts are not uploaded. Extraction uses your agent quota and sends the redacted excerpt to that agent's model provider. See the [npm README](https://www.npmjs.com/package/memroot) for the full disclosure, limits and verification status, and the [privacy notice](https://memroot.dev/privacy).
 
 ## Release integrity and repository layout
 
@@ -121,10 +124,11 @@ Capture runs after session ends and after a session is compacted. A local worker
 | `.agents/plugins/marketplace.json` | Codex catalog pointing to `plugins/codex` |
 | `.grok-plugin/marketplace.json` | Grok catalog pointing to `plugins/grok` |
 | `plugins/` | Built plugin scripts, skills, manifests, licenses and notices |
+| `plugins/agy` | Antigravity CLI plugin, exported from the npm package; installed from the verified npm bundle by `memroot setup`, not by a marketplace catalog |
 | `release.json` | Published npm version, package SHA-512 integrity, and exported file hashes |
 | `tooling/export-marketplace.mjs` | Bounded npm verification and export tooling |
 
-Each reviewed npm release reaches this repository automatically: **Sync verified npm plugins** runs every 10 minutes, reads the npm `latest` version and its SHA-512 integrity, and publishes it when it is new. Maintainers can also run it by hand with an exact version and integrity. The workflow verifies the public package before updating all three catalogs in one commit. It rejects mismatched versions, changed integrity, downgrades, links and unexpected plugin files. It never builds or checks out the application source, and it never executes package scripts. Repeating the same release is safe.
+Each reviewed npm release reaches this repository automatically: **Sync verified npm plugins** runs every 10 minutes, reads the npm `latest` version and its SHA-512 integrity, and publishes it when it is new. Maintainers can also run it by hand with an exact version and integrity. The workflow verifies the public package before updating the exported plugins and the three catalogs in one commit. It rejects mismatched versions, changed integrity, downgrades, links and unexpected plugin files. It never builds or checks out the application source, and it never executes package scripts. Repeating the same release is safe.
 
 Do not edit generated plugin files here; fixes must be published in the npm package first. Documentation and distribution-tooling changes are reviewed separately. Publishing a package does not itself confirm that every agent integration works end to end.
 
