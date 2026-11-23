@@ -1,0 +1,8 @@
+Third-party notices for this Memroot plugin
+
+These files include the open-source components listed below. Each one
+stays under its own license, reproduced here with its copyright
+notice. The Memroot LICENSE does not apply to them. This file is
+generated at build time from the bundler's record of what was bundled.
+
+No third-party components are bundled.
