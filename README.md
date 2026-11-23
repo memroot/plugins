@@ -56,6 +56,17 @@ Antigravity and its logo are trademarks of Google LLC.
 
 The plugin and the MCP connection serve different purposes: installing a plugin alone does not authorize access to your memories. After connecting, ask your agent to check Memroot `connection_status`, save a small test memory, and retrieve it in a fresh session.
 
+## Opt-in: Memroot impact for Claude Code
+
+`memroot-impact` is a second, optional Claude Code plugin: a side pane opened by `/memroot-impact` and, in the terminal, a one-line counter (`Memroot: 3 checks · 7 recalled · 1 saved`) showing what Memroot did in the current session. It only counts this session's calls to Memroot's own MCP server, uploads nothing, and makes no file, network or process access. Setup and update never install it. After setup, in Claude Code:
+
+```text
+/plugin install memroot-impact@memroot
+/reload-plugins
+```
+
+It needs Claude Code with mods (2.1.287 or later) and does not run under `--safe-mode`, `--bare`, `disableAllHooks` or policies that allow only managed mods. See the [plugin README](plugins/memroot-impact/README.md).
+
 ## Native installation
 
 Use `setup` above for the complete plugin and MCP configuration. If you already manage MCP connections yourself, these commands install just the plugin.
@@ -120,10 +131,10 @@ Session capture and memory import are unavailable for Antigravity. Capture runs 
 
 | Path | Purpose |
 | --- | --- |
-| `.claude-plugin/marketplace.json` | Claude Code catalog pointing to `plugins/claude` |
+| `.claude-plugin/marketplace.json` | Claude Code catalog pointing to `plugins/claude` and the opt-in `plugins/memroot-impact` |
 | `.agents/plugins/marketplace.json` | Codex catalog pointing to `plugins/codex` |
 | `.grok-plugin/marketplace.json` | Grok catalog pointing to `plugins/grok` |
-| `plugins/` | Built plugin scripts, skills, manifests, licenses and notices |
+| `plugins/` | Built plugin scripts, skills, manifests, licenses and notices; `memroot-impact` ships its hooks module unbuilt |
 | `plugins/agy` | Antigravity CLI plugin, exported from the npm package; installed from the verified npm bundle by `memroot setup`, not by a marketplace catalog |
 | `release.json` | Published npm version, package SHA-512 integrity, and exported file hashes |
 | `tooling/export-marketplace.mjs` | Bounded npm verification and export tooling |

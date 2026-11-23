@@ -66,7 +66,15 @@ export function validateRelease(version, integrity, current) {
     throw new Error("Refusing changed integrity for an existing version");
 }
 
-export function catalogs(version) {
+// The opt-in Claude Code plugin (ADR 0017, amendment 2026-11-23): a second
+// entry of the Claude catalog only, never installed by setup. The release
+// that first ships it sets IMPACT_PLUGIN_SINCE to its own version; below it
+// the plugin is optional as a whole, and the catalog lists it only when the
+// release carries it, so published releases re-export byte-equal.
+export const IMPACT_PLUGIN = "memroot-impact";
+export const IMPACT_PLUGIN_SINCE = "0.23.0";
+
+export function catalogs(version, { impact = false } = {}) {
   releaseParts(version);
   const description = "Memroot coding-agent plugin";
   return {
@@ -75,6 +83,17 @@ export function catalogs(version) {
       owner: { name: "Memroot" },
       plugins: [
         { name: "memroot", source: "./plugins/claude", description, version },
+        ...(impact
+          ? [
+              {
+                name: IMPACT_PLUGIN,
+                source: `./plugins/${IMPACT_PLUGIN}`,
+                description:
+                  "Opt-in Memroot impact pane and counter for Claude Code",
+                version,
+              },
+            ]
+          : []),
       ],
     },
     ".agents/plugins/marketplace.json": {
@@ -135,6 +154,18 @@ const optionalPluginFiles = (agent, version) => [
 
 const pluginFiles = (agent, version) => {
   const [major, minor, patch] = releaseParts(version);
+  // Unbuilt: Claude Code loads the hooks module as it is; the contract file
+  // types/index.d.ts is the engine's default path for a mod's $.state types.
+  if (agent === IMPACT_PLUGIN)
+    return [
+      ".claude-plugin/plugin.json",
+      "README.md",
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.txt",
+      "hooks/hooks.json",
+      "hooks/register.tsx",
+      "types/index.d.ts",
+    ];
   const help = atLeast(version, HELP_SKILL_SINCE)
     ? ["skills/memroot-help/SKILL.md"]
     : [];
@@ -210,6 +241,46 @@ const pluginFiles = (agent, version) => {
   ];
 };
 
+/** The opt-in plugin's identity, license and hooks module, before export. */
+function checkImpactPlugin(files, prefix, manifest, version) {
+  if (
+    manifest.name !== IMPACT_PLUGIN ||
+    manifest.version !== version ||
+    manifest.license !== "LicenseRef-Memroot-Proprietary" ||
+    manifest.types !== "./types/index.d.ts"
+  )
+    throw new Error("Plugin identity/version/license mismatch");
+  if (!files.get(`${prefix}LICENSE`).equals(files.get("LICENSE")))
+    throw new Error("Plugin license differs from published package license");
+  if (
+    !files
+      .get(`${prefix}THIRD-PARTY-NOTICES.txt`)
+      .toString("utf8")
+      .includes("No third-party components are bundled.")
+  )
+    throw new Error("Missing third-party license notices");
+  // `hooks` beside `modules`: Claude Code 2.1.240 and older refuse a hooks
+  // file without it.
+  const hooks = JSON.parse(files.get(`${prefix}hooks/hooks.json`));
+  if (
+    hooks === null ||
+    typeof hooks.hooks !== "object" ||
+    hooks.hooks === null ||
+    Array.isArray(hooks.hooks) ||
+    Object.keys(hooks.hooks).length !== 0 ||
+    JSON.stringify(hooks.modules) !== JSON.stringify(["./register.tsx"]) ||
+    Object.keys(hooks).length !== 2
+  )
+    throw new Error("Unexpected impact plugin hooks file");
+  for (const path of ["hooks/register.tsx", "types/index.d.ts"])
+    if (
+      /sourceMappingURL\s*=/.test(
+        files.get(`${prefix}${path}`).toString("utf8"),
+      )
+    )
+      throw new Error("Source maps are not public marketplace artifacts");
+}
+
 function command(program, args, cwd, maxBuffer = MAX_CONTENT) {
   // Ignore user npm/tar options and credentials. No shell or package scripts.
   return execFileSync(program, args, {
@@ -279,7 +350,15 @@ export async function exportTarball({
     major > 0n ||
     minor > 17n ||
     (minor === 17n && (patch > 0n || alpha === undefined));
-  const exportedAgents = includesAgy ? [...agents, "agy"] : agents;
+  const impactPrefix = `package/dist/plugins/${IMPACT_PLUGIN}/`;
+  const impact =
+    atLeast(version, IMPACT_PLUGIN_SINCE) ||
+    names.some((path) => path.startsWith(impactPrefix) && !path.endsWith("/"));
+  const exportedAgents = [
+    ...agents,
+    ...(includesAgy ? ["agy"] : []),
+    ...(impact ? [IMPACT_PLUGIN] : []),
+  ];
   const expected = new Map(
     exportedAgents.flatMap((agent) =>
       pluginFiles(agent, version).map((path) => [
@@ -341,6 +420,10 @@ export async function exportTarball({
     const manifest = JSON.parse(
       files.get(`${prefix}${pluginFiles(agent, version)[0]}`),
     );
+    if (agent === IMPACT_PLUGIN) {
+      checkImpactPlugin(files, prefix, manifest, version);
+      continue;
+    }
     if (
       manifest.name !== "memroot" ||
       manifest.version !== version ||
@@ -385,7 +468,7 @@ export async function exportTarball({
       )
         throw new Error("Source maps are not public marketplace artifacts");
   }
-  for (const [path, value] of Object.entries(catalogs(version)))
+  for (const [path, value] of Object.entries(catalogs(version, { impact })))
     files.set(path, Buffer.from(json(value)));
   const hashes = Object.fromEntries(
     [...files]
