@@ -43,7 +43,7 @@ npx memroot@latest setup --agent agy --yes
 npx memroot@latest agy login
 ```
 
-Restart Antigravity after signing in. The bundled adapter uses your computer-wide Memroot project for project-bound tools. It refuses those calls if your account has a stale binding, a binding to a different project, or unreadable binding data. Some child contexts omit plugin hooks, and shell-failure reminders depend on errors reported by Antigravity. Session capture and memory import are unavailable for Antigravity.
+Restart Antigravity after signing in. Antigravity uses the project of the folders a session reports: a folder binding, else the computer-wide project. Project-bound calls are refused when those folders use different projects, a binding there is stale, or the binding data is unreadable. Some child contexts omit plugin hooks, and shell-failure reminders depend on errors reported by Antigravity. Session capture and memory import are unavailable for Antigravity.
 
 Antigravity and its logo are trademarks of Google LLC.
 
