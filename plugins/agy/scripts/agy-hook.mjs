@@ -1021,12 +1021,6 @@ function offlineIdentity(recordedOnly = false) {
   );
   return userId ? { apiBase, userId } : { apiBase };
 }
-function currentSelection(apiBase) {
-  const identity = offlineIdentity();
-  const base = apiBase ?? identity.apiBase;
-  if (!isAllowedApiBase(base)) return void 0;
-  return readSelection(base, identity.userId);
-}
 
 // src/project/folders.ts
 var PROJECT_FOLDERS_FILE = "project-folders.json";
@@ -1179,36 +1173,55 @@ function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   const key = selectionKey(apiBase, principalId);
   return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
-function bindingMatchFor(apiBase, principalId, cwd) {
-  const bindings = readBindings(apiBase, principalId);
+function bindingMatchIn(bindings, cwd) {
   if (bindings.length === 0) return void 0;
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
 
 // src/project/scope.ts
-function effectiveProject(cwd, apiBase) {
-  const identity = offlineIdentity();
-  const base = apiBase ?? identity.apiBase;
-  if (!isAllowedApiBase(base) || !identity.userId) return void 0;
-  const folder = usableFolder(cwd);
-  const found = folder ? bindingMatchFor(base, identity.userId, folder) : void 0;
-  if (found) {
-    const { binding, via } = found;
-    return {
-      scope: "folder",
-      apiBase: normalizeApiBase(base),
-      principalId: identity.userId.toLowerCase(),
-      tenantId: binding.tenantId,
-      projectId: binding.projectId,
-      name: binding.name,
-      selectionId: binding.bindingId,
-      folder: binding.folder,
-      via,
-      ...binding.stale ? { stale: true } : {}
-    };
+function boundProject(base, principalId, { binding, via }) {
+  return {
+    scope: "folder",
+    apiBase: normalizeApiBase(base),
+    principalId: principalId.toLowerCase(),
+    tenantId: binding.tenantId,
+    projectId: binding.projectId,
+    name: binding.name,
+    selectionId: binding.bindingId,
+    folder: binding.folder,
+    via,
+    ...binding.stale ? { stale: true } : {}
+  };
+}
+function workspaceProject(apiBase, principalId, folders) {
+  let bindings;
+  try {
+    bindings = readBindings(apiBase, principalId, { requireValid: true });
+  } catch {
+    return { reason: "unreadable" };
   }
-  const selection = readSelection(base, identity.userId);
-  return selection ? { scope: "computer", ...selection } : void 0;
+  const selection = readSelection(apiBase, principalId);
+  const computer = selection && {
+    scope: "computer",
+    ...selection
+  };
+  const paths = Array.isArray(folders) ? folders.map(usableFolder) : [];
+  if (paths.length === 0 || paths.some((path) => path === void 0)) {
+    const same = bindings.every(
+      (b) => !b.stale && b.tenantId === selection?.tenantId && b.projectId === selection?.projectId
+    );
+    return same ? { project: computer } : { reason: "unknown" };
+  }
+  let chosen;
+  for (const [index, path] of paths.entries()) {
+    const found = bindingMatchIn(bindings, path);
+    const project = found ? boundProject(apiBase, principalId, found) : computer;
+    if (project?.stale) return { reason: "stale", project };
+    if (index === 0) chosen = project;
+    else if (project?.projectId !== chosen?.projectId || project?.tenantId !== chosen?.tenantId)
+      return { reason: "mixed" };
+  }
+  return { project: chosen };
 }
 
 // src/project/context.ts
@@ -1223,7 +1236,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.23.1"} project`;
+  return `npx -y memroot@${"0.24.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -1251,9 +1264,20 @@ function boundFrom(project) {
       return void 0;
   }
 }
-function projectStatusLine(cwd) {
+function workspaceRefusalText(refusal) {
+  switch (refusal.reason) {
+    case "stale":
+      return staleBindingText(refusal.project);
+    case "unreadable":
+      return "MEMROOT_PROJECT_FOLDERS_UNREADABLE: ~/.memroot/project-folders.json is unreadable, so Memroot calls are refused. Fix or delete that file (deleting removes every folder binding).";
+    case "mixed":
+      return "AGY_PROJECT_SCOPE_MIXED: This session's folders use different Memroot projects, so Memroot calls are refused. Start Antigravity in one of them.";
+    case "unknown":
+      return "AGY_PROJECT_SCOPE_UNSUPPORTED: Antigravity did not report this session's folders, so Memroot folder bindings cannot be applied. Remove the binding to another project, or select that project for this computer.";
+  }
+}
+function statusLineFor(selected) {
   const command = projectCommandPrefix();
-  const selected = effectiveProject(cwd);
   if (selected?.stale) return staleBindingText(selected);
   if (selected?.scope === "folder") {
     const folder = selected.folder ?? "";
@@ -2557,19 +2581,6 @@ function localKnownProjectIds(apiBase) {
     return /* @__PURE__ */ new Set();
   }
 }
-function retrieveTarget(args, cwd) {
-  try {
-    const selected = effectiveProject(cwd);
-    if (!selected || selected.stale) return void 0;
-    return classifyProjectId(
-      args?.project_id,
-      selected.projectId,
-      localKnownProjectIds(selected.apiBase)
-    );
-  } catch {
-    return void 0;
-  }
-}
 
 // src/agents/agy/config.ts
 import { lstatSync as lstatSync7 } from "node:fs";
@@ -2886,15 +2897,50 @@ function memrootCall(event) {
   const match2 = call.name.match(/^mcp_memroot_([a-z_]+)$/u);
   return match2 ? { name: match2[1], args, lazy: false } : void 0;
 }
-function checksThisProject(args) {
-  return retrieveTarget(args, void 0) !== "known_other";
+function checksThisProject(event, args) {
+  const selected = usableProject(event);
+  return !selected || classifyProjectId(
+    args.project_id,
+    selected.projectId,
+    localKnownProjectIds(selected.apiBase)
+  ) !== "known_other";
 }
-function otherProjectId(args) {
+function otherProjectId(event, args) {
+  const selected = usableProject(event);
+  return projectIdShape(args.project_id) && args.project_id.toLowerCase() !== selected?.projectId.toLowerCase();
+}
+function sessionProject(event) {
+  const identity = offlineIdentity();
+  if (!identity.userId) return { project: void 0 };
+  return workspaceProject(
+    identity.apiBase,
+    identity.userId,
+    event.workspacePaths
+  );
+}
+function usableProject(event) {
   try {
-    const selected = currentSelection();
-    return projectIdShape(args.project_id) && args.project_id.toLowerCase() !== selected?.projectId.toLowerCase();
+    const resolved = sessionProject(event);
+    return "reason" in resolved ? void 0 : resolved.project;
   } catch {
-    return false;
+    return void 0;
+  }
+}
+function projectForText(event) {
+  try {
+    const resolved = sessionProject(event);
+    if ("reason" in resolved) return void 0;
+    return resolved.project ? { name: resolved.project.name, projectId: resolved.project.projectId } : null;
+  } catch {
+    return void 0;
+  }
+}
+function sessionStatusLine(event) {
+  try {
+    const resolved = sessionProject(event);
+    return "reason" in resolved ? workspaceRefusalText(resolved) : statusLineFor(resolved.project);
+  } catch {
+    return statusLineFor(void 0);
   }
 }
 function unparsed(args) {
@@ -2926,9 +2972,9 @@ async function guard(event) {
     decision("auto_approve", "Read-only Memroot tool; it takes no project.");
     return true;
   }
-  let selected;
+  let resolved;
   try {
-    selected = currentSelection();
+    resolved = sessionProject(event);
   } catch {
     decision(
       "deny",
@@ -2936,6 +2982,11 @@ async function guard(event) {
     );
     return true;
   }
+  if ("reason" in resolved) {
+    decision("deny", workspaceRefusalText(resolved));
+    return true;
+  }
+  const selected = resolved.project;
   if (!selected) {
     decision(
       "deny",
@@ -2953,7 +3004,7 @@ async function guard(event) {
   const args = { ...tool.args, project_id: selected.projectId };
   decision(
     "auto_approve",
-    `Memroot memory call for the project selected on this computer (${selected.projectId}).`,
+    `Memroot memory call for the project ${selected.scope === "folder" ? "bound to this folder" : "selected on this computer"} (${selected.projectId}).`,
     tool.lazy ? { Arguments: args } : args
   );
   return true;
@@ -3039,7 +3090,7 @@ async function main() {
   if (!event || inertProcess()) return;
   if (eventName === "PreToolUse" && await guard(event)) {
     const tool = memrootCall(event);
-    if (!processGuard() && mcpRegistered("agy") && token(event.conversationId) && tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args) && !otherProjectId(tool.args))
+    if (!processGuard() && mcpRegistered("agy") && token(event.conversationId) && tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args) && !otherProjectId(event, tool.args))
       noteCheck("agy", event.conversationId, { started: true });
     return;
   }
@@ -3056,7 +3107,7 @@ async function main() {
     });
     inject(
       [
-        mcpRegistered("agy") ? `${SESSION_START_CONTEXT} ${projectStatusLine()}` : SESSION_START_NOT_CONNECTED
+        mcpRegistered("agy") ? `${SESSION_START_CONTEXT} ${sessionStatusLine(event)}` : SESSION_START_NOT_CONNECTED
       ],
       true
     );
@@ -3092,7 +3143,7 @@ async function main() {
           promptNudgeMode(""),
           claimSessionMarker("prompt-first", "agy", session),
           counts,
-          currentSelection() ?? null
+          projectForText(event)
         )
       ]);
     return;
@@ -3100,7 +3151,7 @@ async function main() {
   if (eventName === "PreToolUse" && mainTurn && turn.open && isChange(event)) {
     const mode = recallGateMode("");
     const counts = readRecallState("agy", session);
-    const selected = currentSelection();
+    const selected = usableProject(event);
     if (!selected || !counts || !gateWouldAct(mode, counts)) return;
     const action = gateAction(
       mode,
@@ -3118,7 +3169,7 @@ async function main() {
   }
   if (eventName === "PostToolUse") {
     const tool = memrootCall(event);
-    if (tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args) && checksThisProject(tool.args))
+    if (tool?.name === "memory_retrieve" && tool.args && !unparsed(tool.args) && checksThisProject(event, tool.args))
       noteCheck("agy", session, {
         failed: Boolean(event.error),
         quotaExhausted: typeof event.error === "string" && /usage_limit_exceeded/u.test(event.error)
@@ -3135,10 +3186,10 @@ async function main() {
   if (eventName === "PostInvocation") {
     const texts = [];
     const counts = readRecallState("agy", session);
-    const selected = currentSelection();
+    const selected = usableProject(event);
     if (mainTurn && turn.gate && counts && selected && !optedOutThisPrompt(counts))
       texts.push(gateText("context", counts, selected, { subagent: false }));
-    if (mainTurn && turn.failure && !optedOutThisPrompt(counts) && currentSelection() && counts && claimSessionMarker(
+    if (mainTurn && turn.failure && !optedOutThisPrompt(counts) && selected && counts && claimSessionMarker(
       "failure-nudge-sent",
       "agy",
       `${session}\0prompt\0${counts.prompts}`
@@ -3151,7 +3202,7 @@ async function main() {
     }
     if (mainTurn && turn.mirror)
       texts.push(
-        currentSelection() ? MIRROR_NUDGE : `${MIRROR_NO_PROJECT} ${projectStatusLine()}`
+        selected ? MIRROR_NUDGE : `${MIRROR_NO_PROJECT} ${sessionStatusLine(event)}`
       );
     writeTurn(session, { ...turn, failure: false, mirror: false, gate: false });
     inject(texts);

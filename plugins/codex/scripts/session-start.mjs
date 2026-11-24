@@ -813,7 +813,9 @@ function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
 function bindingMatchFor(apiBase, principalId, cwd) {
-  const bindings = readBindings(apiBase, principalId);
+  return bindingMatchIn(readBindings(apiBase, principalId), cwd);
+}
+function bindingMatchIn(bindings, cwd) {
   if (bindings.length === 0) return void 0;
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
@@ -825,23 +827,23 @@ function effectiveProject(cwd, apiBase) {
   if (!isAllowedApiBase(base) || !identity.userId) return void 0;
   const folder = usableFolder(cwd);
   const found = folder ? bindingMatchFor(base, identity.userId, folder) : void 0;
-  if (found) {
-    const { binding, via } = found;
-    return {
-      scope: "folder",
-      apiBase: normalizeApiBase(base),
-      principalId: identity.userId.toLowerCase(),
-      tenantId: binding.tenantId,
-      projectId: binding.projectId,
-      name: binding.name,
-      selectionId: binding.bindingId,
-      folder: binding.folder,
-      via,
-      ...binding.stale ? { stale: true } : {}
-    };
-  }
+  if (found) return boundProject(base, identity.userId, found);
   const selection = readSelection(base, identity.userId);
   return selection ? { scope: "computer", ...selection } : void 0;
+}
+function boundProject(base, principalId, { binding, via }) {
+  return {
+    scope: "folder",
+    apiBase: normalizeApiBase(base),
+    principalId: principalId.toLowerCase(),
+    tenantId: binding.tenantId,
+    projectId: binding.projectId,
+    name: binding.name,
+    selectionId: binding.bindingId,
+    folder: binding.folder,
+    via,
+    ...binding.stale ? { stale: true } : {}
+  };
 }
 
 // src/capture/queue/job.ts
@@ -868,7 +870,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.23.1"} project`;
+  return `npx -y memroot@${"0.24.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -897,8 +899,10 @@ function boundFrom(project) {
   }
 }
 function projectStatusLine(cwd) {
+  return statusLineFor(effectiveProject(cwd));
+}
+function statusLineFor(selected) {
   const command = projectCommandPrefix();
-  const selected = effectiveProject(cwd);
   if (selected?.stale) return staleBindingText(selected);
   if (selected?.scope === "folder") {
     const folder = selected.folder ?? "";

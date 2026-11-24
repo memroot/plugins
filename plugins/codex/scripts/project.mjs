@@ -1378,7 +1378,9 @@ function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
 function bindingMatchFor(apiBase, principalId, cwd) {
-  const bindings = readBindings(apiBase, principalId);
+  return bindingMatchIn(readBindings(apiBase, principalId), cwd);
+}
+function bindingMatchIn(bindings, cwd) {
   if (bindings.length === 0) return void 0;
   return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
 }
@@ -1459,7 +1461,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.23.1"} project`;
+  return `npx -y memroot@${"0.24.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -5332,7 +5334,6 @@ var PROJECT_ACTIONS = [
   "unbind",
   "login"
 ];
-var FOLDER_PROJECT_ACTIONS = ["unbind"];
 async function projectCommand(args, _bundledAgent, transport) {
   const requested = args.shift() ?? "status";
   const action = PROJECT_ACTIONS.includes(requested) ? requested : "use";
@@ -5374,10 +5375,6 @@ async function projectCommand(args, _bundledAgent, transport) {
     throw new Error(
       "INVALID_ARGUMENT: --here and --folder apply to use, create, status and unbind."
     );
-  if (transport && (folder !== void 0 || FOLDER_PROJECT_ACTIONS.includes(action)))
-    throw new Error(
-      "AGY_PROJECT_SCOPE_UNSUPPORTED: Antigravity uses the computer-wide Memroot project."
-    );
   const config = await readConfig();
   const base = resolveApiBase(apiBase ? { apiBase } : {}, config);
   const command = projectCommandPrefix();
@@ -5405,7 +5402,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.23.1"}`;
+  const userAgent = `memroot-cli/${"0.24.0"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;
@@ -5491,19 +5488,21 @@ async function projectCommand(args, _bundledAgent, transport) {
       JSON.stringify({
         ...projects,
         selected_project_id: selected2 && selected2.tenantId === projects.tenant_id ? selected2.projectId : null,
-        ...!transport ? {
-          bindings: readBindings(base, projects.principal_id).map((b) => ({
-            ...bindingOutput(b),
-            ...folderMissing(b.folder) ? { missing: true } : {}
-          }))
-        } : {}
+        bindings: readBindings(base, projects.principal_id).map((b) => ({
+          ...bindingOutput(b),
+          ...folderMissing(b.folder) ? { missing: true } : {}
+        }))
       })
     );
     return;
   }
   if (action === "status") {
     const { selection, stale } = resolveSelection(base, projects);
-    const found = !transport ? bindingMatchFor(base, projects.principal_id, folder ?? process.cwd()) : void 0;
+    const found = bindingMatchFor(
+      base,
+      projects.principal_id,
+      folder ?? process.cwd()
+    );
     if (found) {
       const { binding, via } = found;
       console.log(

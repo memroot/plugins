@@ -11,7 +11,7 @@ Answer from this index and name the entry; for how to use it, follow that skill 
 - Archive a memory or undo that archive: `memory_archive`, `memory_restore`, when your tool list has them.
 - Tell Memroot which retrieved memories mattered: `memory_feedback`, when your tool list has it.
 - Is Memroot set up and connected: the `memroot-status` skill; tool `connection_status`.
-- Choose or create the project for this computer: the `memroot-project` skill; tools `projects_list`, `projects_create`; `memroot project` with `list`, `use`, `create`, `status` or `login`.
+- Choose or create the project for this computer or one folder: the `memroot-project` skill; tools `projects_list`, `projects_create`; `memroot project` with `list`, `use`, `create`, `status`, `unbind` or `login`.
 - Antigravity's own Memroot sign-in: `memroot agy login` (`--force` replaces a revoked grant).
 - Diagnose the install: `memroot doctor`.
 - Install or refresh the plugin, MCP link and rules: `memroot setup`, `memroot update`.

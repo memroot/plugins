@@ -416,8 +416,8 @@ var require_semver = __commonJS({
             throw new Error("invalid increment argument: identifier is empty");
           }
           if (identifier) {
-            const match = `-${identifier}`.match(this.options.loose ? re[t2.PRERELEASELOOSE] : re[t2.PRERELEASE]);
-            if (!match || match[1] !== identifier) {
+            const match2 = `-${identifier}`.match(this.options.loose ? re[t2.PRERELEASELOOSE] : re[t2.PRERELEASE]);
+            if (!match2 || match2[1] !== identifier) {
               throw new Error(`invalid identifier: ${identifier}`);
             }
           }
@@ -571,6 +571,9 @@ var require_valid = __commonJS({
     module.exports = valid3;
   }
 });
+
+// src/agents/agy/mcp-stdio.ts
+import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // ../../packages/contracts/src/mcp-tool-names-v1.ts
 var MCP_PROJECT_TOOL_NAMES_V1 = [
@@ -11862,6 +11865,29 @@ var inputRequired = Object.assign(buildInputRequired, {
     return { method: "roots/list" };
   }
 });
+function inputResponse(responses, key) {
+  if (responses === void 0 || typeof responses !== "object" || responses === null) return { kind: "missing" };
+  const entry = responses[key];
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return { kind: "missing" };
+  const candidate = entry;
+  if (candidate["action"] === "accept" || candidate["action"] === "decline" || candidate["action"] === "cancel") {
+    const content = candidate["content"];
+    return {
+      kind: "elicit",
+      action: candidate["action"],
+      ...content !== null && typeof content === "object" && !Array.isArray(content) && { content }
+    };
+  }
+  if (Array.isArray(candidate["roots"])) return {
+    kind: "roots",
+    roots: candidate["roots"]
+  };
+  if (typeof candidate["role"] === "string" && candidate["content"] !== void 0) return {
+    kind: "sampling",
+    result: candidate
+  };
+  return { kind: "missing" };
+}
 var REQUEST_STATE_ONLY_LEG_PACING_MS = 250;
 function inputRequiredRoundsExceededMessage(method, maxRounds) {
   return `Multi-round-trip request '${method}' still required input after ${maxRounds} rounds (inputRequired.maxRounds)`;
@@ -12968,14 +12994,14 @@ var require_content_type = /* @__PURE__ */ __commonJSMin(((exports) => {
     var obj = new ContentType(type.toLowerCase());
     if (index !== -1) {
       var key;
-      var match;
+      var match2;
       var value;
       PARAM_REGEXP.lastIndex = index;
-      while (match = PARAM_REGEXP.exec(header)) {
-        if (match.index !== index) throw new TypeError("invalid parameter format");
-        index += match[0].length;
-        key = match[1].toLowerCase();
-        value = match[2];
+      while (match2 = PARAM_REGEXP.exec(header)) {
+        if (match2.index !== index) throw new TypeError("invalid parameter format");
+        index += match2[0].length;
+        key = match2[1].toLowerCase();
+        value = match2[2];
         if (value.charCodeAt(0) === 34) {
           value = value.slice(1, -1);
           if (value.indexOf("\\") !== -1) value = value.replace(QESC_REGEXP, "$1");
@@ -22855,34 +22881,10 @@ function withClientVersion(args, version3) {
   return version3 ? { ...rest, client_version: version3 } : rest;
 }
 
-// src/project/folders.ts
-import {
-  basename,
-  dirname as dirname3,
-  isAbsolute as isAbsolute2,
-  join as join4,
-  normalize as normalize2,
-  relative,
-  resolve,
-  sep
-} from "node:path";
-
-// src/state/config-store.ts
-import { randomBytes } from "node:crypto";
-import {
-  closeSync as closeSync2,
-  fchmodSync,
-  fsyncSync,
-  lstatSync as lstatSync2,
-  mkdirSync as mkdirSync2,
-  openSync as openSync2,
-  readFileSync as readFileSync2,
-  renameSync as renameSync2,
-  rmSync as rmSync2,
-  writeFileSync as writeFileSync2,
-  writeSync
-} from "node:fs";
-import { dirname as dirname2, join as join2 } from "node:path";
+// src/project/context.ts
+import { existsSync } from "node:fs";
+import { dirname as dirname4, join as join5 } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // src/state/paths.ts
 import {
@@ -22992,7 +22994,35 @@ function listFiles(path) {
   }
 }
 
+// src/project/folders.ts
+import { lstatSync as lstatSync4, readFileSync as readFileSync3, realpathSync } from "node:fs";
+import {
+  basename,
+  dirname as dirname3,
+  isAbsolute as isAbsolute2,
+  join as join4,
+  normalize as normalize2,
+  relative,
+  resolve,
+  sep
+} from "node:path";
+
 // src/state/config-store.ts
+import { randomBytes } from "node:crypto";
+import {
+  closeSync as closeSync2,
+  fchmodSync,
+  fsyncSync,
+  lstatSync as lstatSync2,
+  mkdirSync as mkdirSync2,
+  openSync as openSync2,
+  readFileSync as readFileSync2,
+  renameSync as renameSync2,
+  rmSync as rmSync2,
+  writeFileSync as writeFileSync2,
+  writeSync
+} from "node:fs";
+import { dirname as dirname2, join as join2 } from "node:path";
 var LOCK_STALE_MS = 5e3;
 var LOCK_TRIES = 40;
 var TMP_STALE_MS = 6e4;
@@ -23243,11 +23273,117 @@ var PROJECT_FOLDERS_FILE = "project-folders.json";
 var MAX_BINDINGS = 256;
 var MAX_FILE_BYTES2 = 512 * 1024;
 var MAX_PATH = 4096;
+var MAX_WALK = 128;
 var UUID2 = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function projectFoldersPath() {
   return join4(memrootConfigDir(), PROJECT_FOLDERS_FILE);
 }
 var FOLD_CASE = process.platform === "win32";
+function folderContains(folder, path, options) {
+  const a2 = options.foldCase ? folder.toLowerCase() : folder;
+  const b = options.foldCase ? path.toLowerCase() : path;
+  if (a2 === b) return true;
+  const prefix = a2.endsWith(options.separator) ? a2 : `${a2}${options.separator}`;
+  return b.startsWith(prefix);
+}
+function applicableBinding(bindings, scope, options) {
+  const same = (a2, b) => options.foldCase ? a2.toLowerCase() === b.toLowerCase() : a2 === b;
+  const chains = [
+    { root: scope.top, path: scope.cwd, mapped: false },
+    ...scope.main ? [{ ...scope.main, mapped: true }] : []
+  ];
+  let best;
+  for (const chain of chains)
+    for (const binding of bindings) {
+      const root = chain.root;
+      if (root !== void 0 && !folderContains(root, binding.folder, options) || !folderContains(binding.folder, chain.path, options))
+        continue;
+      const depth = binding.folder.length - (root?.length ?? 0);
+      if (best && depth <= best.depth) continue;
+      const atRoot = root !== void 0 && same(binding.folder, root);
+      const via = chain.mapped ? atRoot ? "main_checkout" : "main_checkout_folder" : same(binding.folder, scope.cwd) ? "folder" : root === void 0 ? "parent_folder" : atRoot ? "repo_root" : "repo_folder";
+      best = { binding, via, depth };
+    }
+  return best && { binding: best.binding, via: best.via };
+}
+var match = { foldCase: FOLD_CASE, separator: sep };
+function usableFolder(value) {
+  return typeof value === "string" && isAbsolute2(value) && value.length <= MAX_PATH && !value.includes("\0") ? value : void 0;
+}
+function canonicalFolder(path) {
+  const absolute = normalize2(resolve(path));
+  let head = absolute;
+  for (let i2 = 0; i2 < MAX_WALK; i2++) {
+    try {
+      const real = realpathSync.native(head);
+      const rest = relative(head, absolute);
+      return rest ? join4(real, rest) : real;
+    } catch {
+      const parent = dirname3(head);
+      if (parent === head) break;
+      head = parent;
+    }
+  }
+  return absolute;
+}
+function smallFile(path) {
+  try {
+    const info = lstatSync4(path);
+    if (!info.isFile() || info.size > 4096) return void 0;
+    return readFileSync3(path, "utf8");
+  } catch {
+    return void 0;
+  }
+}
+function folderScope(real) {
+  for (let dir = real, i2 = 0; i2 < MAX_WALK; i2++) {
+    const dotGit = join4(dir, ".git");
+    let info;
+    try {
+      info = lstatSync4(dotGit);
+    } catch {
+      info = void 0;
+    }
+    if (info) {
+      const root = info.isFile() ? worktreeMain(dir, dotGit) : void 0;
+      if (!root) return { cwd: real, top: dir };
+      const rest = relative(dir, real);
+      return {
+        cwd: real,
+        top: dir,
+        main: { root, path: rest ? join4(root, rest) : root }
+      };
+    }
+    const parent = dirname3(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return { cwd: real };
+}
+function worktreeMain(dir, dotGit) {
+  const pointer = /^gitdir:[ \t]*(.+?)[ \t]*$/m.exec(smallFile(dotGit) ?? "");
+  if (!pointer?.[1]) return void 0;
+  const gitdir = resolve(dir, pointer[1]);
+  if (basename(dirname3(gitdir)) !== "worktrees") return void 0;
+  const back = smallFile(join4(gitdir, "gitdir"))?.trim();
+  if (!back) return void 0;
+  try {
+    if (realpathSync.native(resolve(gitdir, back)) !== realpathSync.native(dotGit))
+      return void 0;
+  } catch {
+    return void 0;
+  }
+  const common = smallFile(join4(gitdir, "commondir"))?.trim();
+  if (!common) return void 0;
+  let commonDir;
+  try {
+    commonDir = realpathSync.native(resolve(gitdir, common));
+  } catch {
+    return void 0;
+  }
+  if (basename(commonDir) !== ".git") return void 0;
+  return dirname3(commonDir);
+}
 function validBinding(value) {
   const v = value;
   return !!v && typeof v === "object" && typeof v.folder === "string" && isAbsolute2(v.folder) && v.folder.length <= MAX_PATH && !v.folder.includes("\0") && UUID2.test(String(v.tenantId)) && UUID2.test(String(v.projectId)) && typeof v.name === "string" && v.name.length > 0 && v.name.length <= 256 && UUID2.test(String(v.bindingId)) && typeof v.boundAt === "string" && !Number.isNaN(Date.parse(v.boundAt)) && (v.stale === void 0 || v.stale === true);
@@ -23283,6 +23419,92 @@ function readBindings(apiBase, principalId, { requireValid = false } = {}) {
   const key = selectionKey(apiBase, principalId);
   return readStore2(requireValid ? key : void 0)[key] ?? [];
 }
+function bindingMatchIn(bindings, cwd) {
+  if (bindings.length === 0) return void 0;
+  return applicableBinding(bindings, folderScope(canonicalFolder(cwd)), match);
+}
+
+// src/project/scope.ts
+function boundProject(base, principalId, { binding, via }) {
+  return {
+    scope: "folder",
+    apiBase: normalizeApiBase(base),
+    principalId: principalId.toLowerCase(),
+    tenantId: binding.tenantId,
+    projectId: binding.projectId,
+    name: binding.name,
+    selectionId: binding.bindingId,
+    folder: binding.folder,
+    via,
+    ...binding.stale ? { stale: true } : {}
+  };
+}
+function workspaceProject(apiBase, principalId, folders) {
+  let bindings;
+  try {
+    bindings = readBindings(apiBase, principalId, { requireValid: true });
+  } catch {
+    return { reason: "unreadable" };
+  }
+  const selection = readSelection(apiBase, principalId);
+  const computer = selection && {
+    scope: "computer",
+    ...selection
+  };
+  const paths = Array.isArray(folders) ? folders.map(usableFolder) : [];
+  if (paths.length === 0 || paths.some((path) => path === void 0)) {
+    const same = bindings.every(
+      (b) => !b.stale && b.tenantId === selection?.tenantId && b.projectId === selection?.projectId
+    );
+    return same ? { project: computer } : { reason: "unknown" };
+  }
+  let chosen;
+  for (const [index, path] of paths.entries()) {
+    const found = bindingMatchIn(bindings, path);
+    const project = found ? boundProject(apiBase, principalId, found) : computer;
+    if (project?.stale) return { reason: "stale", project };
+    if (index === 0) chosen = project;
+    else if (project?.projectId !== chosen?.projectId || project?.tenantId !== chosen?.tenantId)
+      return { reason: "mixed" };
+  }
+  return { project: chosen };
+}
+
+// src/project/context.ts
+function clip(value, max) {
+  return value.replace(/[\r\n"\\`$]+/g, " ").slice(0, max);
+}
+function projectCommandPrefix() {
+  try {
+    const here = dirname4(fileURLToPath(import.meta.url));
+    const script = join5(here, "project.mjs");
+    if (existsSync(script) && !/["\\$`\n]/.test(script))
+      return `node "${script}"`;
+  } catch {
+  }
+  return `npx -y memroot@${"0.24.0"} project`;
+}
+function folderOption(folder) {
+  return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
+}
+function staleBindingText(project) {
+  const command = projectCommandPrefix();
+  const folder = project.folder ?? "";
+  const option = folderOption(folder);
+  return `Memroot project "${clip(project.name, 80)}" bound to folder "${clip(folder, 300)}" is no longer available, so Memroot calls here are refused. Bind another: ${command} use "<name>" ${option}; or use the project selected on this computer: ${command} unbind ${option}.`;
+}
+function workspaceRefusalText(refusal) {
+  switch (refusal.reason) {
+    case "stale":
+      return staleBindingText(refusal.project);
+    case "unreadable":
+      return "MEMROOT_PROJECT_FOLDERS_UNREADABLE: ~/.memroot/project-folders.json is unreadable, so Memroot calls are refused. Fix or delete that file (deleting removes every folder binding).";
+    case "mixed":
+      return "AGY_PROJECT_SCOPE_MIXED: This session's folders use different Memroot projects, so Memroot calls are refused. Start Antigravity in one of them.";
+    case "unknown":
+      return "AGY_PROJECT_SCOPE_UNSUPPORTED: Antigravity did not report this session's folders, so Memroot folder bindings cannot be applied. Remove the binding to another project, or select that project for this computer.";
+  }
+}
 
 // src/project/guard-mode.ts
 function otherProjectSearchedNote(selectedId) {
@@ -23291,7 +23513,7 @@ function otherProjectSearchedNote(selectedId) {
 var AGY_UNKNOWN_PROJECT_NOTE = "Memroot searched the selected project instead: that project_id is not one of this connection's Memroot projects.";
 
 // src/project/list.ts
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 
 // src/project/target.ts
 var UUID3 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -23332,7 +23554,7 @@ function freshListing(listedAt, now) {
   return age >= -FUTURE_SKEW_MS && age <= PROJECT_LIST_MAX_AGE_MS;
 }
 function projectListPath() {
-  return join5(memrootConfigDir(), PROJECT_LIST_FILE);
+  return join6(memrootConfigDir(), PROJECT_LIST_FILE);
 }
 function validSource(value) {
   const v = value;
@@ -23454,20 +23676,20 @@ import {
   rm as rm2,
   writeFile as writeFile2
 } from "node:fs/promises";
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 
 // src/state/lock.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 import {
-  lstatSync as lstatSync4,
+  lstatSync as lstatSync5,
   mkdirSync as mkdirSync3,
   renameSync as renameSync4,
   rmSync as rmSync3,
   writeFileSync as writeFileSync3
 } from "node:fs";
-import { join as join6 } from "node:path";
+import { join as join7 } from "node:path";
 function lockPath(name) {
-  return join6(stateSubdir("locks"), name);
+  return join7(stateSubdir("locks"), name);
 }
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) return false;
@@ -23479,7 +23701,7 @@ function processAlive(pid) {
   }
 }
 function readOwnerFile(path) {
-  return readPrivateFile(join6(path, "owner.json"), 64 * 1024);
+  return readPrivateFile(join7(path, "owner.json"), 64 * 1024);
 }
 function readOwner(path) {
   try {
@@ -23500,7 +23722,7 @@ function readOwner(path) {
 function isStale(path, staleMs) {
   let info;
   try {
-    info = lstatSync4(path);
+    info = lstatSync5(path);
   } catch {
     return false;
   }
@@ -23519,12 +23741,12 @@ function tryMkdir(path) {
     throw error2;
   }
   const token = randomBytes2(8).toString("hex");
-  held.set(path, { ino: lstatSync4(path).ino, token });
+  held.set(path, { ino: lstatSync5(path).ino, token });
   writeOwner(path, (/* @__PURE__ */ new Date()).toISOString(), token);
   return true;
 }
 function writeOwner(path, createdAt, token) {
-  const temporary = join6(path, `owner.${process.pid}.${token}.tmp`);
+  const temporary = join7(path, `owner.${process.pid}.${token}.tmp`);
   writeFileSync3(
     temporary,
     JSON.stringify({
@@ -23535,7 +23757,7 @@ function writeOwner(path, createdAt, token) {
     }),
     { mode: 384 }
   );
-  renameSync4(temporary, join6(path, "owner.json"));
+  renameSync4(temporary, join7(path, "owner.json"));
 }
 function readToken(path) {
   try {
@@ -23549,7 +23771,7 @@ function stillOurs(path) {
   const mine = held.get(path);
   if (!mine) return false;
   try {
-    return lstatSync4(path).ino === mine.ino && readToken(path) === mine.token;
+    return lstatSync5(path).ino === mine.ino && readToken(path) === mine.token;
   } catch {
     return false;
   }
@@ -23606,19 +23828,19 @@ import {
   writeFile
 } from "node:fs/promises";
 import { homedir as homedir2 } from "node:os";
-import { dirname as dirname4, isAbsolute as isAbsolute3, join as join7 } from "node:path";
+import { dirname as dirname5, isAbsolute as isAbsolute3, join as join8 } from "node:path";
 function dataDirectory() {
-  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join7(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join7(homedir2(), ".local", "share");
+  const base = process.platform === "win32" ? process.env.LOCALAPPDATA ?? join8(homedir2(), "AppData", "Local") : process.env.XDG_DATA_HOME ?? join8(homedir2(), ".local", "share");
   if (!isAbsolute3(base))
     throw new Error(
       "INVALID_DATA_DIRECTORY: XDG_DATA_HOME or LOCALAPPDATA must be absolute."
     );
-  return join7(base, "memroot");
+  return join8(base, "memroot");
 }
 async function safeDirectory(path) {
   const boundary = dataDirectory();
   if (path !== boundary && path.startsWith(`${boundary}/`))
-    await safeDirectory(dirname4(path));
+    await safeDirectory(dirname5(path));
   await mkdir(path, { recursive: true, mode: 448 });
   const info = await lstat(path);
   if (!info.isDirectory() || info.isSymbolicLink())
@@ -23630,7 +23852,7 @@ function configDirectory() {
   return memrootConfigDir();
 }
 function configPath() {
-  return join8(configDirectory(), "config.json");
+  return join9(configDirectory(), "config.json");
 }
 function optionalString(value) {
   return typeof value === "string" && value.length > 0 ? value : void 0;
@@ -24215,12 +24437,12 @@ function parseWwwAuthenticateChallenges(response) {
   const challenges = [];
   let rest = header;
   while (rest) {
-    let match = rest.match(schemeRE);
-    const scheme = match?.["1"].toLowerCase();
+    let match2 = rest.match(schemeRE);
+    const scheme = match2?.["1"].toLowerCase();
     if (!scheme) {
       return void 0;
     }
-    const afterScheme = rest.substring(match[0].length);
+    const afterScheme = rest.substring(match2[0].length);
     if (afterScheme && !afterScheme.match(/^[\s,]/)) {
       return void 0;
     }
@@ -24233,27 +24455,27 @@ function parseWwwAuthenticateChallenges(response) {
       while (rest) {
         let key;
         let value;
-        if (match = rest.match(quotedParamRE)) {
+        if (match2 = rest.match(quotedParamRE)) {
           ;
-          [, key, value, rest] = match;
+          [, key, value, rest] = match2;
           if (value.includes("\\")) {
             value = value.replace(/\\([\s\S])/g, "$1");
           }
           parameters[key.toLowerCase()] = value;
           continue;
         }
-        if (match = rest.match(unquotedParamRE)) {
+        if (match2 = rest.match(unquotedParamRE)) {
           ;
-          [, key, value, rest] = match;
+          [, key, value, rest] = match2;
           parameters[key.toLowerCase()] = value;
           continue;
         }
-        if (match = rest.match(token68ParamRE)) {
+        if (match2 = rest.match(token68ParamRE)) {
           if (Object.keys(parameters).length) {
             break;
           }
           ;
-          [, token68, rest] = match;
+          [, token68, rest] = match2;
           break;
         }
         return void 0;
@@ -24657,7 +24879,7 @@ function agyAccount(apiBase) {
 
 // src/connection/credentials.ts
 import { spawnSync } from "node:child_process";
-import { lstatSync as lstatSync5 } from "node:fs";
+import { lstatSync as lstatSync6 } from "node:fs";
 import {
   chmod as chmod2,
   lstat as lstat3,
@@ -24666,7 +24888,7 @@ import {
   rm as rm3,
   writeFile as writeFile3
 } from "node:fs/promises";
-import { isAbsolute as isAbsolute4, join as join9 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join10 } from "node:path";
 var SERVICE = "memroot";
 var TOOL_TIMEOUT_MS = 15e3;
 function credentialStoreKind() {
@@ -24711,7 +24933,7 @@ function quote(value) {
   return JSON.stringify(value);
 }
 function testStorePath() {
-  return join9(configDirectory(), "test-credentials.json");
+  return join10(configDirectory(), "test-credentials.json");
 }
 async function readTestStore() {
   try {
@@ -24753,10 +24975,10 @@ function assertMacOSDefaultKeychain(timeoutMs) {
       Math.min(5e3, timeoutMs ?? 5e3),
       true
     );
-    const match = /^"([^"\r\n]+)"$/u.exec(result.stdout.trim());
-    const path = match?.[1];
+    const match2 = /^"([^"\r\n]+)"$/u.exec(result.stdout.trim());
+    const path = match2?.[1];
     if (result.status !== 0 || !path || !isAbsolute4(path)) throw new Error();
-    const info = lstatSync5(path);
+    const info = lstatSync6(path);
     if (!info.isFile() || info.isSymbolicLink()) throw new Error();
   } catch {
     throw new Error(
@@ -29782,14 +30004,14 @@ var require_content_type2 = /* @__PURE__ */ __commonJSMin2(((exports) => {
     var obj = new ContentType(type.toLowerCase());
     if (index !== -1) {
       var key;
-      var match;
+      var match2;
       var value;
       PARAM_REGEXP.lastIndex = index;
-      while (match = PARAM_REGEXP.exec(header)) {
-        if (match.index !== index) throw new TypeError("invalid parameter format");
-        index += match[0].length;
-        key = match[1].toLowerCase();
-        value = match[2];
+      while (match2 = PARAM_REGEXP.exec(header)) {
+        if (match2.index !== index) throw new TypeError("invalid parameter format");
+        index += match2[0].length;
+        key = match2[1].toLowerCase();
+        value = match2[2];
         if (value.charCodeAt(0) === 34) {
           value = value.slice(1, -1);
           if (value.indexOf("\\") !== -1) value = value.replace(QESC_REGEXP, "$1");
@@ -37855,9 +38077,9 @@ function extractFieldFromWwwAuth(response, fieldName) {
   const wwwAuthHeader = response.headers.get("WWW-Authenticate");
   if (!wwwAuthHeader) return null;
   const pattern = new RegExp(String.raw`${fieldName}=(?:"([^"]+)"|([^\s,]+))`);
-  const match = wwwAuthHeader.match(pattern);
-  if (match) {
-    const result = match[1] || match[2];
+  const match2 = wwwAuthHeader.match(pattern);
+  if (match2) {
+    const result = match2[1] || match2[2];
     if (result) return result;
   }
   return null;
@@ -41433,7 +41655,7 @@ function boundedFetch(endpoint, shutdown2) {
 async function connectAgyMcp(apiBase, broker, signal2) {
   const endpoint = new URL(`${apiBase}/mcp`);
   const client = new Client(
-    { name: "Memroot Antigravity adapter", version: "0.23.1" },
+    { name: "Memroot Antigravity adapter", version: "0.24.0" },
     {
       capabilities: {},
       supportedProtocolVersions: ["2025-11-25"],
@@ -41521,6 +41743,21 @@ function agyBroker(base, config2) {
 var LIVE_LIST_TTL_MS = 5 * 6e4;
 var LIVE_FAILURE_TTL_MS = 3e4;
 var LIVE_LIST_TIMEOUT_MS = 5e3;
+var ROOTS_TIMEOUT_MS = 2e3;
+function rootFolders(roots) {
+  if (!Array.isArray(roots) || roots.length === 0) return void 0;
+  const folders = [];
+  for (const root of roots) {
+    const uri = root?.uri;
+    if (typeof uri !== "string" || !uri.startsWith("file:")) return void 0;
+    try {
+      folders.push(fileURLToPath2(uri));
+    } catch {
+      return void 0;
+    }
+  }
+  return folders;
+}
 var shutdown = new AbortController();
 var clients = /* @__PURE__ */ new Set();
 var transport = new StdioServerTransport(process.stdin, process.stdout, {
@@ -41532,6 +41769,18 @@ transport.send = async (message) => {
     throw new Error("AGY_MCP_RESPONSE_TOO_LARGE");
   await originalSend(message);
 };
+var deliver;
+Object.defineProperty(transport, "onmessage", {
+  get: () => deliver && ((...args) => {
+    const [message] = args;
+    if ("method" in message && message.method === "notifications/roots/list_changed")
+      return;
+    deliver?.(...args);
+  }),
+  set: (handler) => {
+    deliver = handler;
+  }
+});
 var originalClose = transport.close.bind(transport);
 var closing = false;
 transport.close = async () => {
@@ -41585,7 +41834,7 @@ var handle = serveStdio(
       }
       const instructions = remote.getInstructions();
       const server = new Server(
-        { name: "memroot", version: "0.23.1" },
+        { name: "memroot", version: "0.24.0" },
         {
           capabilities: { tools: {} },
           ...instructions ? { instructions } : {}
@@ -41685,34 +41934,38 @@ var handle = serveStdio(
           if (MCP_PROJECT_TOOL_NAMES_V1.includes(
             params.name
           )) {
-            const selected = readSelection(base, principal);
-            if (!selected)
+            let folders;
+            const replied = ctx.mcpReq.inputResponses;
+            const modern = ctx.mcpReq.envelope !== void 0;
+            const roots = (modern ? ctx.mcpReq.envelope[CLIENT_CAPABILITIES_META_KEY] : server.getClientCapabilities())?.roots;
+            if (replied) {
+              const answer = inputResponse(replied, "roots");
+              folders = answer.kind === "roots" ? rootFolders(answer.roots) : void 0;
+            } else if (roots && modern)
+              return inputRequired({
+                inputRequests: { roots: inputRequired.listRoots() }
+              });
+            else if (roots)
+              try {
+                folders = rootFolders(
+                  (await server.listRoots(void 0, {
+                    signal: ctx.mcpReq.signal,
+                    timeout: ROOTS_TIMEOUT_MS
+                  })).roots
+                );
+              } catch {
+                folders = void 0;
+              }
+            const resolved = workspaceProject(base, principal, folders);
+            const refusal = "reason" in resolved ? resolved : void 0;
+            const selected = "reason" in resolved ? void 0 : resolved.project;
+            if (refusal || !selected)
               return {
                 isError: true,
                 content: [
                   {
                     type: "text",
-                    text: "MEMROOT_PROJECT_SELECTION_REQUIRED: No Memroot project is selected for this account. Run /memroot:memroot-project use, then retry."
-                  }
-                ]
-              };
-            let ambiguous;
-            try {
-              ambiguous = readBindings(base, principal, {
-                requireValid: true
-              }).some(
-                (binding) => binding.stale || binding.tenantId !== selected.tenantId || binding.projectId !== selected.projectId
-              );
-            } catch {
-              ambiguous = true;
-            }
-            if (ambiguous)
-              return {
-                isError: true,
-                content: [
-                  {
-                    type: "text",
-                    text: "AGY_PROJECT_SCOPE_UNSUPPORTED: Antigravity cannot safely resolve your Memroot folder bindings. Use a Memroot client that supports folder bindings."
+                    text: refusal ? workspaceRefusalText(refusal) : "MEMROOT_PROJECT_SELECTION_REQUIRED: No Memroot project is selected for this account. Run /memroot:memroot-project use, then retry."
                   }
                 ]
               };
@@ -41735,7 +41988,7 @@ var handle = serveStdio(
               ...params,
               arguments: withClientVersion(
                 { ...params.arguments, project_id: projectId },
-                strictClientVersion("0.23.1")
+                strictClientVersion("0.24.0")
               )
             };
           }

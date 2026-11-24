@@ -1,6 +1,6 @@
 {
   "name": "memroot-impact",
-  "version": "0.23.1",
+  "version": "0.24.0",
   "description": "Opt-in Memroot impact pane and counter for Claude Code: the Memroot checks, recalls, saves and helped marks of this session.",
   "author": {
     "name": "Memroot"
