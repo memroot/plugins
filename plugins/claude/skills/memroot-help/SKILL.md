@@ -14,6 +14,7 @@ Answer from this index and name the entry; for how to use it, follow that skill 
 - Choose or create the project for this computer or one folder: the `project` skill; tools `projects_list`, `projects_create`; `memroot project` with `list`, `use`, `create`, `status`, `unbind` or `login`.
 - Ask each set-up agent to save its own memory to Memroot: `memroot import` (asks first).
 - Session capture: `memroot capture on`, `memroot capture off`, `memroot capture status`.
+- See this session's Memroot checks, recalled memories and saves in a side panel (opt-in): `/plugin install memroot-impact@memroot`, then `/memroot-impact`.
 - Diagnose the install: `memroot doctor`.
 - Install or refresh the plugins, MCP link and rules: `memroot setup`, `memroot update`.
 - Memroot account: `memroot login`, `memroot logout`, `memroot whoami`, `memroot status`.
