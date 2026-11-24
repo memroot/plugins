@@ -23482,7 +23482,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.24.0"} project`;
+  return `npx -y memroot@${"0.24.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -41655,7 +41655,7 @@ function boundedFetch(endpoint, shutdown2) {
 async function connectAgyMcp(apiBase, broker, signal2) {
   const endpoint = new URL(`${apiBase}/mcp`);
   const client = new Client(
-    { name: "Memroot Antigravity adapter", version: "0.24.0" },
+    { name: "Memroot Antigravity adapter", version: "0.24.1" },
     {
       capabilities: {},
       supportedProtocolVersions: ["2025-11-25"],
@@ -41834,7 +41834,7 @@ var handle = serveStdio(
       }
       const instructions = remote.getInstructions();
       const server = new Server(
-        { name: "memroot", version: "0.24.0" },
+        { name: "memroot", version: "0.24.1" },
         {
           capabilities: { tools: {} },
           ...instructions ? { instructions } : {}
@@ -41988,7 +41988,7 @@ var handle = serveStdio(
               ...params,
               arguments: withClientVersion(
                 { ...params.arguments, project_id: projectId },
-                strictClientVersion("0.24.0")
+                strictClientVersion("0.24.1")
               )
             };
           }
