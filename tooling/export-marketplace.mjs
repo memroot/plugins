@@ -131,6 +131,9 @@ export const HELP_SKILL_SINCE = "0.22.0";
 // The project skill's references/authorization.md (the sign-in repair text,
 // moved out of SKILL.md), for Claude Code, Codex and Grok.
 export const AUTHORIZATION_REFERENCE_SINCE = "0.22.0";
+// The Antigravity plugin's always-on rules file, rules/AGENTS.md (it replaces
+// the managed block in GEMINI.md).
+export const AGY_RULES_SINCE = "0.25.0";
 
 const atLeast = (version, since) => {
   const [a, b] = [releaseParts(version), releaseParts(since)];
@@ -149,6 +152,9 @@ const optionalPluginFiles = (agent, version) => [
     : ["skills/memroot-help/SKILL.md"]),
   ...(agent !== "agy" && !atLeast(version, AUTHORIZATION_REFERENCE_SINCE)
     ? [`${projectSkill(agent)}/references/authorization.md`]
+    : []),
+  ...(agent === "agy" && !atLeast(version, AGY_RULES_SINCE)
+    ? ["rules/AGENTS.md"]
     : []),
 ];
 
@@ -181,6 +187,7 @@ const pluginFiles = (agent, version) => {
       "skills/memroot-status/SKILL.md",
       "skills/memroot-project/SKILL.md",
       ...help,
+      ...(atLeast(version, AGY_RULES_SINCE) ? ["rules/AGENTS.md"] : []),
       "scripts/agy-hook.mjs",
       "scripts/mcp-stdio.mjs",
       "scripts/status.mjs",
