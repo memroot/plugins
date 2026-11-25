@@ -1236,7 +1236,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.24.1"} project`;
+  return `npx -y memroot@${"0.25.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -2772,6 +2772,11 @@ async function readConfig() {
   return config;
 }
 
+// src/agents/config-json.ts
+function parseConfigJson(text) {
+  return /^[ \t\r\n]*$/u.test(text) ? void 0 : JSON.parse(text);
+}
+
 // src/commands/global-cli.ts
 var import_compare = __toESM(require_compare(), 1);
 var import_valid = __toESM(require_valid(), 1);
@@ -2789,10 +2794,11 @@ function readAgyServers() {
     join14(agyConfigDir(), "mcp_config.json"),
     1024 * 1024
   );
-  if (raw === void 0 || /^[ \t\r\n]*$/u.test(raw)) return {};
+  if (raw === void 0) return {};
   let config;
   try {
-    config = record(JSON.parse(raw));
+    const parsed = parseConfigJson(raw);
+    config = record(parsed === void 0 ? {} : parsed);
   } catch {
   }
   if (!config || config.mcpServers !== void 0 && !record(config.mcpServers))

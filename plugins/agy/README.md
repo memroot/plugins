@@ -1,8 +1,8 @@
 # Memroot for Antigravity (`agy`)
 
-Bundle version `0.24.1`.
+Bundle version `0.25.0`.
 
-Run `memroot setup --agent agy --yes` with Antigravity CLI 1.4.12 or later. Setup uses the official Antigravity CLI to install the verified npm-bundled plugin in user scope and registers the bundled official-SDK stdio adapter. Run `memroot agy login` in a terminal to authorize its distinct Memroot grant in the OS credential store, then start a new agy session. No native Antigravity credentials are read or copied. A revoked grant can be explicitly replaced with `memroot agy login --force`. `memroot doctor --agent agy` checks local registration, hooks, scripts, skills, managed rules and dedicated credential presence. Registration alone does not verify OAuth or memory calls.
+Run `memroot setup --agent agy --yes` with Antigravity CLI 1.4.12 or later. Setup uses the official Antigravity CLI to install the verified npm-bundled plugin in user scope and registers the bundled official-SDK stdio adapter. Run `memroot agy login` in a terminal to authorize its distinct Memroot grant in the OS credential store, then start a new agy session. No native Antigravity credentials are read or copied. A revoked grant can be explicitly replaced with `memroot agy login --force`. `memroot doctor --agent agy` checks local registration, hooks, scripts, skills, managed rules and dedicated credential presence. The Memroot rules ship in this plugin as `rules/AGENTS.md`, which Antigravity loads in every session; setup and update remove the block earlier versions wrote into `~/.gemini/config/GEMINI.md`. Registration alone does not verify OAuth or memory calls.
 
 Use `/memroot:memroot-memory`, `/memroot:memroot-project`, `/memroot:memroot-status`, `/memroot:memroot-help` or the `/skills` menu for manual skill invocation.
 
@@ -16,4 +16,4 @@ Hook execution follows Antigravity permissions and customization discovery.
 
 Based in part on [NaikSoftware's proposal and reference adapter](https://github.com/memroot/plugins/issues/4).
 
-Shell-failure limitation: agy 1.4.12 omits a nonzero command exit status from PostToolUse and leaves its error field empty. The adapter can remind on reported native tool errors, but cannot detect ordinary nonzero shell exits without reading transcripts, which hooks do not do.
+Shell-failure limitation: agy 1.4.12 to 1.5.16 omit a nonzero command exit status from PostToolUse and leave its error field empty. The adapter can remind on reported native tool errors, but cannot detect ordinary nonzero shell exits without reading transcripts, which hooks do not do.

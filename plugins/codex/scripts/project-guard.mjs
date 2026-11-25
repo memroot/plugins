@@ -615,7 +615,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.24.1"} project`;
+  return `npx -y memroot@${"0.25.0"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -904,7 +904,7 @@ async function main() {
   const note = target === "unknown" ? unknownProjectNote(command) : void 0;
   const corrected = (call) => withClientVersion(
     { ...call, project_id: selected.projectId },
-    grok ? void 0 : strictClientVersion("0.24.1")
+    grok ? void 0 : strictClientVersion("0.25.0")
   );
   if (target === "known_other" && !grok) {
     decide(
@@ -912,7 +912,7 @@ async function main() {
       other,
       withClientVersion(
         { ...input, project_id: kept },
-        strictClientVersion("0.24.1")
+        strictClientVersion("0.25.0")
       ),
       otherProjectNote(selected.projectId)
     );
