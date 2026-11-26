@@ -632,7 +632,7 @@ var node_util_compat_default = { ...util, styleText: styleText2 };
 
 // ../../packages/contracts/src/invisible-text-v1.ts
 var INVISIBLE_FORMATTING_CLASS = "\\u061c\\u200b\\u200e\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff";
-var SUBDIVISION_FLAG = "\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}";
+var SUBDIVISION_FLAG = "\\u{1F3F4}\\u{E0067}\\u{E0062}(?:\\u{E0065}\\u{E006E}\\u{E0067}|\\u{E0073}\\u{E0063}\\u{E0074}|\\u{E0077}\\u{E006C}\\u{E0073})\\u{E007F}";
 var HIDDEN_TEXT = new RegExp(
   `(${SUBDIVISION_FLAG})|[${INVISIBLE_FORMATTING_CLASS}\\u0001-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u206a-\\u206f\\u{E0000}-\\u{E007F}]`,
   "gu"
@@ -1313,6 +1313,12 @@ function worktreeMain(dir, dotGit) {
     return void 0;
   }
   if (basename(commonDir) !== ".git") return void 0;
+  try {
+    if (realpathSync.native(dirname4(gitdir)) !== join5(commonDir, "worktrees"))
+      return void 0;
+  } catch {
+    return void 0;
+  }
   return dirname4(commonDir);
 }
 function bindingFolder(path) {
@@ -1461,7 +1467,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.25.0"} project`;
+  return `npx -y memroot@${"0.25.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -5402,7 +5408,7 @@ async function projectCommand(args, _bundledAgent, transport) {
     );
     return;
   }
-  const userAgent = `memroot-cli/${"0.25.0"}`;
+  const userAgent = `memroot-cli/${"0.25.1"}`;
   const client = transport?.client(base) ?? new McpClient(base, new TokenBroker(base), userAgent);
   const fetchProjects = async (via = client) => {
     let projects2;

@@ -527,6 +527,12 @@ function worktreeMain(dir, dotGit) {
     return void 0;
   }
   if (basename(commonDir) !== ".git") return void 0;
+  try {
+    if (realpathSync.native(dirname3(gitdir)) !== join4(commonDir, "worktrees"))
+      return void 0;
+  } catch {
+    return void 0;
+  }
   return dirname3(commonDir);
 }
 function validBinding(value) {
@@ -615,7 +621,7 @@ function projectCommandPrefix() {
       return `node "${script}"`;
   } catch {
   }
-  return `npx -y memroot@${"0.25.0"} project`;
+  return `npx -y memroot@${"0.25.1"} project`;
 }
 function folderOption(folder) {
   return /["\\$`\r\n]/.test(folder) || folder.length > 1024 ? "--here" : `--folder "${folder}"`;
@@ -904,7 +910,7 @@ async function main() {
   const note = target === "unknown" ? unknownProjectNote(command) : void 0;
   const corrected = (call) => withClientVersion(
     { ...call, project_id: selected.projectId },
-    grok ? void 0 : strictClientVersion("0.25.0")
+    grok ? void 0 : strictClientVersion("0.25.1")
   );
   if (target === "known_other" && !grok) {
     decide(
@@ -912,7 +918,7 @@ async function main() {
       other,
       withClientVersion(
         { ...input, project_id: kept },
-        strictClientVersion("0.25.0")
+        strictClientVersion("0.25.1")
       ),
       otherProjectNote(selected.projectId)
     );

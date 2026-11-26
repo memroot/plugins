@@ -2188,6 +2188,12 @@ function worktreeMain(dir, dotGit) {
     return void 0;
   }
   if (basename(commonDir) !== ".git") return void 0;
+  try {
+    if (realpathSync.native(dirname4(gitdir)) !== join8(commonDir, "worktrees"))
+      return void 0;
+  } catch {
+    return void 0;
+  }
   return dirname4(commonDir);
 }
 function validBinding(value) {
@@ -2929,7 +2935,7 @@ var RULES = [
     name: "url_userinfo",
     keywords: ["://"],
     pattern: new RegExp(
-      `\\b([a-z][a-z0-9+.-]{1,20}:\\/\\/[^\\s:@\\/]{1,256}:)${NOT_MARKER}([^\\s@\\/]{1,256})(?=@)`,
+      `\\b([a-z][a-z0-9+.-]{1,20}:\\/\\/[^\\s:@\\/]{0,256}:)${NOT_MARKER}([^\\s@\\/]{1,256})(?=@)`,
       "gi"
     ),
     replace: keepPrefix("url_password")
@@ -2953,7 +2959,7 @@ var RULES = [
     name: "auth_header",
     keywords: ["authorization", "api-key", "auth-token", "cookie"],
     pattern: new RegExp(
-      `\\b(authorization|proxy-authorization|x-api-key|api-key|x-auth-token|cookie|set-cookie)(\\s*[:=]\\s*["']?)${NOT_MARKER}([^\\r\\n"']{8,})`,
+      `\\b(authorization|proxy-authorization|x-api-key|api-key|x-auth-token|cookie|set-cookie)(["']?\\s*[:=]\\s*["']?)${NOT_MARKER}([^\\r\\n"']{8,})`,
       "gi"
     ),
     replace: keepPrefix("auth_header")
@@ -2965,9 +2971,14 @@ var RULES = [
     // bounds, so each line start costs a bounded number of steps. The
     // unbounded form backtracked cubically on a newline run followed by a
     // long name. A value on the next line (YAML `key:` then the value) is
-    // still matched, as before.
+    // still matched, as before. The value is one capture group (keepPrefix):
+    // a quoted value runs to its closing quote on the same line, so spaces
+    // and `#` in it are redacted too; an unquoted value runs to whitespace,
+    // so an inline `# comment` after it is kept, and never starts with `#`,
+    // so a comment line after an empty key stays; a quote that is not
+    // closed on the line keeps the old first-word value.
     pattern: new RegExp(
-      `^(${LINE_SPACE}{0,64}(?:export${LINE_SPACE}{1,16})?[A-Za-z_][A-Za-z0-9_]{0,100}(?:KEY|SECRET|TOKEN|PASS(?:WORD|WD)?|PWD|CREDENTIALS?|AUTH|PRIVATE|SALT|DSN|CONN(?:ECTION)?_?STRING)[A-Za-z0-9_]{0,100}\\s{0,64}[=:]\\s{0,64}["']?)(?!\\$\\{?[A-Za-z_])(?!<)${NOT_MARKER}([^\\s"'#]{4,})`,
+      `^(${LINE_SPACE}{0,64}(?:export${LINE_SPACE}{1,16})?[A-Za-z_][A-Za-z0-9_]{0,100}(?:KEY|SECRET|TOKEN|PASS(?:WORD|WD)?|PWD|CREDENTIALS?|AUTH|PRIVATE|SALT|DSN|CONN(?:ECTION)?_?STRING)[A-Za-z0-9_]{0,100}\\s{0,64}[=:]\\s{0,64}["']?)(?!\\$\\{?[A-Za-z_])(?!<)${NOT_MARKER}((?<=")[^"\\r\\n]{4,512}(?=")|(?<=')[^'\\r\\n]{4,512}(?=')|(?<!["'])[^\\s"'#][^\\s"']{3,}|[^\\s"'#]{4,})`,
       "gmi"
     ),
     replace: keepPrefix("env_secret")
@@ -23216,7 +23227,7 @@ function assertionShapeRule(predicate, problem) {
 
 // ../../packages/contracts/src/invisible-text-v1.ts
 var INVISIBLE_FORMATTING_CLASS = "\\u061c\\u200b\\u200e\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u2069\\ufeff";
-var SUBDIVISION_FLAG = "\\u{1F3F4}[\\u{E0061}-\\u{E007A}]{2}[\\u{E0030}-\\u{E0039}\\u{E0061}-\\u{E007A}]{1,3}\\u{E007F}";
+var SUBDIVISION_FLAG = "\\u{1F3F4}\\u{E0067}\\u{E0062}(?:\\u{E0065}\\u{E006E}\\u{E0067}|\\u{E0073}\\u{E0063}\\u{E0074}|\\u{E0077}\\u{E006C}\\u{E0073})\\u{E007F}";
 var HIDDEN_TEXT = new RegExp(
   `(${SUBDIVISION_FLAG})|[${INVISIBLE_FORMATTING_CLASS}\\u0001-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f-\\u009f\\u206a-\\u206f\\u{E0000}-\\u{E007F}]`,
   "gu"
@@ -26971,7 +26982,7 @@ async function main() {
       client: new McpClient(
         consent.consent.apiBase,
         broker,
-        `memroot-capture/${"0.25.0"}`
+        `memroot-capture/${"0.25.1"}`
       ),
       salt,
       redactor: createRedactor(salt),

@@ -711,6 +711,12 @@ function worktreeMain(dir, dotGit) {
     return void 0;
   }
   if (basename(commonDir) !== ".git") return void 0;
+  try {
+    if (realpathSync2.native(dirname3(gitdir)) !== join5(commonDir, "worktrees"))
+      return void 0;
+  } catch {
+    return void 0;
+  }
   return dirname3(commonDir);
 }
 function validBinding(value) {

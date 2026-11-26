@@ -1,6 +1,6 @@
 # Memroot for Antigravity (`agy`)
 
-Bundle version `0.25.0`.
+Bundle version `0.25.1`.
 
 Run `memroot setup --agent agy --yes` with Antigravity CLI 1.4.12 or later. Setup uses the official Antigravity CLI to install the verified npm-bundled plugin in user scope and registers the bundled official-SDK stdio adapter. Run `memroot agy login` in a terminal to authorize its distinct Memroot grant in the OS credential store, then start a new agy session. No native Antigravity credentials are read or copied. A revoked grant can be explicitly replaced with `memroot agy login --force`. `memroot doctor --agent agy` checks local registration, hooks, scripts, skills, managed rules and dedicated credential presence. The Memroot rules ship in this plugin as `rules/AGENTS.md`, which Antigravity loads in every session; setup and update remove the block earlier versions wrote into `~/.gemini/config/GEMINI.md`. Registration alone does not verify OAuth or memory calls.
 

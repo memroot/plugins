@@ -8,13 +8,13 @@
       "name": "memroot",
       "source": "./plugins/claude",
       "description": "Memroot coding-agent plugin",
-      "version": "0.25.0"
+      "version": "0.25.1"
     },
     {
       "name": "memroot-impact",
       "source": "./plugins/memroot-impact",
       "description": "Opt-in Memroot impact pane and counter for Claude Code",
-      "version": "0.25.0"
+      "version": "0.25.1"
     }
   ]
 }

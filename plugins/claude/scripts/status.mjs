@@ -576,6 +576,12 @@ function worktreeMain(dir, dotGit) {
     return void 0;
   }
   if (basename(commonDir) !== ".git") return void 0;
+  try {
+    if (realpathSync.native(dirname3(gitdir)) !== join4(commonDir, "worktrees"))
+      return void 0;
+  } catch {
+    return void 0;
+  }
   return dirname3(commonDir);
 }
 function validBinding(value) {
@@ -665,7 +671,7 @@ var capture = consent.kind === "ok" ? {
 process.stdout.write(
   `${JSON.stringify({
     plugin: "memroot",
-    version: "0.25.0",
+    version: "0.25.1",
     agent,
     connection: "not_checked",
     capabilities: {
